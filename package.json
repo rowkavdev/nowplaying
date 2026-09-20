@@ -1,10 +1,19 @@
 {
   "name": "nowplaying",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Universal media presence core for Plex, Jellyfin, Navidrome and Emby",
+  "exports": {
+    ".": "./src/index.js",
+    "./card": "./src/card.js",
+    "./providers/*": "./src/providers/*.js"
+  },
   "scripts": {
-    "test": "node --test"
+    "build": "node scripts/build.js",
+    "check": "node --check src/*.js && node --check src/providers/*.js && node --check test/*.js",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "engines": {
     "node": ">=22"
