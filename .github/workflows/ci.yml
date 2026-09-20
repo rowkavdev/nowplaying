@@ -13,7 +13,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  validate:
+    name: Validate on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --ignore-scripts
+      - run: npm run check
+      - run: npm test
+
+  coverage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,4 +39,22 @@ jobs:
         with:
           node-version: 22
       - run: npm install --ignore-scripts
-      - run: npm test
+      - run: npm run test:coverage
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts
+      - run: npm run build
+      - run: test -s dist/card.svg && test -s dist/manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nowplaying-build
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
