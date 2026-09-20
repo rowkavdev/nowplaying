@@ -1,0 +1,77 @@
+/*
+ * Plex session polling adapted from discord-rich-presence-plex (DRPP).
+ * Source: https://github.com/phin05/discord-rich-presence-plex/blob/a4f95f08ec96c3f837876e73354665560115dfac/server/plex/client.go
+ * Copyright (C) phin05 and DRPP contributors.
+ * Licensed under AGPL-3.0. See LICENSE and NOTICE.
+ */
+
+import { defineProvider } from "../provider.js";
+
+const CLIENT_ID = "nowplaying";
+
+export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
+  const origin = normalizeBaseUrl(baseUrl);
+  if (typeof token !== "string" || !token.trim()) {
+    throw new TypeError("Plex token is required");
+  }
+
+  return defineProvider({
+    id: "plex",
+    async getPresence({ username } = {}) {
+      const response = await fetchImpl(`${origin}/status/sessions`, {
+        headers: {
+          Accept: "application/json",
+          "X-Plex-Client-Identifier": CLIENT_ID,
+          "X-Plex-Token": token,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const payload = await response.json();
+      const sessions = payload?.MediaContainer?.Metadata ?? [];
+      const session = sessions.find((item) => matchesUser(item, username)) ?? null;
+      return session ? mapSession(session, origin, token) : { state: "idle" };
+    },
+  });
+}
+
+function normalizeBaseUrl(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new TypeError("Plex baseUrl is required");
+  }
+  const url = new URL(value);
+  return url.toString().replace(/\/$/, "");
+}
+
+function matchesUser(session, username) {
+  if (!username) return true;
+  const actual = session?.User?.username || session?.User?.title || "";
+  return actual.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
+}
+
+function mapSession(session, origin, token) {
+  const state = session?.Player?.state === "paused" ? "paused" : "playing";
+  const type = session.type;
+  const kind = type === "track" ? "track" : type === "episode" ? "episode" : type === "movie" ? "movie" : "unknown";
+  const subtitle = kind === "episode"
+    ? session.grandparentTitle || session.parentTitle
+    : kind === "track"
+      ? session.grandparentTitle || session.originalTitle
+      : session.year ? String(session.year) : null;
+  const artworkPath = session.thumb || session.grandparentThumb;
+  const artworkUrl = artworkPath
+    ? `${origin}${artworkPath}?X-Plex-Token=${encodeURIComponent(token)}`
+    : null;
+
+  return {
+    state,
+    kind,
+    title: session.title,
+    subtitle,
+    artworkUrl,
+    positionMs: session.viewOffset,
+    durationMs: session.duration,
+  };
+}
