@@ -1,5 +1,7 @@
 const MEDIA_KINDS = new Set(["track", "episode", "movie", "show", "unknown"]);
 const PLAYBACK_STATES = new Set(["playing", "paused", "idle", "offline"]);
+const ARTWORK_PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
+const ARTWORK_TYPES = new Set(["primary", "thumb", "cover"]);
 
 export function createPresence(input = {}) {
   const state = input.state ?? "idle";
@@ -23,11 +25,40 @@ export function createPresence(input = {}) {
     kind,
     title: optionalString(input.title, "title"),
     subtitle: optionalString(input.subtitle, "subtitle"),
-    artworkUrl: optionalString(input.artworkUrl, "artworkUrl"),
+    artwork: normalizeArtwork(input.artwork),
+    artworkUrl: null,
     positionMs,
     durationMs,
     updatedAt: normalizeDate(input.updatedAt),
   });
+}
+
+function normalizeArtwork(value) {
+  if (value == null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) throw new TypeError("artwork must be an object");
+  const allowed = new Set(["provider", "itemId", "imageId", "imageTag", "type"]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw new TypeError(`artwork.${key} is not allowed`);
+  }
+  if (!ARTWORK_PROVIDERS.has(value.provider)) throw new TypeError("artwork.provider is unsupported");
+  if (!ARTWORK_TYPES.has(value.type)) throw new TypeError("artwork.type is unsupported");
+  const artwork = {
+    provider: value.provider,
+    itemId: optionalArtworkId(value.itemId, "artwork.itemId"),
+    imageId: optionalArtworkId(value.imageId, "artwork.imageId"),
+    imageTag: optionalArtworkId(value.imageTag, "artwork.imageTag"),
+    type: value.type,
+  };
+  if (!artwork.itemId && !artwork.imageId) throw new TypeError("artwork requires itemId or imageId");
+  return Object.freeze(artwork);
+}
+
+function optionalArtworkId(value, name) {
+  if (value == null) return null;
+  if (typeof value !== "string" || !value.trim() || value.length > 512) {
+    throw new TypeError(`${name} must be a non-empty string up to 512 characters`);
+  }
+  return value.trim();
 }
 
 function optionalString(value, name) {
