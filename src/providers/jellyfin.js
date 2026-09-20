@@ -12,7 +12,7 @@ export function createJellyfinProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
       if (!response.ok) throw new Error(`Jellyfin sessions request failed: ${response.status} ${response.statusText}`);
       const sessions = await response.json();
       const session = sessions.find((candidate) => matchesSession(candidate, username));
-      return session ? mapSession(session, origin, apiKey) : { state: "idle" };
+      return session ? mapSession(session) : { state: "idle" };
     },
   });
 }
@@ -28,14 +28,15 @@ function matchesSession(session, username) {
   return session.UserName?.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
 }
 
-function mapSession(session, origin, apiKey) {
+function mapSession(session) {
   const item = session.NowPlayingItem;
   const kind = item.Type === "Audio" ? "track" : item.Type === "Episode" ? "episode" : item.Type === "Movie" ? "movie" : "unknown";
   const subtitle = kind === "episode" ? item.SeriesName || item.SeasonName : kind === "track" ? item.Artists?.join(", ") || item.AlbumArtist : item.ProductionYear ? String(item.ProductionYear) : null;
   const imageTag = item.ImageTags?.Primary;
   return {
     state: session.PlayState?.IsPaused ? "paused" : "playing", kind, title: item.Name, subtitle,
-    artworkUrl: imageTag ? `${origin}/Items/${encodeURIComponent(item.Id)}/Images/Primary?tag=${encodeURIComponent(imageTag)}&api_key=${encodeURIComponent(apiKey)}` : null,
+    artwork: imageTag ? { provider: "jellyfin", itemId: item.Id, imageTag, type: "primary" } : null,
+    artworkUrl: null,
     positionMs: ticksToMilliseconds(session.PlayState?.PositionTicks), durationMs: ticksToMilliseconds(item.RunTimeTicks),
   };
 }
