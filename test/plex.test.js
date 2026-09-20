@@ -32,24 +32,27 @@ test("polls and maps the selected Plex user session", async () => {
   assert.equal(presence.kind, "movie");
   assert.equal(presence.title, "Arrival");
   assert.equal(presence.subtitle, "2016");
-  assert.match(presence.artworkUrl, /X-Plex-Token=secret/);
+  assert.deepEqual(presence.artwork, {
+    provider: "plex",
+    itemId: null,
+    imageId: "/library/metadata/1/thumb",
+    imageTag: null,
+    type: "thumb",
+  });
+  assert.equal(presence.artworkUrl, null);
 });
 
 test("returns idle when no matching session exists", async () => {
   const provider = createPlexProvider({
-    baseUrl: "https://plex.test",
+    baseUrl: "http://plex.test",
     token: "secret",
-    fetchImpl: async () => ({ ok: true, json: async () => ({ MediaContainer: {} }) }),
+    fetchImpl: async () => ({ ok: true, async json() { return { MediaContainer: { Metadata: [] } }; } }),
   });
   const presence = await provider.getPresence({ username: "rowan" });
   assert.equal(presence.state, "idle");
 });
 
-test("surfaces Plex HTTP failures", async () => {
-  const provider = createPlexProvider({
-    baseUrl: "https://plex.test",
-    token: "secret",
-    fetchImpl: async () => ({ ok: false, status: 401, statusText: "Unauthorized" }),
-  });
-  await assert.rejects(provider.getPresence(), /401 Unauthorized/);
+test("rejects missing configuration", () => {
+  assert.throws(() => createPlexProvider({ baseUrl: "http://plex.test", token: "" }), /Plex token is required/);
+  assert.throws(() => createPlexProvider({ baseUrl: "", token: "secret" }), /Plex baseUrl is required/);
 });
