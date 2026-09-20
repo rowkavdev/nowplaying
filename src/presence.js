@@ -26,7 +26,7 @@ export function createPresence(input = {}) {
     title: optionalString(input.title, "title"),
     subtitle: optionalString(input.subtitle, "subtitle"),
     artwork: normalizeArtwork(input.artwork),
-    artworkUrl: null,
+    artworkUrl: optionalString(input.artworkUrl, "artworkUrl"),
     positionMs,
     durationMs,
     updatedAt: normalizeDate(input.updatedAt),
