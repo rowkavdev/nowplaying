@@ -21,7 +21,14 @@ test("maps a selected Navidrome now-playing entry", async () => {
   assert.equal(presence.title, "Song");
   assert.equal(presence.subtitle, "Artist");
   assert.equal(presence.durationMs, 180_000);
-  assert.match(presence.artworkUrl, /getCoverArt/);
+  assert.deepEqual(presence.artwork, {
+    provider: "navidrome",
+    itemId: null,
+    imageId: "cover",
+    imageTag: null,
+    type: "cover",
+  });
+  assert.equal(presence.artworkUrl, null);
 });
 
 test("returns idle when nobody is playing", async () => {
@@ -37,5 +44,5 @@ test("surfaces Subsonic API errors", async () => {
     baseUrl: "https://music.test", username: "u", token: "t", salt: "s",
     fetchImpl: async () => ({ ok: true, json: async () => ({ "subsonic-response": { status: "failed", error: { message: "bad auth" } } }) }),
   });
-  await assert.rejects(provider.getPresence(), /bad auth/);
+  await assert.rejects(() => provider.getPresence(), /Navidrome API error: bad auth/);
 });
