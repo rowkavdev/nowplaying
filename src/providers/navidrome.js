@@ -17,7 +17,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       if (root?.status === "failed") throw new Error(`Navidrome API error: ${root.error?.message || "unknown error"}`);
       const entries = root?.nowPlaying?.entry ?? [];
       const entry = entries.find((item) => !playingUser || item.username?.localeCompare(playingUser, undefined, { sensitivity: "accent" }) === 0);
-      return entry ? mapEntry(entry, origin, auth) : { state: "idle" };
+      return entry ? mapEntry(entry) : { state: "idle" };
     },
   });
 }
@@ -27,13 +27,12 @@ function normalizeBaseUrl(value) {
   return new URL(value).toString().replace(/\/$/, "");
 }
 
-function mapEntry(entry, origin, auth) {
-  const coverQuery = new URLSearchParams(auth);
-  if (entry.coverArt) coverQuery.set("id", entry.coverArt);
+function mapEntry(entry) {
   return {
     state: "playing", kind: "track", title: entry.title, subtitle: entry.artist || entry.album,
-    artworkUrl: entry.coverArt ? `${origin}/rest/getCoverArt.view?${coverQuery}` : null,
-    positionMs: Number.isFinite(entry.minutesAgo) ? null : null,
+    artwork: entry.coverArt ? { provider: "navidrome", imageId: entry.coverArt, type: "cover" } : null,
+    artworkUrl: null,
+    positionMs: null,
     durationMs: Number.isFinite(entry.duration) ? entry.duration * 1000 : null,
   };
 }
