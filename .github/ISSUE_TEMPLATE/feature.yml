@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest one focused improvement
+title: "feat: "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the smallest useful result, not an implementation plan.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Core model
+        - Plex
+        - Jellyfin
+        - Navidrome
+        - Emby
+        - README card
+        - Discord Rich Presence
+        - Privacy
+        - Deployment
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy or security notes
+      description: Mention any tokens, server data, titles, artwork or usernames this could expose.
