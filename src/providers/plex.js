@@ -11,38 +11,25 @@ const CLIENT_ID = "nowplaying";
 
 export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   const origin = normalizeBaseUrl(baseUrl);
-  if (typeof token !== "string" || !token.trim()) {
-    throw new TypeError("Plex token is required");
-  }
-
+  if (typeof token !== "string" || !token.trim()) throw new TypeError("Plex token is required");
   return defineProvider({
     id: "plex",
     async getPresence({ username } = {}) {
       const response = await fetchImpl(`${origin}/status/sessions`, {
-        headers: {
-          Accept: "application/json",
-          "X-Plex-Client-Identifier": CLIENT_ID,
-          "X-Plex-Token": token,
-        },
+        headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
-      if (!response.ok) {
-        throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
       const payload = await response.json();
       const sessions = payload?.MediaContainer?.Metadata ?? [];
       const session = sessions.find((item) => matchesUser(item, username)) ?? null;
-      return session ? mapSession(session, origin, token) : { state: "idle" };
+      return session ? mapSession(session) : { state: "idle" };
     },
   });
 }
 
 function normalizeBaseUrl(value) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new TypeError("Plex baseUrl is required");
-  }
-  const url = new URL(value);
-  return url.toString().replace(/\/$/, "");
+  if (typeof value !== "string" || !value.trim()) throw new TypeError("Plex baseUrl is required");
+  return new URL(value).toString().replace(/\/$/, "");
 }
 
 function matchesUser(session, username) {
@@ -51,27 +38,16 @@ function matchesUser(session, username) {
   return actual.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
 }
 
-function mapSession(session, origin, token) {
+function mapSession(session) {
   const state = session?.Player?.state === "paused" ? "paused" : "playing";
   const type = session.type;
   const kind = type === "track" ? "track" : type === "episode" ? "episode" : type === "movie" ? "movie" : "unknown";
-  const subtitle = kind === "episode"
-    ? session.grandparentTitle || session.parentTitle
-    : kind === "track"
-      ? session.grandparentTitle || session.originalTitle
-      : session.year ? String(session.year) : null;
-  const artworkPath = session.thumb || session.grandparentThumb;
-  const artworkUrl = artworkPath
-    ? `${origin}${artworkPath}?X-Plex-Token=${encodeURIComponent(token)}`
-    : null;
-
+  const subtitle = kind === "episode" ? session.grandparentTitle || session.parentTitle : kind === "track" ? session.grandparentTitle || session.originalTitle : session.year ? String(session.year) : null;
+  const imageId = session.thumb || session.grandparentThumb;
   return {
-    state,
-    kind,
-    title: session.title,
-    subtitle,
-    artworkUrl,
-    positionMs: session.viewOffset,
-    durationMs: session.duration,
+    state, kind, title: session.title, subtitle,
+    artwork: imageId ? { provider: "plex", imageId, type: "thumb" } : null,
+    artworkUrl: null,
+    positionMs: session.viewOffset, durationMs: session.duration,
   };
 }
