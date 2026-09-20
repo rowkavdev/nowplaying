@@ -1,26 +1,61 @@
-const COLORS = Object.freeze({
-  background: "#0d1117",
-  border: "#30363d",
-  primary: "#f0f6fc",
-  secondary: "#8b949e",
-  accent: "#58a6ff",
+export const cardThemes = Object.freeze({
+  "midnight-blue": Object.freeze({
+    background: "#0d1117",
+    border: "#30363d",
+    primary: "#f0f6fc",
+    secondary: "#9aa7b7",
+    accent: "#58a6ff",
+    track: "#30363d",
+  }),
+  paper: Object.freeze({
+    background: "#ffffff",
+    border: "#c7d2df",
+    primary: "#172033",
+    secondary: "#526173",
+    accent: "#0969da",
+    track: "#d8e0e8",
+  }),
+  compact: Object.freeze({
+    background: "#0d1117",
+    border: "#30363d",
+    primary: "#f0f6fc",
+    secondary: "#9aa7b7",
+    accent: "#58a6ff",
+    track: "#30363d",
+  }),
 });
 
+const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const SHOW_DEFAULTS = Object.freeze({
   mediaType: true,
   progress: true,
   state: true,
   subtitle: true,
 });
+const COMPACT_SHOW = Object.freeze({ progress: false, state: false, subtitle: false });
 
-export function renderCard(presence, { width = 440, show = {} } = {}) {
+export function resolveCardTheme(theme = "midnight-blue", colors = {}) {
+  if (!Object.hasOwn(cardThemes, theme)) throw new TypeError(`Unknown card theme: ${theme}`);
+  if (colors === null || typeof colors !== "object" || Array.isArray(colors)) throw new TypeError("colors must be an object");
+  const resolved = { ...cardThemes[theme] };
+  for (const [key, value] of Object.entries(colors)) {
+    if (!Object.hasOwn(resolved, key)) throw new TypeError(`Unknown card color: ${key}`);
+    if (typeof value !== "string" || !COLOR_PATTERN.test(value)) throw new TypeError(`card.colors.${key} must be a six-digit hex color`);
+    resolved[key] = value.toLowerCase();
+  }
+  return Object.freeze(resolved);
+}
+
+export function renderCard(presence, { width = 440, show = {}, theme = "midnight-blue", colors = {} } = {}) {
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
-  const visibility = { ...SHOW_DEFAULTS, ...show };
+  const presetShow = theme === "compact" ? COMPACT_SHOW : {};
+  const visibility = { ...SHOW_DEFAULTS, ...presetShow, ...show };
   for (const [key, value] of Object.entries(visibility)) {
     if (!Object.hasOwn(SHOW_DEFAULTS, key)) throw new TypeError(`Unknown card visibility setting: ${key}`);
     if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
   }
+  const palette = resolveCardTheme(theme, colors);
 
   const status = presence.state === "playing" ? "NOW PLAYING" : presence.state === "paused" ? "PAUSED" : "NOT PLAYING";
   const title = presence.title || "Nothing playing";
@@ -36,12 +71,12 @@ export function renderCard(presence, { width = 440, show = {} } = {}) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title>
   <desc id="desc">${escapeXml(description)}</desc>
-  <rect width="100%" height="100%" rx="10" fill="${COLORS.background}" stroke="${COLORS.border}"/>
-  ${visibility.state ? `<text x="24" y="30" fill="${COLORS.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
-  <text x="24" y="${titleY}" fill="${COLORS.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="600">${escapeXml(truncate(title, 38))}</text>
-  ${hasSubtitle ? `<text x="24" y="${subtitleY}" fill="${COLORS.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">${escapeXml(truncate(subtitle, 52))}</text>` : ""}
-  ${visibility.progress ? `<rect x="24" y="${progressY}" width="${width - 48}" height="4" rx="2" fill="${COLORS.border}"/>
-  <rect x="24" y="${progressY}" width="${progress}" height="4" rx="2" fill="${COLORS.accent}"/>` : ""}
+  <rect width="100%" height="100%" rx="10" fill="${palette.background}" stroke="${palette.border}"/>
+  ${visibility.state ? `<text x="24" y="30" fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
+  <text x="24" y="${titleY}" fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="600">${escapeXml(truncate(title, 38))}</text>
+  ${hasSubtitle ? `<text x="24" y="${subtitleY}" fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">${escapeXml(truncate(subtitle, 52))}</text>` : ""}
+  ${visibility.progress ? `<rect x="24" y="${progressY}" width="${width - 48}" height="4" rx="2" fill="${palette.track}"/>
+  <rect x="24" y="${progressY}" width="${progress}" height="4" rx="2" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
 
