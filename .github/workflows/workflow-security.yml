@@ -1,0 +1,42 @@
+name: Workflow security
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint 1.7.12
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=1.7.12
+          archive="actionlint_${version}_linux_x86_64.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output checksums.txt "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_checksums.txt"
+          grep "  ${archive}$" checksums.txt | sha256sum --check --strict
+          tar -xzf "$archive" actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+      - name: Lint workflows
+        run: actionlint -color
+
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit workflow security
+        uses: zizmorcore/zizmor-action@6599ee8b7a49aef6a770f63d261d214911a7ce02 # v0.6.0
+        with:
+          advanced-security: false
