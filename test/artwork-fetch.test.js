@@ -1,9 +1,10 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
 import { artworkDataUri, fetchArtwork } from "../src/artwork-fetch.js";
 
-const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAAASUhEUgAAAAEAAAAB", "base64"));
 
 function response({ status = 200, type = "image/png", bytes = png, length } = {}) {
   return {
