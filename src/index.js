@@ -23,3 +23,4 @@ export { createResilientCardResolver } from "./resilient-card.js";
 export { createHttpServer } from "./http-server.js";
 export { checkForUpdate } from "./update-check.js";
 export { downloadVerifiedUpdate } from "./update-download.js";
+export { installVerifiedUpdate } from "./update-install.js";
