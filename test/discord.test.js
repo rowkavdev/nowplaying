@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -76,10 +77,11 @@ test("validates fields and Discord asset keys", () => {
     () => validateDiscordSettings({ largeImage: "https://example.test/image.png" }),
     { message: "discord.largeImage: expected an asset key" },
   );
-  assert.throws(
-    () => validateDiscordSettings({ buttons: [] }),
-    { message: "discord.buttons: unknown setting" },
-  );
+  assert.deepEqual(formatDiscordActivity(playing, { buttons: [{ label: "Open Plex", url: "https://app.plex.tv" }] }).buttons, [{ label: "Open Plex", url: "https://app.plex.tv" }]);
+  assert.throws(() => validateDiscordSettings({ buttons: [{ label: "Bad", url: "http://private.test" }] }), /valid HTTPS URL/);
+  assert.throws(() => validateDiscordSettings({ buttons: [{ label: "One", url: "https://example.test/1" }, { label: "Two", url: "https://example.test/2" }, { label: "Three", url: "https://example.test/3" }] }), /up to two buttons/);
+  assert.doesNotThrow(() => validateDiscordSettings({ minUpdateIntervalMs: 5000 }));
+  assert.throws(() => validateDiscordSettings({ minUpdateIntervalMs: 4999 }), /5000 to 300000/);
 });
 
 test("truncates without splitting Unicode code points", () => {
