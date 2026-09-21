@@ -6,6 +6,7 @@ export { templateFields, createTemplateValues, validateTemplate, formatTemplate 
 export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPrivacy } from "./privacy.js";
 export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from "./discord.js";
 export { createArtworkRequest } from "./artwork.js";
+export { createArtworkCache, artworkCacheKey } from "./artwork-cache.js";
 export { createPlexProvider } from "./providers/plex.js";
 export { createJellyfinProvider } from "./providers/jellyfin.js";
 export { createNavidromeProvider } from "./providers/navidrome.js";
