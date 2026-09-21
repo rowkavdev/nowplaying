@@ -1,11 +1,11 @@
+import { createHash } from "node:crypto";
+
 const THEMES = new Set(["midnight-blue", "paper", "compact"]);
 const VISIBILITY = new Set(["artwork", "mediaType", "progress", "state", "subtitle"]);
 
 export function parseCardQuery(searchParams) {
   for (const key of searchParams.keys()) {
-    if (!["theme", "width", "show"].includes(key) || searchParams.getAll(key).length !== 1) {
-      throw new TypeError("invalid card query");
-    }
+    if (!["theme", "width", "show"].includes(key) || searchParams.getAll(key).length !== 1) throw new TypeError("invalid card query");
   }
   const options = {};
   if (searchParams.has("theme")) {
@@ -30,7 +30,6 @@ export function parseCardQuery(searchParams) {
 
 export function createCardHandler({ resolveCard } = {}) {
   if (typeof resolveCard !== "function") throw new TypeError("resolveCard: expected a function");
-
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
@@ -46,11 +45,20 @@ export function createCardHandler({ resolveCard } = {}) {
     try {
       const svg = await resolveCard(options);
       if (typeof svg !== "string" || !svg.includes("<svg")) throw new TypeError("invalid card output");
-      return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      const etag = `"${createHash("sha256").update(svg).digest("base64url")}"`;
+      const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=30, stale-while-revalidate=60", ETag: etag, "X-Content-Type-Options": "nosniff" };
+      if (readHeader(request?.headers, "if-none-match") === etag) return response(304, "", headers);
+      return response(200, method === "HEAD" ? "" : svg, headers);
     } catch {
-      return response(503, "Card unavailable");
+      return response(503, "Card unavailable", { "Cache-Control": "no-store" });
     }
   };
 }
 
+function readHeader(headers, name) {
+  if (!headers) return undefined;
+  if (typeof headers.get === "function") return headers.get(name) ?? undefined;
+  const key = Object.keys(headers).find((value) => value.toLowerCase() === name);
+  return key ? headers[key] : undefined;
+}
 function response(status, body, headers = {}) { return Object.freeze({ status, headers: Object.freeze(headers), body }); }
