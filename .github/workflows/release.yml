@@ -50,7 +50,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-${{ github.ref_name }}
-      - uses: actions/attest-build-provenance@v2
+      - name: Attest public-repository build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: nowplaying-${{ github.ref_name }}.tar.gz
       - env:
