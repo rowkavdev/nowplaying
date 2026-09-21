@@ -1,5 +1,7 @@
-export function createSharpArtworkSanitizer({ sharpFactory, quality = 85 } = {}) {
+
+export function createSharpArtworkSanitizer({ sharpFactory, quality = 85, maxOutputBytes = 1_000_000 } = {}) {
   if (typeof sharpFactory !== "function") throw new TypeError("sharpFactory: expected a function");
+  if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > 5_000_000) throw new RangeError("maxOutputBytes: must be between 1 and 5000000");
   if (!Number.isInteger(quality) || quality < 1 || quality > 100) throw new RangeError("quality: must be between 1 and 100");
 
   return async function sanitize(artwork, { width = 256, height = 256 } = {}) {
@@ -14,6 +16,8 @@ export function createSharpArtworkSanitizer({ sharpFactory, quality = 85 } = {})
       .png({ compressionLevel: 9, quality, force: true })
       .toBuffer({ resolveWithObject: true });
     if (!info || !Number.isInteger(info.width) || !Number.isInteger(info.height)) throw new TypeError("sharp: expected output dimensions");
+    if (info.width * info.height > width * height) throw new RangeError("sharp: output exceeds requested pixel dimensions");
+    if (data.byteLength > maxOutputBytes) throw new RangeError("sharp: output exceeds maximum byte size");
     return Object.freeze({ contentType: "image/png", bytes: new Uint8Array(data), width: info.width, height: info.height });
   };
 }
