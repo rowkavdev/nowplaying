@@ -7,6 +7,7 @@ export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPriva
 export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from "./discord.js";
 export { createArtworkRequest } from "./artwork.js";
 export { createArtworkCache, artworkCacheKey } from "./artwork-cache.js";
+export { fetchArtwork, artworkDataUri } from "./artwork-fetch.js";
 export { createPlexProvider } from "./providers/plex.js";
 export { createJellyfinProvider } from "./providers/jellyfin.js";
 export { createNavidromeProvider } from "./providers/navidrome.js";
