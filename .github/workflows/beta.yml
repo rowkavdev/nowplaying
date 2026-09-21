@@ -60,7 +60,7 @@ jobs:
             printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing all updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
             printf "## What's Changed\n\n"
-            git log --reverse --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA" | while IFS=$'\t' read -r sha subject; do
+            while IFS=$'\t' read -r sha subject || [[ -n "${sha:-}" ]]; do
               [[ -z "$sha" ]] && continue
               short=${sha:0:7}
               safe_subject=${subject//$'\r'/ }
@@ -71,7 +71,7 @@ jobs:
               else
                 printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$safe_subject" "$short" "$GITHUB_REPOSITORY" "$sha"
               fi
-            done
+            done < <(git log --reverse --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA")
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$DEV_TAG"
           } > development-release-notes.md
       - name: Publish immutable development pre-release
