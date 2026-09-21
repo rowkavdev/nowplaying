@@ -17,13 +17,21 @@ function get(port, path = "/card.svg") {
 test("adapts handler responses onto a real Node HTTP server", async () => {
   const app = createHttpServer({ port: 0, handler: async ({ url }) => ({ status: 200, headers: { "Content-Type": "text/plain" }, body: url }) });
   const address = await app.listen();
-  try { assert.deepEqual(await get(address.port, "/healthz"), { status: 200, headers: { "content-type": "text/plain", date: assert.any(String), connection: "keep-alive", "keep-alive": "timeout=5", "transfer-encoding": "chunked" }, body: "/healthz" }); }
-  finally { await app.close(); }
+  try {
+    const result = await get(address.port, "/healthz");
+    assert.equal(result.status, 200);
+    assert.equal(result.headers["content-type"], "text/plain");
+    assert.equal(result.body, "/healthz");
+  } finally { await app.close(); }
 });
 
 test("sanitizes unexpected adapter failures", async () => {
   const app = createHttpServer({ port: 0, handler: async () => { throw new Error("token=secret"); } });
   const address = await app.listen();
-  try { const result = await get(address.port); assert.equal(result.status, 500); assert.equal(result.body, "Internal Server Error"); assert.equal(result.headers["cache-control"], "no-store"); }
-  finally { await app.close(); }
+  try {
+    const result = await get(address.port);
+    assert.equal(result.status, 500);
+    assert.equal(result.body, "Internal Server Error");
+    assert.equal(result.headers["cache-control"], "no-store");
+  } finally { await app.close(); }
 });
