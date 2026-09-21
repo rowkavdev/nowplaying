@@ -1,3 +1,4 @@
+
 const PRIVACY_MODES = new Set(["private", "friends", "public", "custom"]);
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
@@ -100,8 +101,8 @@ function validateCard(value) {
   if (value.theme !== undefined && !CARD_THEMES.has(value.theme)) {
     throw new TypeError("card.theme: expected midnight-blue, paper or compact");
   }
-  if (value.width !== undefined && (!Number.isInteger(value.width) || value.width < 240 || value.width > 800)) {
-    throw new TypeError("card.width: must be an integer between 240 and 800");
+  if (value.width !== undefined && (!Number.isInteger(value.width) || value.width < 280 || value.width > 800)) {
+    throw new TypeError("card.width: must be an integer between 280 and 800");
   }
   if (value.show !== undefined) {
     assertObject(value.show, "card.show");
