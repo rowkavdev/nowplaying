@@ -1,0 +1,48 @@
+name: Rolling private beta
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rolling-private-beta
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev
+      - name: Build installer and portable ZIP
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Add-Content dist/windows/SHA256SUMS
+          }
+      - name: Refresh beta tag
+        shell: bash
+        run: |
+          git tag -f beta "$GITHUB_SHA"
+          git push --force origin beta
+      - name: Replace moving prerelease assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete beta --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          git tag -f beta "$GITHUB_SHA"
+          git push --force origin beta
+          gh release create beta --repo "$GITHUB_REPOSITORY" --prerelease --title "Latest private beta" --notes "Automated test build from main at $GITHUB_SHA. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
