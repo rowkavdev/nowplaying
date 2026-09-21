@@ -56,22 +56,40 @@ jobs:
             baseline_label="$stable_tag"
           fi
 
+          git log --reverse --no-merges --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA" > all-changes.tsv
+          : > ranked-changes.tsv
+          while IFS=$'\t' read -r sha subject || [[ -n "${sha:-}" ]]; do
+            [[ -z "${sha:-}" ]] && continue
+            case "$subject" in
+              *'BREAKING CHANGE'*|*'!'*:*) rank=0 ;;
+              security:*|sec:*) rank=1 ;;
+              feat:*|feature:*|update:*) rank=2 ;;
+              fix:*) rank=3 ;;
+              perf:*) rank=4 ;;
+              test:*|docs:*|ci:*|chore:*|build:*) rank=9 ;;
+              *) rank=5 ;;
+            esac
+            stats=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {printf "%012d", a+d+f}')
+            pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
+            key=${pr:-commit-$sha}
+            printf '%s\t%s\t%s\t%s\t%s\n' "$rank" "$stats" "$key" "$sha" "$subject" >> ranked-changes.tsv
+          done < all-changes.tsv
+
+          total=$(cut -f3 ranked-changes.tsv | sort -u | wc -l | tr -d ' ')
+          sort -t$'\t' -k1,1n -k2,2nr ranked-changes.tsv | awk -F '\t' '!seen[$3]++' | head -10 > top-changes.tsv
           {
             printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
-            printf 'This is a cumulative test build containing all updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
+            printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
             printf "## What's Changed\n\n"
-            while IFS=$'\t' read -r sha subject || [[ -n "${sha:-}" ]]; do
-              [[ -z "$sha" ]] && continue
+            while IFS=$'\t' read -r rank stats key sha subject; do
               short=${sha:0:7}
-              safe_subject=${subject//$'\r'/ }
-              safe_subject=${safe_subject//$'\n'/ }
-              pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
-              if [[ -n "$pr" ]]; then
-                printf -- '- %s ([`%s`](https://github.com/%s/commit/%s), [#%s](https://github.com/%s/pull/%s))\n' "$safe_subject" "$short" "$GITHUB_REPOSITORY" "$sha" "$pr" "$GITHUB_REPOSITORY" "$pr"
+              if [[ "$key" == commit-* ]]; then
+                printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$subject" "$short" "$GITHUB_REPOSITORY" "$sha"
               else
-                printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$safe_subject" "$short" "$GITHUB_REPOSITORY" "$sha"
+                printf -- '- %s ([#%s](https://github.com/%s/pull/%s), [`%s`](https://github.com/%s/commit/%s))\n' "$subject" "$key" "$GITHUB_REPOSITORY" "$key" "$short" "$GITHUB_REPOSITORY" "$sha"
               fi
-            done < <(git log --reverse --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA")
+            done < top-changes.tsv
+            if (( total > 10 )); then printf '\nShowing 10 of %s changes. See Full Changelog for all changes.\n' "$total"; fi
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$DEV_TAG"
           } > development-release-notes.md
       - name: Publish immutable development pre-release
