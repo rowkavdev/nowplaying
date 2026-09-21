@@ -7,5 +7,5 @@ import { createPresence } from "../src/presence.js";
 test("settings and renderer share the same card width range", () => {
   assert.throws(() => createSettings({ card: { width: 279 } }), /between 280 and 800/);
   const settings = createSettings({ card: { width: 280 } });
-  assert.doesNotThrow(() => renderCard(createPresence(), settings.card));
+  assert.doesNotThrow(() => renderCard(createPresence(), { width: settings.card.width }));
 });
