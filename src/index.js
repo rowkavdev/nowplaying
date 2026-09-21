@@ -26,3 +26,4 @@ export { downloadVerifiedUpdate } from "./update-download.js";
 export { installVerifiedUpdate } from "./update-install.js";
 export { createAutoUpdater } from "./auto-updater.js";
 export { createAnalyticsStore } from "./analytics-store.js";
+export { createAnalyticsHandler } from "./analytics-handler.js";
