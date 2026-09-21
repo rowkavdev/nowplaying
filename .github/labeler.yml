@@ -1,0 +1,21 @@
+area:server:
+  - changed-files:
+      - any-glob-to-any-file: ["src/http-*.js", "src/*handler.js", "src/analytics*.js"]
+area:cards:
+  - changed-files:
+      - any-glob-to-any-file: ["src/card*.js", "src/artwork*.js", "src/providers/**", "test/card*.js", "test/artwork*.js"]
+area:installer:
+  - changed-files:
+      - any-glob-to-any-file: ["scripts/build-windows.ps1", "scripts/windows-installer.iss", "scripts/windows-launcher.cs", "scripts/generate-windows-icon.ps1", "assets/**"]
+area:tray:
+  - changed-files:
+      - any-glob-to-any-file: ["scripts/windows-tray.ps1"]
+area:updater:
+  - changed-files:
+      - any-glob-to-any-file: ["src/update*.js", "docs/updates.md", "test/update*.js"]
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", "scripts/build*.js", "package*.json"]
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
