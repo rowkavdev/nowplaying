@@ -32,17 +32,18 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)" | Add-Content dist/windows/SHA256SUMS
           }
-      - name: Refresh dev tag
+      - name: Choose next patch development version
         shell: bash
         run: |
-          git tag -f dev "$GITHUB_SHA"
-          git push --force origin dev
-      - name: Replace moving development build assets
+          current=$(node -p "require('./package.json').version")
+          IFS=. read -r major minor patch <<<"$current"
+          tag="v${major}.${minor}.$((patch + 1))-dev.${GITHUB_RUN_NUMBER}"
+          echo "DEV_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Publish immutable development pre-release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete dev --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          git tag -f dev "$GITHUB_SHA"
-          git push --force origin dev
-          gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --title "Development build" --notes "Automated development build from main at $GITHUB_SHA. This is newer than the latest release and may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          git tag "$DEV_TAG" "$GITHUB_SHA"
+          git push origin "$DEV_TAG"
+          gh release create "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title "nowplaying ${DEV_TAG#v}" --notes "Automated development build from main at $GITHUB_SHA. This is a test build for the next patch and may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
