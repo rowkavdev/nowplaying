@@ -1,4 +1,5 @@
 
+
 export { renderCard, cardThemes, resolveCardTheme } from "./card.js";
 export { createPresence } from "./presence.js";
 export { defineProvider } from "./provider.js";
@@ -6,6 +7,7 @@ export { defaultSettings, validateSettings, createSettings } from "./settings.js
 export { templateFields, createTemplateValues, validateTemplate, formatTemplate } from "./template.js";
 export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPrivacy } from "./privacy.js";
 export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from "./discord.js";
+export { createDiscordClient } from "./discord-client.js";
 export { createArtworkRequest } from "./artwork.js";
 export { createArtworkCache, artworkCacheKey } from "./artwork-cache.js";
 export { fetchArtwork, artworkDataUri } from "./artwork-fetch.js";
