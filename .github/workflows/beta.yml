@@ -1,8 +1,6 @@
 name: Rolling private beta
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -37,7 +35,7 @@ jobs:
         run: |
           git tag -f beta "$GITHUB_SHA"
           git push --force origin beta
-      - name: Replace moving prerelease assets
+      - name: Replace deliberate beta release assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,4 +43,4 @@ jobs:
           gh release delete beta --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           git tag -f beta "$GITHUB_SHA"
           git push --force origin beta
-          gh release create beta --repo "$GITHUB_REPOSITORY" --prerelease --title "Latest private beta" --notes "Automated test build from main at $GITHUB_SHA. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          gh release create beta --repo "$GITHUB_REPOSITORY" --prerelease --title "Deliberate private beta" --notes "Manually requested beta build from $GITHUB_SHA. This channel is only refreshed when a beta ahead of the latest version is intentionally requested. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
