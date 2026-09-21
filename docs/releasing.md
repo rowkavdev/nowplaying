@@ -1,8 +1,9 @@
+
 # Releases and versioning
 
-Automated, versioned releases are tracked in issue [#28](https://github.com/rowkav09/nowplaying/issues/28). No stable release has been published yet. This guide defines the target process and the checks required before release automation is enabled.
+Automated, versioned releases use `.github/workflows/release.yml`. No stable release has been published yet. This guide defines the live process and the checks required before creating the first protected tag.
 
-> Commands and workflow names in the planned sections are design guidance until issue #28 lands.
+The release workflow runs only for semantic version tags, separates verification from publication, and requires the protected `release` environment for the write-capable job.
 
 ## Goals
 
