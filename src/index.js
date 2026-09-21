@@ -1,3 +1,4 @@
+
 export { renderCard, cardThemes, resolveCardTheme } from "./card.js";
 export { createPresence } from "./presence.js";
 export { defineProvider } from "./provider.js";
@@ -8,6 +9,7 @@ export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from 
 export { createArtworkRequest } from "./artwork.js";
 export { createArtworkCache, artworkCacheKey } from "./artwork-cache.js";
 export { fetchArtwork, artworkDataUri } from "./artwork-fetch.js";
+export { createArtworkService } from "./artwork-service.js";
 export { createPlexProvider } from "./providers/plex.js";
 export { createJellyfinProvider } from "./providers/jellyfin.js";
 export { createNavidromeProvider } from "./providers/navidrome.js";
