@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: rolling-development-build
@@ -17,6 +18,8 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -39,6 +42,38 @@ jobs:
           IFS=. read -r major minor patch <<<"$current"
           tag="v${major}.${minor}.$((patch + 1))-dev.${GITHUB_RUN_NUMBER}"
           echo "DEV_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Build cumulative development release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          stable_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft --jq 'select(.isPrerelease == false and .isDraft == false) | .tagName')
+          if [[ -z "$stable_tag" ]]; then
+            stable_tag=$(git rev-list --max-parents=0 HEAD | tail -1)
+            baseline_label="initial commit"
+          else
+            baseline_label="$stable_tag"
+          fi
+
+          {
+            printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
+            printf 'This is a cumulative test build containing all updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
+            printf "## What's Changed\n\n"
+            git log --reverse --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA" | while IFS=$'\t' read -r sha subject; do
+              [[ -z "$sha" ]] && continue
+              short=${sha:0:7}
+              safe_subject=${subject//$'\r'/ }
+              safe_subject=${safe_subject//$'\n'/ }
+              pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
+              if [[ -n "$pr" ]]; then
+                printf -- '- %s ([`%s`](https://github.com/%s/commit/%s), [#%s](https://github.com/%s/pull/%s))\n' "$safe_subject" "$short" "$GITHUB_REPOSITORY" "$sha" "$pr" "$GITHUB_REPOSITORY" "$pr"
+              else
+                printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$safe_subject" "$short" "$GITHUB_REPOSITORY" "$sha"
+              fi
+            done
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$DEV_TAG"
+          } > development-release-notes.md
       - name: Publish immutable development pre-release
         shell: bash
         env:
@@ -46,4 +81,4 @@ jobs:
         run: |
           git tag "$DEV_TAG" "$GITHUB_SHA"
           git push origin "$DEV_TAG"
-          gh release create "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title "nowplaying ${DEV_TAG#v}" --notes "Automated development build from main at $GITHUB_SHA. This is a test build for the next patch and may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing." dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          gh release create "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title "nowplaying ${DEV_TAG#v}" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
