@@ -1,9 +1,13 @@
+import { validateRasterDimensions } from "./raster-dimensions.js";
+
+
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function fetchArtwork(request, {
   fetchImpl = fetch,
   timeoutMs = 5_000,
   maxBytes = 1_000_000,
+  maxPixels = 16_000_000,
 } = {}) {
   if (request === null || typeof request !== "object" || typeof request.url !== "string") {
     throw new TypeError("request: expected an artwork request descriptor");
@@ -29,7 +33,8 @@ export async function fetchArtwork(request, {
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > maxBytes) throw new RangeError("Artwork exceeds maximum byte size");
     validateMagic(bytes, contentType);
-    return Object.freeze({ contentType, bytes });
+    const dimensions = validateRasterDimensions(bytes, contentType, { maxPixels });
+    return Object.freeze({ contentType, bytes, ...dimensions });
   } finally {
     clearTimeout(timer);
   }
