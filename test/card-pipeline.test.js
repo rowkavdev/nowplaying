@@ -5,7 +5,7 @@ import { createPresence } from "../src/presence.js";
 
 test("polls, applies privacy, resolves allowed artwork and renders", async () => {
   const calls = [];
-  const artwork = { provider: "plex", itemId: "7", type: "primary" };
+  const artwork = { provider: "plex", itemId: "7", imageId: null, imageTag: null, type: "primary" };
   const provider = { getPresence: async () => createPresence({ state: "playing", kind: "movie", title: "Secret", artwork }) };
   const artworkService = { resolve: async (...args) => { calls.push(args); return "data:image/png;base64,eA=="; } };
   const renderer = (presence, options) => ({ presence, options });
