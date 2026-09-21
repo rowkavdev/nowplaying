@@ -19,3 +19,4 @@ export { createNavidromeProvider } from "./providers/navidrome.js";
 export { createEmbyProvider } from "./providers/emby.js";
 export { createCardHandler, parseCardQuery } from "./http-handler.js";
 export { createCardPipeline } from "./card-pipeline.js";
+export { createResilientCardResolver } from "./resilient-card.js";
