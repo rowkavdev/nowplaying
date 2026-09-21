@@ -4,9 +4,14 @@ $Version = (Get-Content (Join-Path $Root 'package.json') | ConvertFrom-Json).ver
 $Bundle = Join-Path $Root "dist/windows/nowplaying-v$Version-windows-x64"
 
 
+
+
 Remove-Item (Join-Path $Root 'dist/windows') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item (Join-Path $Bundle 'runtime') -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $Bundle 'app') -ItemType Directory -Force | Out-Null
+& (Join-Path $Root 'scripts/generate-windows-icon.ps1')
+
+
 
 
 # Compile the tiny native launcher. Node and Sharp remain real files so native loading is reliable.
@@ -21,6 +26,13 @@ Copy-Item (Join-Path $Root 'node_modules') (Join-Path $Bundle 'app/node_modules'
 Copy-Item (Join-Path $Root 'package.json') (Join-Path $Bundle 'app/package.json')
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
+Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse
+
+$Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
+if (-not $Iscc) { $Iscc = (Get-Command iscc -ErrorAction Stop).Source }
+& $Iscc ('/DAppVersion=' + $Version) ('/DBundleDir=' + $Bundle) (Join-Path $Root 'scripts/windows-installer.iss')
+
+
 
 
 & (Join-Path $Bundle 'nowplaying.exe') --version
