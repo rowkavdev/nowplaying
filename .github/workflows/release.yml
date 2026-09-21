@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - run: node --check src/*.js src/providers/*.js test/*.js
       - run: npm test
       - run: npm run build
@@ -53,4 +55,4 @@ jobs:
           subject-path: nowplaying-${{ github.ref_name }}.tar.gz
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" nowplaying-${GITHUB_REF_NAME}.tar.gz SHA256SUMS --verify-tag --generate-notes --title "nowplaying ${GITHUB_REF_NAME}"
+        run: gh release upload "${GITHUB_REF_NAME}" nowplaying-${GITHUB_REF_NAME}.tar.gz SHA256SUMS --clobber
