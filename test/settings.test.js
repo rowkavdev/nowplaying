@@ -1,4 +1,5 @@
 
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -18,7 +19,7 @@ test("deep-merges supported sections without mutating defaults", () => {
   const settings = createSettings({
     locale: "en-US",
     privacy: { mode: "friends", hideArtwork: true },
-    card: { width: 560, show: { year: false } },
+    card: { width: 560, show: { subtitle: false } },
     discord: { enabled: true, timestamps: "none" },
   });
 
@@ -28,7 +29,7 @@ test("deep-merges supported sections without mutating defaults", () => {
   assert.equal(settings.privacy.hideArtwork, true);
   assert.equal(settings.card.width, 560);
   assert.equal(settings.card.show.mediaType, true);
-  assert.equal(settings.card.show.year, false);
+  assert.equal(settings.card.show.subtitle, false);
   assert.equal(settings.discord.enabled, true);
   assert.equal(settings.discord.timestamps, "none");
   assert.equal(defaultSettings.card.width, 420);
