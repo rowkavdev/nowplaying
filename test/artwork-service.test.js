@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createArtworkCache } from "../src/artwork-cache.js";
@@ -5,7 +6,7 @@ import { createArtworkService } from "../src/artwork-service.js";
 
 const artwork = { provider: "jellyfin", type: "primary", itemId: "movie-1", imageTag: "v1" };
 const config = { baseUrl: "http://media.local", apiKey: "secret" };
-const png = Uint8Array.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
+const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAAASUhEUgAAAAEAAAAB", "base64"));
 function response(status, bytes = png) {
   return { status, statusText: status === 404 ? "Not Found" : "OK", ok: status >= 200 && status < 300,
     headers: { get: (name) => name === "content-type" ? "image/png" : null },
