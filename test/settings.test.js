@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -63,7 +64,7 @@ test("rejects unknown settings with a stable path", () => {
 test("rejects invalid nested values", () => {
   assert.throws(
     () => validateSettings({ card: { width: 100 } }),
-    { message: "card.width: must be an integer between 240 and 800" },
+    { message: "card.width: must be an integer between 280 and 800" },
   );
   assert.throws(
     () => validateSettings({ card: { theme: "unsafe-css" } }),
