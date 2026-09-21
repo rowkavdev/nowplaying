@@ -21,7 +21,7 @@ test("resolves a private provider request to a card-safe data URI and caches it"
     assert.equal(options.headers["X-Emby-Token"], "secret");
     return response(200);
   }});
-  const expected = "data:image/png;base64,iVBORw0KGgo=";
+  const expected = "data:image/png;base64,iVBORw0KGgoAAAAASUhEUgAAAAEAAAAB";
   assert.equal(await service.resolve(artwork, config), expected);
   assert.equal(await service.resolve(artwork, config), expected);
   assert.equal(calls, 1);
