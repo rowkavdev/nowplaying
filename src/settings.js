@@ -1,4 +1,5 @@
 
+
 const PRIVACY_MODES = new Set(["private", "friends", "public", "custom"]);
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
@@ -24,13 +25,13 @@ export const defaultSettings = Object.freeze({
     theme: "midnight-blue",
     width: 420,
     show: Object.freeze({
-      provider: false,
-      mediaType: true,
-      year: true,
-      progress: true,
       artwork: true,
+      mediaType: true,
+      progress: true,
       state: true,
+      subtitle: true,
     }),
+    layout: Object.freeze({ padding: 24, radius: 10, titleSize: 20, subtitleSize: 14, progressHeight: 4 }),
   }),
   discord: Object.freeze({
     enabled: false,
@@ -45,8 +46,9 @@ const ROOT_KEYS = new Set(["locale", "privacy", "format", "card", "discord"]);
 const KEYS = Object.freeze({
   privacy: new Set(Object.keys(defaultSettings.privacy)),
   format: new Set(Object.keys(defaultSettings.format)),
-  card: new Set(["theme", "width", "show"]),
+  card: new Set(["theme", "width", "show", "layout"]),
   cardShow: new Set(Object.keys(defaultSettings.card.show)),
+  cardLayout: new Set(Object.keys(defaultSettings.card.layout)),
   discord: new Set(Object.keys(defaultSettings.discord)),
 });
 
@@ -111,6 +113,14 @@ function validateCard(value) {
       if (value.show[key] !== undefined) assertBoolean(value.show[key], `card.show.${key}`);
     }
   }
+  if (value.layout !== undefined) {
+    assertObject(value.layout, "card.layout");
+    rejectUnknown(value.layout, KEYS.cardLayout, "card.layout");
+    const ranges = { padding: [12, 48], radius: [0, 24], titleSize: [14, 30], subtitleSize: [10, 20], progressHeight: [2, 12] };
+    for (const [key, [min, max]] of Object.entries(ranges)) {
+      if (value.layout[key] !== undefined && (!Number.isInteger(value.layout[key]) || value.layout[key] < min || value.layout[key] > max)) throw new RangeError(`card.layout.${key}: expected an integer from ${min} to ${max}`);
+    }
+  }
 }
 
 function validateDiscord(value) {
@@ -156,6 +166,7 @@ export function createSettings(input = {}) {
   Object.freeze(settings.privacy);
   Object.freeze(settings.format);
   Object.freeze(settings.card.show);
+  Object.freeze(settings.card.layout);
   Object.freeze(settings.card);
   Object.freeze(settings.discord);
   return Object.freeze(settings);
