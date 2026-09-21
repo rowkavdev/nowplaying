@@ -1,8 +1,9 @@
+
 # nowplaying
 
 Live README cards and Discord Rich Presence for Plex, Jellyfin, Navidrome and Emby.
 
-> Private early build. The provider core and first SVG renderer work; the hosted endpoint, Discord output and production deployment flow are still being built.
+> Private early build. Provider polling, privacy controls, self-contained artwork cards, Discord Rich Presence and protected release automation are implemented. The hosted HTTP endpoint and production process wrapper remain in progress.
 
 ## What it is
 
@@ -26,11 +27,11 @@ Supported providers:
 - [x] Plex, Jellyfin, Navidrome and Emby adapters
 - [x] Accessible, XML-safe SVG renderer
 - [x] Node 22/24 tests, coverage and build artifacts in CI
-- [ ] Deep output settings and themes
-- [ ] Privacy controls
+- [x] Deep output settings and deuteranopia-safe themes
+- [x] Privacy controls
 - [ ] Hosted README-card endpoint
-- [ ] Discord Rich Presence publisher
-- [ ] Versioned releases and packaged builds
+- [x] Discord Rich Presence formatter, lifecycle and IPC adapter
+- [x] Tag-driven versioned release and packaged builds
 
 Follow the work in [Issues](https://github.com/rowkav09/nowplaying/issues).
 
@@ -52,7 +53,7 @@ npm test
 npm run build
 ```
 
-No runtime packages are required yet. The build writes a smoke-test artifact to `dist/`.
+The sharp runtime sanitizes artwork before it enters a card. The build writes a smoke-test artifact to `dist/`.
 
 ## Library usage
 
@@ -85,7 +86,7 @@ Provider constructors accept an optional `fetchImpl`, which keeps tests determin
 
 The first card renderer supports playing, paused and idle states, bounded widths, progress, safe XML escaping and accessible `<title>`/`<desc>` text. Its default dark palette uses a blue accent chosen to remain distinct for deuteranopia.
 
-The settings layer is being designed as shared presentation configuration rather than provider-specific flags. Planned controls include:
+The shared presentation layer is separate from provider polling. Implemented controls include:
 
 - title, detail and state formats
 - per-field visibility
@@ -96,7 +97,7 @@ The settings layer is being designed as shared presentation configuration rather
 - named card themes and custom colors
 - Discord activity text, buttons, assets and timestamps
 
-See [customization issue #25](https://github.com/rowkav09/nowplaying/issues/25).
+See [Customization](docs/customization.md).
 
 ## Commands
 
