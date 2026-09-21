@@ -1,3 +1,4 @@
+
 export function createArtworkCache({ maxEntries = 128, ttlMs = 3_600_000, negativeTtlMs = 60_000, now = Date.now } = {}) {
   for (const [name, value] of Object.entries({ maxEntries, ttlMs, negativeTtlMs })) {
     if (!Number.isInteger(value) || value < 1) throw new TypeError(`${name}: expected a positive integer`);
@@ -38,7 +39,7 @@ export function artworkCacheKey(artwork, { width = 256, height = 256 } = {}) {
   }
   const id = artwork.itemId || artwork.imageId;
   if (!artwork.provider || !id || !artwork.type) throw new TypeError("artwork: missing provider, identifier or type");
-  return [artwork.provider, artwork.type, id, artwork.imageTag || "-", `${width}x${height}`]
+  return ["san-v1-png", artwork.provider, artwork.type, id, artwork.imageTag || "-", `${width}x${height}`]
     .map((part) => encodeURIComponent(String(part)))
     .join(":");
 }

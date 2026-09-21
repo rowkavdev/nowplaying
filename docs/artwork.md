@@ -1,3 +1,4 @@
+
 # Artwork pipeline
 
 nowplaying keeps media-server credentials and artwork origins out of public card output. Providers emit opaque references, the hosted process fetches and validates the image, and the SVG receives only a bounded raster data URI.
@@ -33,6 +34,6 @@ The hosted card endpoint still sees Camo's fetch and must be public if the READM
 
 GitHub can cache proxied images. A changing query parameter on the outer card URL may be used as a cache-busting version, but it must contain no private metadata. Prefer a coarse generated-at version over track titles or item IDs.
 
-## Current sanitizer boundary
+## Sanitizer policy
 
-The fetch layer validates transport, declared type, magic bytes and byte size. It does not yet decode pixel dimensions, remove metadata or re-encode the image. Deployments should keep the byte limit conservative until the planned decode-and-reencode step lands.
+The fetch layer validates transport, declared type, magic bytes, byte size and decoded pixel dimensions. The default sharp runtime then decodes one frame only, applies EXIF orientation, resizes to the requested rendition without enlargement, and emits a fresh PNG without copying EXIF, XMP or ICC metadata. Post-encode pixel and byte limits are enforced before output is cached or embedded. Cache keys carry the sanitizer/output policy version so future codec or format changes invalidate old entries.

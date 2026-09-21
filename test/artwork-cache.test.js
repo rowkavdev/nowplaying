@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -43,7 +44,7 @@ test("cache keys include provider, image version and size without credentials", 
     { width: 320, height: 180 },
   );
   assert.notEqual(one, two);
-  assert.match(one, /jellyfin:primary:item%2F1:v1:320x180/);
+  assert.match(one, /^san-v1-png:jellyfin:primary:item%2F1:v1:320x180$/);
   assert.doesNotMatch(one, /token|api/i);
 });
 
