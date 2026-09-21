@@ -1,3 +1,4 @@
+
 export const cardThemes = Object.freeze({
   "midnight-blue": Object.freeze({ background: "#0d1117", border: "#30363d", primary: "#f0f6fc", secondary: "#9aa7b7", accent: "#58a6ff", track: "#30363d" }),
   paper: Object.freeze({ background: "#ffffff", border: "#c7d2df", primary: "#172033", secondary: "#526173", accent: "#0969da", track: "#d8e0e8" }),
@@ -46,7 +47,8 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const progress = progressWidth(presence, contentWidth);
   const description = subtitle || status;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title>
   <desc id="desc">${escapeXml(description)}</desc>
   <rect width="100%" height="100%" rx="10" fill="${palette.background}" stroke="${palette.border}"/>
