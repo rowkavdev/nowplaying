@@ -16,6 +16,11 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 3000, shu
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("port must be an integer from 0 to 65535");
   if (!Number.isInteger(shutdownMs) || shutdownMs < 1 || shutdownMs > 30000) throw new RangeError("shutdownMs must be an integer from 1 to 30000");
   const server = createServer(async (request, response) => {
+    if (!isLoopbackAuthority(request.headers.host)) {
+      response.writeHead(421, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Misdirected Request");
+      return;
+    }
     try {
       const result = await handler({ method: request.method, url: request.url, headers: request.headers });
       response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS });
@@ -42,4 +47,13 @@ function isLoopbackHost(host) {
   if (version === 4) return host.startsWith("127.");
   if (version === 6) return host === "::1" || host.toLowerCase() === "0:0:0:0:0:0:0:1";
   return false;
+}
+
+function isLoopbackAuthority(authority) {
+  if (typeof authority !== "string" || !authority || /[\/?#@]/.test(authority)) return false;
+  let url;
+  try { url = new URL(`http://${authority}`); } catch { return false; }
+  if (url.username || url.password || (url.port && !/^\d{1,5}$/.test(url.port))) return false;
+  const host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
+  return isLoopbackHost(host);
 }
