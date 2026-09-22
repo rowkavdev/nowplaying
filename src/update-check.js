@@ -1,4 +1,4 @@
-const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/;
+const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
 
 export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", fetchImpl = globalThis.fetch } = {}) {
   const current = parseVersion(currentVersion);
@@ -24,6 +24,25 @@ function parseVersion(value) {
   if (typeof value !== "string") throw new TypeError("version: expected semver");
   const match = VERSION_PATTERN.exec(value);
   if (!match) throw new TypeError("version: expected semver");
-  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), normalized: `${match[1]}.${match[2]}.${match[3]}` };
+  const prerelease = match[4]?.split(".") ?? [];
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease, normalized: `${match[1]}.${match[2]}.${match[3]}${match[4] ? `-${match[4]}` : ""}` };
 }
-function compareVersion(a, b) { return a.major - b.major || a.minor - b.minor || a.patch - b.patch; }
+
+function compareVersion(a, b) {
+  const core = a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+  if (core) return core;
+  if (!a.prerelease.length || !b.prerelease.length) return Number(!a.prerelease.length) - Number(!b.prerelease.length);
+  for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index += 1) {
+    if (a.prerelease[index] === undefined) return -1;
+    if (b.prerelease[index] === undefined) return 1;
+    const left = a.prerelease[index];
+    const right = b.prerelease[index];
+    if (left === right) continue;
+    const leftNumber = /^\d+$/.test(left);
+    const rightNumber = /^\d+$/.test(right);
+    if (leftNumber && rightNumber) return Number(left) - Number(right);
+    if (leftNumber !== rightNumber) return leftNumber ? -1 : 1;
+    return left < right ? -1 : 1;
+  }
+  return 0;
+}
