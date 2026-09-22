@@ -2,5 +2,7 @@ import { expireStalePresence } from "./presence-policy.js";
 import { formatDiscordActivity } from "./discord.js";
 
 export function formatFreshDiscordActivity(presence, settings = {}, freshness = {}) {
-  return formatDiscordActivity(expireStalePresence(presence, freshness), settings);
+  const current = expireStalePresence(presence, freshness);
+  if (current !== presence && settings.idleBehavior !== "show") return null;
+  return formatDiscordActivity(current, settings);
 }
