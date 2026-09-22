@@ -1,6 +1,7 @@
 export { renderCard, cardThemes, resolveCardTheme } from "./card.js";
 export { createPresence } from "./presence.js";
 export { createSetupDraft, advanceSetupDraft, serializeSetupDraft } from "./setup.js";
+export { checkProviderConnection } from "./setup-connection.js";
 export { presenceAgeMs, presenceFreshness } from "./presence-freshness.js";
 export { expireStalePresence } from "./presence-policy.js";
 export { defineProvider } from "./provider.js";
