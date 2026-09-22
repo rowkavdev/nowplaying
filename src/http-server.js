@@ -18,7 +18,7 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 3000, shu
   const server = createServer(async (request, response) => {
     try {
       const result = await handler({ method: request.method, url: request.url, headers: request.headers });
-      response.writeHead(result.status, { ...SECURITY_HEADERS, ...result.headers });
+      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS });
       response.end(result.body);
     } catch {
       response.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
