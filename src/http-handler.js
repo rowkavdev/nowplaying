@@ -43,15 +43,27 @@ export function createCardHandler({ resolveCard } = {}) {
     try { options = parseCardQuery(url.searchParams); }
     catch { return response(400, "Invalid card query"); }
     try {
-      const svg = await resolveCard(options);
+      const result = await resolveCard(options);
+      const svg = typeof result === "string" ? result : result?.svg;
       if (typeof svg !== "string" || !svg.includes("<svg")) throw new TypeError("invalid card output");
+      const diagnostics = cardDiagnostics(result);
       const etag = `"${createHash("sha256").update(svg).digest("base64url")}"`;
-      const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=30, stale-while-revalidate=60", ETag: etag, "X-Content-Type-Options": "nosniff" };
+      const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=30, stale-while-revalidate=60", ETag: etag, "X-Content-Type-Options": "nosniff", ...diagnostics };
       if (readHeader(request?.headers, "if-none-match") === etag) return response(304, "", headers);
       return response(200, method === "HEAD" ? "" : svg, headers);
     } catch {
       return response(503, "Card unavailable", { "Cache-Control": "no-store" });
     }
+  };
+}
+
+function cardDiagnostics(result) {
+  if (!result || typeof result === "string") return {};
+  const source = ["live", "last-good", "idle"].includes(result.source) ? result.source : null;
+  const ageMs = Number.isFinite(result.ageMs) ? Math.max(0, Math.floor(result.ageMs)) : null;
+  return {
+    ...(source ? { "X-Nowplaying-Source": source } : {}),
+    ...(ageMs !== null ? { "X-Nowplaying-Age": String(Math.floor(ageMs / 1000)) } : {}),
   };
 }
 
