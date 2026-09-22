@@ -20,11 +20,12 @@ export function serializeLogEvent({ time, level, component, status, code = null 
 
 export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } = {}) {
   if (typeof file !== "string" || !file) throw new TypeError("log file is required");
-  if (!Number.isInteger(maxBytes) || maxBytes < 256 || maxBytes > 50 * 1024 * 1024) throw new TypeError("log maxBytes is invalid");
+  if (!Number.isInteger(maxBytes) || maxBytes < 1024 || maxBytes > 50 * 1024 * 1024) throw new TypeError("log maxBytes is invalid");
   if (!Number.isInteger(retain) || retain < 1 || retain > 10) throw new TypeError("log retain is invalid");
 
   async function write(event) {
     const line = serializeLogEvent(event);
+    if (Buffer.byteLength(line) > maxBytes) throw new Error("log entry exceeds maxBytes");
     await mkdir(dirname(file), { recursive: true });
     const currentSize = await stat(file).then((value) => value.size, (error) => error.code === "ENOENT" ? 0 : Promise.reject(error));
     if (currentSize > 0 && currentSize + Buffer.byteLength(line) > maxBytes) await rotate();
