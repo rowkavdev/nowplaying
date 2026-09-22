@@ -65,4 +65,4 @@ jobs:
           subject-path: nowplaying-${{ github.ref_name }}.tar.gz
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" nowplaying-${GITHUB_REF_NAME}.tar.gz SHA256SUMS --clobber --repo "${GITHUB_REPOSITORY}"
+        run: gh release upload "${GITHUB_REF_NAME}" "nowplaying-${GITHUB_REF_NAME}.tar.gz" SHA256SUMS --clobber --repo "${GITHUB_REPOSITORY}"
