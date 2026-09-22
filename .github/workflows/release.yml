@@ -34,9 +34,11 @@ jobs:
         with:
           path: .
           format: spdx-json
-          output-file: nowplaying-${{ github.ref_name }}.spdx.json
+          output-file: nowplaying.spdx.json
           upload-artifact: false
           upload-release-assets: false
+      - name: Name SBOM for the immutable tag
+        run: mv nowplaying.spdx.json "nowplaying-${GITHUB_REF_NAME}.spdx.json"
       - name: Pack immutable artifact
         run: |
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "nowplaying-${GITHUB_REF_NAME}.tar.gz" dist LICENSE README.md package.json
