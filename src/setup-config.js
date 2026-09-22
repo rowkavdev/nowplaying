@@ -1,0 +1,29 @@
+import { createProviderIdentity } from "./provider-identity.js";
+
+const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
+
+export function createSetupConfig(input = {}) {
+  if (!PROVIDERS.has(input.provider)) throw new TypeError("setup config.provider is invalid");
+  const identity = createProviderIdentity(input.identity);
+  if (input.credential !== undefined || input.token !== undefined || input.apiKey !== undefined) {
+    throw new TypeError("setup config cannot contain credentials");
+  }
+  if (input.credentialStored !== true) throw new TypeError("setup config requires a stored credential");
+  if (input.discordEnabled !== undefined && typeof input.discordEnabled !== "boolean") {
+    throw new TypeError("setup config.discordEnabled must be a boolean");
+  }
+  return Object.freeze({
+    version: 1,
+    provider: input.provider,
+    identity,
+    credentialRef: Object.freeze({ provider: input.provider, identityId: identity.id }),
+    discord: Object.freeze({
+      enabled: input.discordEnabled ?? true,
+      idleBehavior: input.discordIdleBehavior ?? "clear",
+    }),
+  });
+}
+
+export function serializeSetupConfig(input) {
+  return `${JSON.stringify(createSetupConfig(input), null, 2)}\n`;
+}
