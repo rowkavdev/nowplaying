@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           version=1.7.12
-          archive="actionlint_${version}_linux_x86_64.tar.gz"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
           curl --fail --location --proto '=https' --tlsv1.2 \
