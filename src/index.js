@@ -7,6 +7,7 @@ export { defaultSettings, validateSettings, createSettings } from "./settings.js
 export { templateFields, createTemplateValues, validateTemplate, formatTemplate } from "./template.js";
 export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPrivacy } from "./privacy.js";
 export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from "./discord.js";
+export { formatFreshDiscordActivity } from "./discord-freshness.js";
 export { createDiscordClient } from "./discord-client.js";
 export { createDiscordRpcTransport, toRpcActivity } from "./discord-rpc.js";
 export { createArtworkRequest } from "./artwork.js";
