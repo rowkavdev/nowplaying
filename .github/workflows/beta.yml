@@ -47,7 +47,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # shellcheck disable=SC2016 # jq and awk programs intentionally use literal $ fields.
           set -euo pipefail
           stable_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft --jq 'select(.isPrerelease == false and .isDraft == false) | .tagName')
           if [[ -z "$stable_tag" ]]; then
@@ -70,6 +69,7 @@ jobs:
               test:*|docs:*|ci:*|chore:*|build:*) rank=9 ;;
               *) rank=5 ;;
             esac
+            # shellcheck disable=SC2016 # awk field references must remain literal.
             stats=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {printf "%012d", a+d+f}')
             pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
             key=${pr:-commit-$sha}
@@ -79,14 +79,17 @@ jobs:
           total=$(cut -f3 ranked-changes.tsv | sort -u | wc -l | tr -d ' ')
           sort -t$'\t' -k1,1n -k2,2nr ranked-changes.tsv | awk -F '\t' '!seen[$3]++' | head -10 > top-changes.tsv
           {
+            # shellcheck disable=SC2016 # Markdown backticks are intentional.
             printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
             printf "## What's Changed\n\n"
             while IFS=$'\t' read -r rank stats key sha subject; do
               short=${sha:0:7}
               if [[ "$key" == commit-* ]]; then
+                # shellcheck disable=SC2016 # Markdown backticks are intentional.
                 printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$subject" "$short" "$GITHUB_REPOSITORY" "$sha"
               else
+                # shellcheck disable=SC2016 # Markdown backticks are intentional.
                 printf -- '- %s ([#%s](https://github.com/%s/pull/%s), [`%s`](https://github.com/%s/commit/%s))\n' "$subject" "$key" "$GITHUB_REPOSITORY" "$key" "$short" "$GITHUB_REPOSITORY" "$sha"
               fi
             done < top-changes.tsv
