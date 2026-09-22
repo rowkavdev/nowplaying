@@ -103,5 +103,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git tag "$DEV_TAG" "$GITHUB_SHA"
-          git push origin "$DEV_TAG"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$DEV_TAG"
           gh release create "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title "nowplaying ${DEV_TAG#v}" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
