@@ -10,13 +10,13 @@ test("clears stale Discord activity by default", () => {
   assert.equal(formatFreshDiscordActivity(presence, {}, { now }), null);
 });
 
-test("can show an explicit offline Discord activity without stale metadata", () => {
+test("shows only a privacy-safe offline Discord activity when opted in", () => {
   const presence = createPresence({ state: "playing", kind: "episode", title: "Old episode", subtitle: "Old show", updatedAt: new Date(now - 60_001) });
-  assert.deepEqual(formatFreshDiscordActivity(presence, { idleBehavior: "show" }, { now }), {
-    type: "watching",
-    largeImage: "media",
-    largeText: "Offline",
-  });
+  const activity = formatFreshDiscordActivity(presence, { idleBehavior: "show" }, { now });
+  assert.equal(activity.largeText, "Offline");
+  assert.equal(activity.details, undefined);
+  assert.equal(activity.state, undefined);
+  assert.equal(JSON.stringify(activity).includes("Old"), false);
 });
 
 test("formats fresh Discord activity normally", () => {
