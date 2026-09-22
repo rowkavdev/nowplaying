@@ -12,13 +12,15 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Install actionlint 1.7.12
         shell: bash
         run: |
           set -euo pipefail
           version=1.7.12
-          archive="actionlint_${version}_linux_x86_64.tar.gz"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$archive" "https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
           curl --fail --location --proto '=https' --tlsv1.2 \
@@ -35,7 +37,9 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Audit workflow security
         uses: zizmorcore/zizmor-action@6599ee8b7a49aef6a770f63d261d214911a7ce02 # v0.6.0
         with:
