@@ -17,7 +17,7 @@ jobs:
         with:
           script: |
             const issue = context.payload.issue;
-            const text = `${issue.title}\n${issue.body || ''}`.toLowerCase();
+            const text = `${issue.title}\n${issue.body || ''}`.toLowerCase().replace(/https?:\/\/\S+/g, ' ');
             const rules = new Map([
               ['area:artwork', ['artwork', 'cover', 'image']],
               ['area:cards', ['card', 'svg', 'readme']],
@@ -33,7 +33,7 @@ jobs:
               ['area:updater', ['update', 'upgrade']],
             ]);
             const labels = [...rules]
-              .filter(([, words]) => words.some((word) => text.includes(word)))
+              .filter(([, words]) => words.some((word) => new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(text)))
               .map(([label]) => label);
             if (!labels.length) return;
             await github.rest.issues.addLabels({
