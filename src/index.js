@@ -13,6 +13,7 @@ export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPriva
 export { discordDefaults, validateDiscordSettings, formatDiscordActivity } from "./discord.js";
 export { formatFreshDiscordActivity } from "./discord-freshness.js";
 export { createDiscordClient } from "./discord-client.js";
+export { createDiscordController } from "./discord-controller.js";
 export { createDiscordRpcTransport, toRpcActivity } from "./discord-rpc.js";
 export { createArtworkRequest } from "./artwork.js";
 export { createArtworkCache, artworkCacheKey } from "./artwork-cache.js";
