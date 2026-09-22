@@ -39,18 +39,18 @@ test("writes private logs and appends across logger restarts", async () => {
 test("rotates before exceeding size and retains only the configured count", async () => {
   const root = await mkdtemp(join(tmpdir(), "nowplaying-log-"));
   const file = join(root, "nowplaying.log");
-  const log = createRotatingLog({ file, maxBytes: 256, retain: 2 });
-  for (let index = 0; index < 12; index += 1) await log.write(event(`EVENT_${index}`));
+  const log = createRotatingLog({ file, maxBytes: 1024, retain: 2 });
+  for (let index = 0; index < 40; index += 1) await log.write(event(`EVENT_${index}`));
   const current = await readFile(file, "utf8");
   const first = await readFile(`${file}.1`, "utf8");
   const second = await readFile(`${file}.2`, "utf8");
-  for (const value of [current, first, second]) assert.ok(Buffer.byteLength(value) <= 256);
+  for (const value of [current, first, second]) assert.ok(Buffer.byteLength(value) <= 1024);
   await assert.rejects(readFile(`${file}.3`, "utf8"), /ENOENT/);
-  assert.match(current, /EVENT_11/);
+  assert.match(current, /EVENT_39/);
 });
 
 test("validates size and retention bounds", () => {
-  assert.throws(() => createRotatingLog({ file: "x", maxBytes: 255 }), /maxBytes is invalid/);
+  assert.throws(() => createRotatingLog({ file: "x", maxBytes: 1023 }), /maxBytes is invalid/);
   assert.throws(() => createRotatingLog({ file: "x", retain: 0 }), /retain is invalid/);
   assert.throws(() => createRotatingLog(), /file is required/);
 });
