@@ -23,3 +23,20 @@ test("supports Headers-compatible request headers and never caches failures", as
   const failed = await createCardHandler({ resolveCard: async () => { throw new Error("secret"); } })({ url: "/card.svg" });
   assert.equal(failed.headers["Cache-Control"], "no-store");
 });
+
+
+test("emits bounded privacy-safe cache diagnostics", async () => {
+  const handler = createCardHandler({ resolveCard: async () => ({ svg, source: "last-good", ageMs: 12_999, title: "private title", providerUrl: "http://192.168.1.2" }) });
+  const response = await handler({ url: "/card.svg" });
+  assert.equal(response.headers["X-Nowplaying-Source"], "last-good");
+  assert.equal(response.headers["X-Nowplaying-Age"], "12");
+  assert.equal(JSON.stringify(response.headers).includes("private title"), false);
+  assert.equal(JSON.stringify(response.headers).includes("192.168.1.2"), false);
+});
+
+test("omits invalid cache diagnostic values", async () => {
+  const handler = createCardHandler({ resolveCard: async () => ({ svg, source: "provider-error", ageMs: Number.NaN }) });
+  const response = await handler({ url: "/card.svg" });
+  assert.equal(response.headers["X-Nowplaying-Source"], undefined);
+  assert.equal(response.headers["X-Nowplaying-Age"], undefined);
+});
