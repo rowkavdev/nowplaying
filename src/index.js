@@ -1,6 +1,7 @@
 export { renderCard, cardThemes, resolveCardTheme } from "./card.js";
 export { createPresence } from "./presence.js";
 export { presenceAgeMs, presenceFreshness } from "./presence-freshness.js";
+export { expireStalePresence } from "./presence-policy.js";
 export { defineProvider } from "./provider.js";
 export { defaultSettings, validateSettings, createSettings } from "./settings.js";
 export { templateFields, createTemplateValues, validateTemplate, formatTemplate } from "./template.js";
