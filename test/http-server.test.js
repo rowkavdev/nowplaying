@@ -12,9 +12,9 @@ const SECURITY_HEADERS = Object.freeze({
   "x-frame-options": "DENY",
 });
 
-function get(port, path = "/card.svg") {
+function get(port, path = "/card.svg", authority = null) {
   return new Promise((resolve, reject) => {
-    const req = request({ host: "127.0.0.1", port, path }, (res) => {
+    const req = request({ host: "127.0.0.1", port, path, ...(authority ? { headers: { Host: authority } } : {}) }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() }));
@@ -65,5 +65,33 @@ test("sanitizes unexpected adapter failures and preserves security headers", asy
     assert.equal(result.body, "Internal Server Error");
     assert.equal(result.headers["content-type"], "text/plain; charset=utf-8");
     assertSecurityHeaders(result.headers);
+  } finally { await app.close(); }
+});
+
+test("accepts loopback request authorities with optional ports", async () => {
+  let calls = 0;
+  const app = createHttpServer({ port: 0, handler: async () => { calls += 1; return { status: 204, headers: {}, body: "" }; } });
+  const address = await app.listen();
+  try {
+    for (const authority of ["localhost", `localhost:${address.port}`, "127.0.0.1", `127.0.0.2:${address.port}`, "[::1]", `[::1]:${address.port}`, "[0:0:0:0:0:0:0:1]"]) {
+      const result = await get(address.port, "/healthz", authority);
+      assert.equal(result.status, 204, authority);
+    }
+    assert.equal(calls, 7);
+  } finally { await app.close(); }
+});
+
+test("rejects hostile and malformed request authorities before the handler", async () => {
+  let calls = 0;
+  const app = createHttpServer({ port: 0, handler: async () => { calls += 1; return { status: 200, headers: {}, body: "private" }; } });
+  const address = await app.listen();
+  try {
+    for (const authority of ["example.com", "localhost.example.com", "0.0.0.0", "192.0.2.1", "[2001:db8::1]", "user@localhost", "localhost/path", "localhost:99999"]) {
+      const result = await get(address.port, "/private", authority);
+      assert.equal(result.status, 421, authority);
+      assert.equal(result.body, "Misdirected Request", authority);
+      assertSecurityHeaders(result.headers);
+    }
+    assert.equal(calls, 0);
   } finally { await app.close(); }
 });
