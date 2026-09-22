@@ -1,0 +1,44 @@
+name: Issue labels
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply area labels
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const text = `${issue.title}\n${issue.body || ''}`.toLowerCase();
+            const rules = new Map([
+              ['area:artwork', ['artwork', 'cover', 'image']],
+              ['area:cards', ['card', 'svg', 'readme']],
+              ['area:ci', ['ci', 'workflow', 'action', 'dependabot', 'renovate', 'codeql']],
+              ['area:discord', ['discord', 'rich presence', 'ipc']],
+              ['area:docs', ['docs', 'documentation', 'guide', 'wiki']],
+              ['area:installer', ['install', 'windows', 'setup', 'configuration', 'config migration']],
+              ['area:providers', ['provider', 'plex', 'jellyfin', 'navidrome', 'emby', 'spotify', 'youtube']],
+              ['area:release', ['release', 'provenance', 'sbom', 'package']],
+              ['area:security', ['security', 'privacy', 'secret', 'credential', 'token']],
+              ['area:server', ['server', 'http', 'hosted', 'cache', 'health']],
+              ['area:tray', ['tray', 'diagnostic', 'log folder', 'safe mode']],
+              ['area:updater', ['update', 'upgrade']],
+            ]);
+            const labels = [...rules]
+              .filter(([, words]) => words.some((word) => text.includes(word)))
+              .map(([label]) => label);
+            if (!labels.length) return;
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels,
+            });
