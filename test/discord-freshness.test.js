@@ -14,7 +14,6 @@ test("can show an explicit offline Discord activity without stale metadata", () 
   const presence = createPresence({ state: "playing", kind: "episode", title: "Old episode", subtitle: "Old show", updatedAt: new Date(now - 60_001) });
   assert.deepEqual(formatFreshDiscordActivity(presence, { idleBehavior: "show" }, { now }), {
     type: "watching",
-    details: "Nothing playing",
     largeImage: "media",
     largeText: "Offline",
   });
