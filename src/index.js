@@ -5,6 +5,7 @@ export { checkProviderConnection } from "./setup-connection.js";
 export { presenceAgeMs, presenceFreshness } from "./presence-freshness.js";
 export { expireStalePresence } from "./presence-policy.js";
 export { defineProvider } from "./provider.js";
+export { createProviderIdentity, resolveProviderIdentity } from "./provider-identity.js";
 export { defaultSettings, validateSettings, createSettings } from "./settings.js";
 export { templateFields, createTemplateValues, validateTemplate, formatTemplate } from "./template.js";
 export { privacyDefaults, validatePrivacyPolicy, createPrivacyPolicy, applyPrivacy } from "./privacy.js";
