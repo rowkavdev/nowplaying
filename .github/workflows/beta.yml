@@ -47,6 +47,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # shellcheck disable=SC2016 # jq and awk programs intentionally use literal $ fields.
           set -euo pipefail
           stable_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft --jq 'select(.isPrerelease == false and .isDraft == false) | .tagName')
           if [[ -z "$stable_tag" ]]; then
@@ -76,7 +77,7 @@ jobs:
           done < all-changes.tsv
 
           total=$(cut -f3 ranked-changes.tsv | sort -u | wc -l | tr -d ' ')
-          sort -t"$(printf '\t')" -k1,1n -k2,2nr ranked-changes.tsv | awk -F "$(printf '\t')" '!seen[$3]++' | head -10 > top-changes.tsv
+          sort -t$'\t' -k1,1n -k2,2nr ranked-changes.tsv | awk -F '\t' '!seen[$3]++' | head -10 > top-changes.tsv
           {
             printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
