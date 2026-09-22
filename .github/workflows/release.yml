@@ -31,6 +31,16 @@ jobs:
       - run: npm run build
       - name: Verify tag matches package version
         run: test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
+      - name: Generate SPDX JSON SBOM
+        uses: anchore/sbom-action@36a5fde73e0fcb1d1e70be9ad66b4724e783bda7 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: nowplaying.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Name SBOM for the immutable tag
+        run: mv nowplaying.spdx.json "nowplaying-${GITHUB_REF_NAME}.spdx.json"
       - name: Pack immutable artifact
         run: |
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "nowplaying-${GITHUB_REF_NAME}.tar.gz" dist LICENSE README.md package.json
@@ -40,6 +50,7 @@ jobs:
           name: release-${{ github.ref_name }}
           path: |
             nowplaying-${{ github.ref_name }}.tar.gz
+            nowplaying-${{ github.ref_name }}.spdx.json
             SHA256SUMS
           if-no-files-found: error
           retention-days: 7
@@ -67,4 +78,4 @@ jobs:
           subject-path: nowplaying-${{ github.ref_name }}.tar.gz
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" "nowplaying-${GITHUB_REF_NAME}.tar.gz" SHA256SUMS --clobber --repo "${GITHUB_REPOSITORY}"
+        run: gh release upload "${GITHUB_REF_NAME}" nowplaying-${GITHUB_REF_NAME}.tar.gz nowplaying-${GITHUB_REF_NAME}.spdx.json SHA256SUMS --clobber --repo "${GITHUB_REPOSITORY}"
