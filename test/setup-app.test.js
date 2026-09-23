@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath, writeSetupConfig } from "../src/setup-app.js";
@@ -21,7 +21,7 @@ test("serves the wizard page and draft API together on a free loopback port", as
     assert.equal(page.status, 200);
     assert.match(await page.text(), /NowPlaying setup/);
     const api = new URL("/api/setup/draft", app.url);
-    const next = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "next" }) });
+    const next = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: JSON.stringify({ action: "next" }) });
     assert.equal((await next.json()).draft.step, "provider");
     assert.equal((await fetch(new URL("/other", app.url))).status, 404);
     const found = await (await fetch(new URL("/api/setup/discover", app.url))).json();
@@ -40,7 +40,7 @@ test("a sign-in saves the secret to the credential store and only the account to
   const configFile = join(dir, "config.json");
   const app = await startSetupApp({ draftFile, configFile, credentialStore, deviceId: "device-0001", signIn });
   try {
-    const api = (path, method, body) => fetch(new URL(path, app.url), { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+    const api = (path, method, body) => fetch(new URL(path, app.url), { method, headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
     await api("/api/setup/draft", "POST", { action: "next" });
     assert.equal((await api("/api/setup/draft", "POST", { action: "next", changes: { provider: "navidrome" } }))[1].draft.step, "signin");
     assert.deepEqual(await api("/api/setup/draft", "POST", { action: "next" }), [409, { error: "signin_required" }]);
@@ -75,7 +75,7 @@ test("Finish writes no config when sign-in is unavailable", async () => {
   const configFile = join(dir, "config.json");
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), configFile });
   try {
-    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: JSON.stringify(body) }).then((r) => r.json());
     await post({ action: "next" });
     await post({ action: "next", changes: { provider: "plex" } });
     for (let i = 0; i < 2; i += 1) await post({ action: "next" });
@@ -138,7 +138,7 @@ test("Start with Windows shows the current state and Finish applies the choice",
   const startup = { isEnabled: async () => true, setEnabled: async (value) => { applied.push(value); } };
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), startup });
   try {
-    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: JSON.stringify(body) }).then((r) => r.json());
     // Installer already added the shortcut: the box starts ticked.
     assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.startWithWindows, true);
     await post({ action: "next" });
@@ -147,7 +147,7 @@ test("Start with Windows shows the current state and Finish applies the choice",
     assert.deepEqual(applied, []);
     assert.equal((await post({ action: "next" })).draft.step, "complete");
     assert.deepEqual(applied, [false]);
-    const reset = await (await fetch(new URL("/api/setup/draft", app.url), { method: "DELETE", headers: { "Content-Type": "application/json" } })).json();
+    const reset = await (await fetch(new URL("/api/setup/draft", app.url), { method: "DELETE", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret } })).json();
     assert.equal(reset.draft.startWithWindows, true);
   } finally {
     await app.close();
@@ -159,7 +159,7 @@ test("a failed startup change keeps the wizard on review", async () => {
   const startup = { isEnabled: async () => false, setEnabled: async () => { throw new Error("denied"); } };
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), startup });
   try {
-    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
     await post({ action: "next" });
     await post({ action: "next", changes: { provider: "plex" } });
     await post({ action: "next", changes: { startWithWindows: true } });
@@ -189,4 +189,37 @@ test("the wizard writes album art lookup on by default and off when unticked", a
   assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkLookup, "musicbrainz");
   await writeSetupConfig(file, { ...draft, discordArtworkLookup: false });
   assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkLookup, "off");
+});
+
+test("the setup server rejects writes without this run's session secret", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-session-"));
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json") });
+  try {
+    assert.match(app.sessionSecret, /^[A-Za-z0-9_-]{43}$/);
+    const api = new URL("/api/setup/draft", app.url);
+    const denied = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "next" }) });
+    assert.equal(denied.status, 403);
+    const page = await fetch(app.url);
+    const cookie = page.headers.get("set-cookie");
+    assert.match(cookie, /^nowplaying_session=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; SameSite=Strict$/);
+    const allowed = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie.split(";")[0] }, body: JSON.stringify({ action: "next" }) });
+    assert.equal(allowed.status, 200);
+    const other = await startSetupApp({ draftFile: join(dir, "draft2.json") });
+    try { assert.notEqual(other.sessionSecret, app.sessionSecret); } finally { await other.close(); }
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the native window gets the session secret through its environment, not argv", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { runNativeSetup } = await import("../src/setup-app.js");
+  let call;
+  const spawnProcess = (command, args, options) => { call = { args, options }; const child = new EventEmitter(); setImmediate(() => child.emit("close", 0)); return child; };
+  const secret = "a".repeat(43);
+  await runNativeSetup("http://127.0.0.1:4567/setup", { scriptPath: "C:\\np\\windows-setup.ps1", sessionSecret: secret, env: { PATH: "x" }, spawnProcess });
+  assert.deepEqual(call.options.env, { PATH: "x", NOWPLAYING_SETUP_SESSION: secret });
+  assert.ok(!call.args.some((arg) => arg.includes(secret)));
+  assert.throws(() => runNativeSetup("http://127.0.0.1:4567/setup", { scriptPath: "C:\\np\\windows-setup.ps1", sessionSecret: "short", spawnProcess }), /sessionSecret/);
 });
