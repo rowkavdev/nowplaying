@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
+import { createMusicBrainzLookup } from "./musicbrainz-lookup.js";
 
 const ASSET_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 const SECRET_PARAM = /(^|[_-])(token|key|apikey|api_key|auth|sig|signature|secret|password|pass|session|s|t|u)$/i;
@@ -135,7 +136,8 @@ export function createDiscordArtworkResolver({
 }
 
 
-export function artworkResolverOptions(discordSettings = {}) {
+export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup } = {}) {
   const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
-  return Object.freeze({ publicProxyBase: proxy, metadataLookup: false });
+  if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false });
+  return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup() });
 }
