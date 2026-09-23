@@ -18,7 +18,8 @@ test("shortcuts and the post-install setup use the no-console launcher", async (
   assert.match(icons, /^Name: "\{group\}\\NowPlaying"; /m);
   for (const line of lines) assert.match(line, /Filename: "\{app\}\\nowplayingw\.exe"; Parameters: "start"/);
   const run = iss.split(/^\[Run\]$/m)[1]?.split(/^\[/m)[0] ?? "";
-  assert.match(run, /Filename: "\{app\}\\nowplayingw\.exe"; Parameters: "setup"/);
+  assert.match(run, /Parameters: "start"; .*Check: NeedsSetup/);
+  assert.doesNotMatch(run, /Parameters: "setup"/);
   assert.match(run, /Parameters: "start"; .*Check: not NeedsSetup/);
   assert.doesNotMatch(run, /nowplaying\.exe/);
   assert.match(iss, /^DisableDirPage=no$/m);

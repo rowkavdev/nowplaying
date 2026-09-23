@@ -230,8 +230,11 @@ function Show-Step {
         $radio.add_CheckedChanged({ Update-Buttons })
         $panel.Controls.Add($radio)
       }
-      $panel.Controls.Add((New-Text $(if ($found.Count -gt 0) { 'Or choose another server:' } else { 'No server found running on this PC. Choose yours:' })))
-      foreach ($key in $Providers.Keys) {
+      # A server found above isn't listed again below.
+      $foundKinds = @($found | ForEach-Object { [string]$_.provider })
+      $others = @($Providers.Keys | Where-Object { $foundKinds -notcontains $_ })
+      if ($others.Count -gt 0) { $panel.Controls.Add((New-Text $(if ($found.Count -gt 0) { 'Or choose another server:' } else { 'No server found running on this PC. Choose yours:' }))) }
+      foreach ($key in $others) {
         $radio = [System.Windows.Forms.RadioButton]::new()
         $radio.Text = $Providers[$key]; $radio.Tag = $key; $radio.AutoSize = $true
         if (-not $checkedOne -and $script:Draft.provider -eq $key) { $radio.Checked = $true; $checkedOne = $true }
@@ -305,15 +308,14 @@ function Show-Step {
       $title.Text = 'Check your choices'
       $provider = if ($script:Draft.provider) { $Providers[[string]$script:Draft.provider] } else { 'Not chosen' }
       $status = if ($script:Draft.discordEnabled) { 'On' } else { 'Off' }
-      $who = if ($script:Draft.account) { " (signed in as $($script:Draft.account.displayName))" } else { '' }
+      $who = if ($script:Draft.account) { " as $($script:Draft.account.displayName)" } else { '' }
       $panel.Controls.Add((New-Text "Media server: $provider$who"))
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
     }
     default {
       $title.Text = 'All set'
-      $done = if ($script:Draft.account) { "You're signed in to $($Providers[[string]$script:Draft.provider]) as $($script:Draft.account.displayName), and your choices are saved." } else { 'Your choices are saved.' }
-      $panel.Controls.Add((New-Text $done))
+      $panel.Controls.Add((New-Text 'Close this window and NowPlaying starts. Look for its icon in the taskbar tray (under the ^ arrow if it is hidden).'))
     }
   }
   $panel.ResumeLayout()
