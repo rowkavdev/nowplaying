@@ -1,0 +1,55 @@
+name: Vercel build
+
+# Builds the hosted service the way Vercel does (same CLI, same project
+# settings) on every PR that touches it, so a broken build fails here
+# instead of after merge. Needs no secrets.
+on:
+  pull_request:
+    paths:
+      - hosted/**
+      - src/card.js
+      - .github/workflows/hosted-build.yml
+      - .github/workflows/hosted-deploy.yml
+      - test/hosted-*.test.js
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Vercel build (hosted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Test hosted service
+        run: node --test test/hosted-*.test.js
+      - name: Write Vercel project settings (mirrors the live project)
+        run: |
+          mkdir -p .vercel
+          cat > .vercel/project.json <<'JSON'
+          {"projectId":"ci","orgId":"ci","settings":{"framework":null,"rootDirectory":"hosted","nodeVersion":"22.x","buildCommand":null,"outputDirectory":null,"installCommand":null,"devCommand":null}}
+          JSON
+      - name: Vercel build
+        run: npx --yes vercel@59.25.4 build --prod
+      - name: Check build output
+        run: |
+          set -euo pipefail
+          out=.vercel/output
+          find "$out/static" "$out/functions" -maxdepth 2 | sort
+          test -f "$out/static/index.html"
+          if [ -e "$out/static/lib" ]; then echo "::error::hosted/lib is in the static output and would be public"; exit 1; fi
+          for fn in card health ingest register revoke; do
+            test -d "$out/functions/api/$fn.func" || { echo "::error::missing function api/$fn"; exit 1; }
+          done

@@ -47,9 +47,17 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@59.25.4 build --prod --token="$VERCEL_TOKEN"
       - name: Deploy
+        timeout-minutes: 5
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@59.25.4 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        # Drop git metadata first. With it, Vercel attributes the deploy to the
+        # commit author, who isn't a member of the Hobby "nowplaying" team, and
+        # blocks the deployment (the CLI then waits at "Building..." forever).
+        # The prebuilt output is already in .vercel/output.
+        run: |
+          set -euo pipefail
+          rm -rf .git
+          npx --yes vercel@59.25.4 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
       - name: Smoke test production domain
         env:
           BASE_URL: ${{ vars.HOSTED_BASE_URL }}
