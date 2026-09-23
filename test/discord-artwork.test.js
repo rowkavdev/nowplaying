@@ -110,7 +110,7 @@ test("only music looks up covers, and media kinds never share a cache entry", as
 });
 
 test("video and motion artwork is never sent to Discord", async () => {
-  for (const url of ["https://cdn.example.com/cover.m3u8", "https://cdn.example.com/motion/cover.MP4", "https://cdn.example.com/a.webm"]) {
+  for (const url of ["https://cdn.example.com/cover.m3u8", "https://cdn.example.com/motion/cover.MP4", "https://cdn.example.com/a.webm", "https://cdn.example.com/b.m4v", "https://cdn.example.com/c.mov", "https://cdn.example.com/d.mkv"]) {
     assert.deepEqual(classifyArtworkUrl(url), { ok: false, failure: "unsupported_format" });
   }
   assert.equal(classifyArtworkUrl("https://cdn.example.com/cover.gif").ok, true);

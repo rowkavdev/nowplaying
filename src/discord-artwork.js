@@ -17,7 +17,7 @@ export function isDiscordImage(value) {
 }
 
 export const artworkFailures = Object.freeze(["invalid", "not_https", "credentials", "private_host", "secret_query", "too_long", "unsupported_format"]);
-// Animated or video artwork (Apple Music style motion covers, HLS streams)
+// Animated or video artwork (Apple Music style motion covers, .m3u8 HLS streams)
 // shows as a blank image in Discord, so it falls through to the next source.
 const VIDEO_EXTENSION = /\.(m3u8|mp4|m4v|webm|mov|mkv)$/i;
 
