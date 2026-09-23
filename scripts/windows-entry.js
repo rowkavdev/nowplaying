@@ -135,7 +135,8 @@ async function openSetupWindow() {
 
 async function startFromWizardConfig(configFile) {
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
-  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort() });
+  const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
+  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null });
   console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }

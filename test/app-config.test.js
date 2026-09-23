@@ -82,6 +82,13 @@ test("starts the card server from config and the credential store", async () => 
     const card = await fetch(`${app.url}/card.svg`);
     assert.equal(card.status, 200);
     assert.match(await card.text(), /<svg/);
+    const page = await fetch(`${app.url}/`);
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
+    const status = await (await fetch(`${app.url}/api/status`)).json();
+    assert.equal(status.server.state, "connected");
+    assert.equal(status.server.type, "Jellyfin");
+    assert.deepEqual({ ...status.discord }, { enabled: true, state: "no_app_id", lastPublishedAt: null, error: null });
   } finally {
     await app.close();
   }

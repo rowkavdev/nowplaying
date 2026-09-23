@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
+import { createAppStatus } from "./app-status.js";
+import { createStatusPageHandler } from "./status-page-handler.js";
 import { createResilientCardResolver } from "./resilient-card.js";
 import { createSetupConfig } from "./setup-config.js";
 import { createEmbyProvider } from "./providers/emby.js";
@@ -128,7 +130,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {} } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -145,8 +147,11 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     if (error instanceof StartupError) throw error;
     throw invalidConfig();
   }
+  const status = createAppStatus({ config, version });
+  provider = status.wrapProvider(provider);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
-  const server = createHttpServer({ host, port, handler: createCardHandler({ resolveCard }) });
+  const handler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
+  const server = createHttpServer({ host, port, handler });
   let address;
   try {
     address = await server.listen();
@@ -161,11 +166,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   } catch {
     discord = Object.freeze({ status: "failed", stop: async () => {} });
   }
+  status.setDiscord(() => discord.status === "on"
+    ? { enabled: true, ...discord.connection() }
+    : { enabled: discord.status !== "off", state: discord.status });
   const close = async () => {
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, status, close });
 }
 
 function invalidConfig() {
