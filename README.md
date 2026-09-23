@@ -1,5 +1,11 @@
 # nowplaying
 
+[![CI](https://github.com/rowkav09/nowplaying/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rowkav09/nowplaying/actions/workflows/ci.yml)
+[![Dev build](https://github.com/rowkav09/nowplaying/actions/workflows/beta.yml/badge.svg?branch=main)](https://github.com/rowkav09/nowplaying/releases/tag/dev)
+[![Latest release](https://img.shields.io/github/v/release/rowkav09/nowplaying?label=release)](https://github.com/rowkav09/nowplaying/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/rowkav09/nowplaying)](https://github.com/rowkav09/nowplaying/commits/main)
+[![License](https://img.shields.io/github/license/rowkav09/nowplaying)](LICENSE)
+
 Live README cards and Discord Rich Presence for Plex, Jellyfin, Navidrome and Emby.
 
 > Private beta. Provider polling, privacy controls, self-contained artwork cards, Discord Rich Presence, hosted HTTP runtime, aggregate analytics, auto-updates and protected releases are implemented.
