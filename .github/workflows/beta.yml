@@ -132,7 +132,19 @@ jobs:
           title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           mapfile -t files < <(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) | sort)
-          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev" > dev-release.json 2>/dev/null; then
+          # Only a 404 means there is no dev release yet. Any other lookup error
+          # (rate limit, outage) used to fall through to "create", which moved the
+          # tag and then failed with "a release with the same tag name already
+          # exists", leaving the old assets under a moved tag. Retry, then stop.
+          lookup=failed
+          for attempt in 1 2 3; do
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev" > dev-release.json 2> dev-release-error.txt; then lookup=found; break; fi
+            if grep -q "HTTP 404" dev-release-error.txt; then lookup=missing; break; fi
+            echo "Dev release lookup attempt $attempt failed: $(head -c 300 dev-release-error.txt)"
+            sleep $((attempt * 20))
+          done
+          [[ "$lookup" != failed ]] || { echo "Couldn't look up the dev release; nothing was changed"; exit 1; }
+          if [[ "$lookup" == missing ]]; then
             git tag -f dev "$GITHUB_SHA"
             git push --force "$remote" refs/tags/dev
             gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md "${files[@]}"
@@ -156,9 +168,7 @@ jobs:
           # source archives and binaries always describe the same commit.
           git tag -f dev "$GITHUB_SHA"
           git push --force "$remote" refs/tags/dev
-          # Update the release by ID. `gh release edit dev` fails with "a release
-          # with the same tag name already exists" once the tag has moved, which
-          # left the page on an old build number.
+          # Update the release by the ID looked up above.
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f name="$title" -F prerelease=true -f make_latest=false -F body=@development-release-notes.md --jq '.name'
       # Old scheme: one immutable vX.Y.Z-dev.N pre-release per merge. Remove those
       # (release and tag) only after the moving dev release is confirmed to carry
