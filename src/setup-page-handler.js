@@ -47,6 +47,18 @@ const JS = `"use strict";
 (function () {
   var API = "/api/setup/draft";
   var SIGNIN_API = "/api/setup/signin";
+  var TEST_API = "/api/setup/test";
+  var TEST_MESSAGES = {
+    connected: "Connected. NowPlaying can see what you're playing.",
+    authentication_failed: "Your server rejected the saved sign-in. Sign in again.",
+    unreachable: "Couldn't reach your server. Check the address and that the server is running.",
+    connection_failed: "Your server answered, but not in a way NowPlaying understands. Check the address points at your media server.",
+    missing_server: "Add your server address, then sign in again.",
+    credential_unavailable: "Your saved sign-in is missing from Windows Credential Manager. Sign in again.",
+    invalid_configuration: "The saved details look wrong. Sign in again.",
+    not_signed_in: "Sign in first, then test the connection."
+  };
+  var connectionTest = null;
   var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
   var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
   var DEFAULT_URLS = { plex: "http://127.0.0.1:32400", jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
@@ -98,6 +110,7 @@ const JS = `"use strict";
   function signInResult(result) {
     if (result.status === "signed_in") {
       stopSignIn();
+      connectionTest = null;
       return request("GET").then(function (fresh) { draft = fresh.draft; });
     }
     if (result.status === "pending" && signin.flowId) {
@@ -138,7 +151,11 @@ const JS = `"use strict";
   function signInPanel() {
     var name = nameOf(PROVIDERS, draft.provider);
     var parts = [el("h2", { textContent: "Sign in to " + name })];
-    if (draft.account) parts.push(el("p", { textContent: "Signed in as " + draft.account.displayName + ". Your sign-in is saved in Windows Credential Manager, not in this page." }));
+    if (draft.account) {
+      parts.push(el("p", { textContent: "Signed in as " + draft.account.displayName + ". Your sign-in is saved in Windows Credential Manager, not in this page." }));
+      parts.push(el("button", { type: "button", id: "connectionTest", textContent: "Test connection" }));
+      if (connectionTest) parts.push(el("p", { id: "connectionResult", role: "status", textContent: connectionTest }));
+    }
     if (draft.provider === "plex") {
       parts.push(field("serverUrl", "Plex server address", "url", DEFAULT_URLS.plex));
       parts.push(el("p", { textContent: signin.flowId ? "Finish signing in on the Plex page. This page updates when you're done." : "Plex opens in a new tab so you can approve NowPlaying." }));
@@ -155,6 +172,18 @@ const JS = `"use strict";
       parts.push(el("button", { type: "button", id: "signinStart", textContent: "Sign in" }));
     }
     return parts;
+  }
+
+  function runConnectionTest() {
+    if (busy) return;
+    busy = true;
+    connectionTest = "Testing...";
+    render();
+    fetch(TEST_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then(function (response) { return response.json().catch(function () { return {}; }); })
+      .then(function (result) { connectionTest = TEST_MESSAGES[result.status] || "Couldn't test the connection. Try again."; })
+      .catch(function () { connectionTest = "Couldn't reach NowPlaying. Make sure it is running."; })
+      .then(function () { busy = false; render(); });
   }
 
   function onSignInClick() {
@@ -247,6 +276,8 @@ const JS = `"use strict";
     document.getElementById("next").disabled = busy || index >= STEPS.length - 1 || needsProvider || needsSignIn;
     var start = document.getElementById("signinStart");
     if (start) start.disabled = busy;
+    var tester = document.getElementById("connectionTest");
+    if (tester) tester.disabled = busy;
     document.getElementById("next").textContent = draft.step === "review" ? "Finish" : "Next";
     document.getElementById("reset").disabled = busy;
   }
@@ -257,6 +288,7 @@ const JS = `"use strict";
     });
     document.getElementById("panel").addEventListener("click", function (event) {
       if (event.target && event.target.id === "signinStart") onSignInClick();
+      if (event.target && event.target.id === "connectionTest") runConnectionTest();
     });
     document.getElementById("next").addEventListener("click", function () { send("POST", { action: "next", changes: changes() }); });
     document.getElementById("back").addEventListener("click", function () { send("POST", { action: "back", changes: changes() }); });
