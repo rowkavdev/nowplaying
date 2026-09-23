@@ -112,23 +112,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git tag -f dev "$GITHUB_SHA"
-          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev
           title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
-          if gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload dev --repo "$GITHUB_REPOSITORY" --clobber dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
-            # Drop assets from older builds (file names carry the version).
-            keep=$(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) -printf '%f\n')
-            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > current-assets.txt
-            while IFS= read -r asset; do
-              if [[ -n "$asset" ]] && ! grep -qxF "$asset" <<<"$keep"; then
-                gh release delete-asset dev "$asset" --repo "$GITHUB_REPOSITORY" --yes
-              fi
-            done < current-assets.txt
-            gh release edit dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "$title" --notes-file development-release-notes.md
-          else
-            gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          mapfile -t files < <(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) | sort)
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev" > dev-release.json 2>/dev/null; then
+            git tag -f dev "$GITHUB_SHA"
+            git push --force "$remote" refs/tags/dev
+            gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md "${files[@]}"
+            exit 0
           fi
+          release_id=$(jq -r .id dev-release.json)
+          # Replace every asset explicitly instead of relying on --clobber, which
+          # can fail with a 404 on an asset it just looked up. A 404 on delete
+          # means the asset is already gone, which is the state we want.
+          for attempt in 1 2 3; do
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' > asset-ids.txt
+            while IFS= read -r id; do
+              [[ -n "$id" ]] && { gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id" >/dev/null 2>&1 || true; }
+            done < asset-ids.txt
+            if gh release upload dev --repo "$GITHUB_REPOSITORY" "${files[@]}"; then uploaded=1; break; fi
+            echo "Upload attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
+          [[ "${uploaded:-0}" == 1 ]] || { echo "Could not upload development assets"; exit 1; }
+          # Move the tag only once the new assets are on the release, so the tag,
+          # source archives and binaries always describe the same commit.
+          git tag -f dev "$GITHUB_SHA"
+          git push --force "$remote" refs/tags/dev
+          gh release edit dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "$title" --notes-file development-release-notes.md
       # Old scheme: one immutable vX.Y.Z-dev.N pre-release per merge. Remove those
       # (release and tag) only after the moving dev release is confirmed to carry
       # this commit's assets. Stable releases never match the pattern.
