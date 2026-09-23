@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyArtworkUrl, createDiscordArtworkResolver, isPrivateHost } from "../src/discord-artwork.js";
+import { artworkResolverOptions, classifyArtworkUrl, createDiscordArtworkResolver, isPrivateHost } from "../src/discord-artwork.js";
+import { createSetupConfig } from "../src/setup-config.js";
 
 test("private IPv4, IPv6 and local names are never sent to Discord", () => {
   for (const host of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.9", "169.254.1.1", "100.64.0.1", "::1", "[fd00::1]", "fe80::1", "::ffff:192.168.0.2", "localhost", "nas", "jellyfin.local", "media.home.arpa"]) {
@@ -67,4 +68,19 @@ test("options are validated", () => {
   assert.throws(() => createDiscordArtworkResolver({ metadataLookup: true }), TypeError);
   assert.throws(() => createDiscordArtworkResolver({ fallbackAsset: "bad key" }), TypeError);
   assert.throws(() => createDiscordArtworkResolver({ maxEntries: 0 }), RangeError);
+});
+
+test("a new setup config turns the Cover Art Archive lookup on: hit, miss and off", async () => {
+  const base = { provider: "jellyfin", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
+  const cover = "https://coverartarchive.org/release/00000000-0000-4000-8000-000000000001/front-250";
+  const track = { title: "Song", artist: "Band", artworkUrl: "http://192.168.1.20:8096/Items/1/Images/Primary" };
+  const on = createSetupConfig({ ...base, discordArtworkLookup: "musicbrainz" }).discord;
+  const hit = createDiscordArtworkResolver(artworkResolverOptions(on, { createLookup: () => async () => cover }));
+  assert.deepEqual(await hit.resolve(track).then((r) => [r.image, r.strategy]), [cover, "lookup"]);
+  const miss = createDiscordArtworkResolver(artworkResolverOptions(on, { createLookup: () => async () => null }));
+  assert.deepEqual(await miss.resolve(track).then((r) => [r.image, r.strategy, r.failure]), ["media", "fallback", "not_https"]);
+  let called = false;
+  const off = createDiscordArtworkResolver(artworkResolverOptions(createSetupConfig({ ...base, discordArtworkLookup: "off" }).discord, { createLookup: () => async () => { called = true; return cover; } }));
+  assert.deepEqual(await off.resolve(track).then((r) => [r.image, r.strategy]), ["media", "fallback"]);
+  assert.equal(called, false);
 });

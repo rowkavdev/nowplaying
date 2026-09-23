@@ -53,6 +53,7 @@ export function parseAppConfig(text) {
       credentialStored: true,
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
+      discordArtworkLookup: parsed.discord?.artworkLookup,
     });
   } catch {
     throw invalidConfig();
@@ -104,7 +105,8 @@ function defaultDiscordTransport(clientId) {
 // ID. Discord not running is fine: the client retries in the background.
 // Artwork: a public HTTPS image from the server is used as is; private or
 // local server images fall back to the app's "media" asset. No title or artist
-// leaves the machine unless the config opts in to a lookup.
+// leaves the machine unless the config has artworkLookup "musicbrainz" (the
+// default for new setups, off for configs written before it existed).
 export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {} });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });

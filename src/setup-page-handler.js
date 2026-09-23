@@ -222,6 +222,8 @@ const JS = `"use strict";
     if (enabled) result.discordEnabled = enabled.checked;
     var idle = document.getElementById("discordIdleBehavior");
     if (idle) result.discordIdleBehavior = idle.value;
+    var art = document.getElementById("discordArtworkLookup");
+    if (art) result.discordArtworkLookup = art.checked;
     var startup = document.getElementById("startWithWindows");
     if (startup) result.startWithWindows = startup.checked;
     return result;
@@ -248,6 +250,8 @@ const JS = `"use strict";
           el("label", {}, [el("input", { type: "checkbox", id: "discordEnabled", checked: draft.discordEnabled }), " Show what I'm playing on Discord"]),
           el("label", { htmlFor: "discordIdleBehavior" }, ["When nothing is playing: "]),
           el("select", { id: "discordIdleBehavior" }, IDLE.map(function (item) { return el("option", { value: item[0], textContent: item[1], selected: draft.discordIdleBehavior === item[0] }); })),
+          el("label", {}, [el("input", { type: "checkbox", id: "discordArtworkLookup", checked: draft.discordArtworkLookup !== false }), " Look up album art online"]),
+          el("p", { textContent: "Sends only the track title and artist to MusicBrainz to find the cover. Your server address and account are never sent." }),
         ].concat(draft.startWithWindows === null ? [] : [
           el("label", {}, [el("input", { type: "checkbox", id: "startWithWindows", checked: draft.startWithWindows }), " Start NowPlaying when I sign in to Windows"]),
         ]);
@@ -256,6 +260,7 @@ const JS = `"use strict";
           el("h2", { textContent: "Check your choices" }),
           el("p", { textContent: "Media server: " + nameOf(PROVIDERS, draft.provider) + (draft.account ? " (signed in as " + draft.account.displayName + ")" : "") }),
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
+          el("p", { textContent: "Album art lookup: " + (draft.discordArtworkLookup !== false ? "On" : "Off") }),
         ].concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]);
       default:
         return [el("h2", { textContent: "All set" }), el("p", { textContent: draft.account ? "You're signed in to " + nameOf(PROVIDERS, draft.provider) + " as " + draft.account.displayName + ", and your choices are saved." : "Your choices are saved." })];

@@ -28,8 +28,18 @@ test("reads the wizard's config back exactly", async () => {
   assert.deepEqual(config, {
     version: 1, provider: "jellyfin", serverUrl: "http://127.0.0.1:8096",
     identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" },
-    discord: { enabled: true, idleBehavior: "clear" },
+    discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
   });
+});
+
+test("keeps the album art lookup choice, and older configs without it stay off", async () => {
+  const on = await loadAppConfig(await configFile({ ...JELLYFIN, discordArtworkLookup: "musicbrainz" }));
+  assert.equal(on.discord.artworkLookup, "musicbrainz");
+  const old = JSON.parse(serializeSetupConfig(JELLYFIN));
+  delete old.discord.artworkLookup;
+  assert.equal((await loadAppConfig(await configFile(JSON.stringify(old)))).discord.artworkLookup, "off");
+  const bad = { ...old, discord: { ...old.discord, artworkLookup: "itunes" } };
+  await assert.rejects(loadAppConfig(await configFile(JSON.stringify(bad))), code("CONFIG_INVALID"));
 });
 
 test("a missing config says to run setup", async () => {

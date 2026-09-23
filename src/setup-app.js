@@ -32,6 +32,7 @@ export async function writeSetupConfig(file, draft) {
     credentialStored: true,
     discordEnabled: draft.discordEnabled,
     discordIdleBehavior: draft.discordIdleBehavior,
+    discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
   });
   await mkdir(dirname(file), { recursive: true });
   const temporary = `${file}.tmp`;

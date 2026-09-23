@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
+import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath, writeSetupConfig } from "../src/setup-app.js";
 import { stat } from "node:fs/promises";
 
 test("builds the draft path under LOCALAPPDATA", () => {
@@ -61,7 +61,7 @@ test("a sign-in saves the secret to the credential store and only the account to
       serverUrl: "http://127.0.0.1:4533",
       identity: { id: "rowan", displayName: "Rowan" },
       credentialRef: { provider: "navidrome", identityId: "rowan" },
-      discord: { enabled: false, idleBehavior: "clear" },
+      discord: { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz" },
     });
     assert.doesNotMatch(configText, /nd-secret|pw-123/);
     if (process.platform !== "win32") assert.equal((await stat(configFile)).mode & 0o777, 0o600);
@@ -179,4 +179,14 @@ test("without startup support the choice is not offered", async () => {
   } finally {
     await app.close();
   }
+});
+
+test("the wizard writes album art lookup on by default and off when unticked", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  const draft = { provider: "jellyfin", account: { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" }, discordEnabled: true, discordIdleBehavior: "clear" };
+  await writeSetupConfig(file, draft);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkLookup, "musicbrainz");
+  await writeSetupConfig(file, { ...draft, discordArtworkLookup: false });
+  assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkLookup, "off");
 });
