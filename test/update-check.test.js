@@ -60,3 +60,19 @@ test("reports malformed release JSON as invalid releases", async () => {
   const response = { ok: true, status: 200, text: async () => "{not json" };
   await assert.rejects(checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", fetchImpl: async () => response }), /invalid releases/);
 });
+
+test("parses crafted tags in linear time and skips malformed releases", async () => {
+  const crafted = [`v0.0.0-0.${"--.".repeat(40)}`, `v0.0.0--${"-".repeat(120)}!`, `v0.0.0-${"a-".repeat(5000)}!`];
+  const started = performance.now();
+  const result = await checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", channel: "beta", fetchImpl: fetchReleases([...crafted.map((tag) => ({ ...release("0.2.0"), tag_name: tag })), release("0.2.0")]) });
+  // Exponential backtracking takes minutes on these inputs; linear takes milliseconds.
+  assert.ok(performance.now() - started < 2000, "version parsing must not backtrack");
+  assert.equal(result.version, "0.2.0");
+});
+
+test("rejects invalid prerelease identifiers and overlong versions", async () => {
+  for (const currentVersion of ["0.1.0-01", "0.1.0-a..b", "0.1.0-", "0.1.0-a.", `0.1.0-${"a".repeat(130)}`]) {
+    await assert.rejects(checkForUpdate({ currentVersion, repository: "x/y", fetchImpl: fetchReleases([]) }), /expected semver/, currentVersion);
+  }
+  assert.deepEqual(await checkForUpdate({ currentVersion: "0.1.0-0.a-b.1", repository: "x/y", fetchImpl: fetchReleases([]) }), { available: false, currentVersion: "0.1.0-0.a-b.1" });
+});

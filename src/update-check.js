@@ -2,7 +2,11 @@ import { readBoundedBytes, timeoutSignal } from "./bounded-response.js";
 
 const MAX_RELEASES_BYTES = 4 * 1024 * 1024;
 const CHECK_TIMEOUT_MS = 30 * 1000;
-const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+// Linear-time SemVer parsing: one unambiguous pattern for the shape, then a
+// per-identifier check. (The single-regex form backtracked exponentially on
+// crafted tags, and tags come from the release API.)
+const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/;
+const MAX_VERSION_LENGTH = 128;
 
 export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", fetchImpl = globalThis.fetch, timeoutMs = CHECK_TIMEOUT_MS } = {}) {
   const current = parseVersion(currentVersion);
@@ -14,7 +18,8 @@ export async function checkForUpdate({ currentVersion, repository, token, channe
   const releases = await readReleases(response);
   if (!Array.isArray(releases)) throw new TypeError("update check returned invalid releases");
   const candidates = releases.filter((release) => release && !release.draft && typeof release.tag_name === "string" && Boolean(release.prerelease) === (channel === "beta"))
-    .map((release) => ({ release, version: parseVersion(release.tag_name) }))
+    .map((release) => ({ release, version: tryParseVersion(release.tag_name) }))
+    .filter((candidate) => candidate.version !== null)
     .sort((a, b) => compareVersion(b.version, a.version));
   const latest = candidates[0];
   if (!latest || compareVersion(latest.version, current) <= 0) return Object.freeze({ available: false, currentVersion: current.normalized });
@@ -26,10 +31,23 @@ export async function checkForUpdate({ currentVersion, repository, token, channe
 
 function parseVersion(value) {
   if (typeof value !== "string") throw new TypeError("version: expected semver");
+  if (value.length > MAX_VERSION_LENGTH) throw new TypeError("version: expected semver (too long)");
   const match = VERSION_PATTERN.exec(value);
   if (!match) throw new TypeError("version: expected semver");
   const prerelease = match[4]?.split(".") ?? [];
+  if (!prerelease.every(validIdentifier)) throw new TypeError("version: expected semver");
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease, normalized: `${match[1]}.${match[2]}.${match[3]}${match[4] ? `-${match[4]}` : ""}` };
+}
+
+// A malformed tag on one release shouldn't stop update checks altogether.
+function tryParseVersion(value) {
+  try { return parseVersion(value); } catch { return null; }
+}
+
+function validIdentifier(part) {
+  if (!part) return false;
+  if (/^\d+$/.test(part)) return part === "0" || part[0] !== "0";
+  return /^[0-9A-Za-z-]+$/.test(part);
 }
 
 function compareVersion(a, b) {
