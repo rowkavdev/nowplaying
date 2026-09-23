@@ -9,7 +9,7 @@ const TIME = new Date("2026-09-23T00:50:00.000Z");
 const event = (code = null) => ({ time: TIME, level: "info", component: "provider", status: "ok", code });
 
 test("resolves a stable per-user Windows log path", () => {
-  assert.equal(windowsLogPath({ localAppData: "C:\\Users\\rowan\\AppData\\Local" }), join("C:\\Users\\rowan\\AppData\\Local", "nowplaying", "logs", "nowplaying.log"));
+  assert.equal(windowsLogPath({ localAppData: "C:\\Users\\rowan\\AppData\\Local" }), "C:\\Users\\rowan\\AppData\\Local\\nowplaying\\logs\\nowplaying.log");
   assert.throws(() => windowsLogPath(), /LOCALAPPDATA is required/);
   assert.throws(() => windowsLogPath({ localAppData: "x", appName: "../other" }), /appName is invalid/);
 });
