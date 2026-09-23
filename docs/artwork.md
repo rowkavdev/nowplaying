@@ -37,3 +37,17 @@ GitHub can cache proxied images. A changing query parameter on the outer card UR
 ## Sanitizer policy
 
 The fetch layer validates transport, declared type, magic bytes, byte size and decoded pixel dimensions. The default sharp runtime then decodes one frame only, applies EXIF orientation, resizes to the requested rendition without enlargement, and emits a fresh PNG without copying EXIF, XMP or ICC metadata. Post-encode pixel and byte limits are enforced before output is cached or embedded. Cache keys carry the sanitizer/output policy version so future codec or format changes invalidate old entries.
+
+
+## Discord artwork
+
+Discord fetches the large image itself, so it can only show artwork from a public HTTPS URL. A private media server's image URL never works there and would leak the server's address, so nowplaying picks the Discord image in this order:
+
+1. **Provider image** - used only if it is a public HTTPS URL with no embedded credentials and no token-like query parameters (`X-Plex-Token`, `api_key`, Subsonic `t`/`s`/`u` and similar).
+2. **Public proxy** - if you run a public artwork proxy, its base URL plus an opaque hash of the artwork reference. The private host and item IDs are never part of the URL.
+3. **Metadata lookup** - off by default. When you turn it on, only the track title and artist are sent to the lookup service you configure. Nothing is sent while it is off.
+4. **Fallback asset** - your configured Discord asset key (`media` by default).
+
+URLs are rejected for loopback, private, link-local and CGNAT IPv4 ranges, private, link-local and IPv4-mapped IPv6 addresses, `localhost`, single-label hostnames and local suffixes such as `.local`, `.lan` and `.home.arpa`.
+
+Results are cached for six hours; misses are cached for ten minutes so a failing lookup is not retried on every update. Diagnostics show only which strategy was used and a short failure class such as `private_host` or `lookup_error` - never the URL, host, token or lookup error text.
