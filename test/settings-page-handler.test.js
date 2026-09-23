@@ -15,7 +15,7 @@ test("serves the page, style and script, and passes other paths on", async () =>
   assert.equal(page.status, 200);
   assert.equal(page.page, true);
   assert.match(page.body, /<script src="\/settings.js">/);
-  assert.doesNotMatch(page.body, /<script>|\sstyle=|\son[a-z]+=/);
+  assert.doesNotMatch(page.body, /<script>|\sstyle=|\son[a-z]+=/i);
   assert.equal((await h({ url: "/settings.js" })).headers["Content-Type"], "text/javascript; charset=utf-8");
   assert.equal((await h({ url: "/settings.css" })).status, 200);
   assert.equal((await h({ method: "HEAD", url: "/settings" })).body, "");
