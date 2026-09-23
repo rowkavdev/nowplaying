@@ -21,12 +21,13 @@ test("formats activity from shared templates", () => {
     largeText: "{stateLabel} · {progressPercent}%",
   });
   assert.deepEqual(activity, {
-    type: "watching",
+    type: "listening",
     details: "Episode",
     state: "Watching Example Show",
     largeImage: "media",
     largeText: "Playing · 33%",
     startTimestamp: 1_789_905_600,
+    endTimestamp: 1_789_905_690,
   });
   assert.equal(Object.isFrozen(activity), true);
 });
@@ -39,7 +40,7 @@ test("supports elapsed, remaining, both and no timestamps", () => {
   assert.deepEqual(
     formatDiscordActivity(playing, { timestamps: "both" }),
     {
-      type: "watching",
+      type: "listening",
       details: "Episode",
       state: "Example Show",
       largeImage: "media",
@@ -61,7 +62,7 @@ test("clears idle by default or shows an explicit idle activity", () => {
   const idle = { state: "idle", kind: "unknown", title: null, subtitle: null, updatedAt: playing.updatedAt };
   assert.equal(formatDiscordActivity(idle), null);
   assert.deepEqual(formatDiscordActivity(idle, { idleBehavior: "show" }), {
-    type: "watching",
+    type: "listening",
     details: "Nothing playing",
     largeImage: "media",
     largeText: "Idle",
@@ -88,4 +89,14 @@ test("truncates without splitting Unicode code points", () => {
   const activity = formatDiscordActivity({ ...playing, title: "😀".repeat(140) });
   assert.equal([...activity.details].length, 128);
   assert.equal(activity.details.endsWith("😀"), true);
+});
+
+test("defaults to Listening with a progress bar and no bar while paused", () => {
+  const activity = formatDiscordActivity(playing);
+  assert.equal(activity.type, "listening");
+  assert.equal(activity.startTimestamp, 1_789_905_600);
+  assert.equal(activity.endTimestamp, 1_789_905_690);
+  const paused = formatDiscordActivity({ ...playing, state: "paused" });
+  assert.equal(paused.startTimestamp, undefined);
+  assert.equal(paused.endTimestamp, undefined);
 });

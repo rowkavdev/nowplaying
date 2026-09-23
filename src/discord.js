@@ -11,7 +11,7 @@ export const discordDefaults = Object.freeze({
   largeText: "{stateLabel}",
   largeImage: "media",
   smallImage: "",
-  timestamps: "elapsed",
+  timestamps: "both",
   idleBehavior: "clear",
   buttons: Object.freeze([]),
   minUpdateIntervalMs: 15_000,
@@ -77,7 +77,7 @@ export function formatDiscordActivity(presence, input = {}) {
   const state = trimDiscordText(formatTemplate(settings.state, values));
   const largeText = trimDiscordText(formatTemplate(settings.largeText, values));
   const activity = {
-    type: "watching",
+    type: "listening",
     details: details || (presence.state === "idle" ? "Nothing playing" : undefined),
     state: state || undefined,
     largeImage: settings.largeImage || undefined,

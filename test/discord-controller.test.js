@@ -20,7 +20,7 @@ test("previews the exact Discord payload without publishing", () => {
   });
 
   assert.deepEqual(controller.preview(playing), {
-    type: "watching",
+    type: "listening",
     details: "Playing Example track",
     state: "by Example artist",
     largeImage: "media",
