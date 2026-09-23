@@ -14,6 +14,9 @@ import { runTraySession } from "../src/tray-session.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
 
+// Declared before any top-level await so the start path below can use it.
+let recovery;
+
 const command = process.argv[2] ?? "help";
 
 if (command === "--version" || command === "version") {
@@ -139,7 +142,6 @@ async function openSetupWindow() {
 
 // Crash-loop protection for the installed app (#122): after three starts in a
 // row that never stayed up, the next one runs in safe mode.
-let recovery;
 async function guardedStart(configFile) {
   recovery?.cancel();
   const store = createStartupRecoveryStore({ file: resolve(dirname(configFile), "startup-recovery.json") });
