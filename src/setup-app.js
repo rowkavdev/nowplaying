@@ -133,14 +133,17 @@ export function openSetupUrl(url, { platform = process.platform, spawnProcess = 
 // Runs the native Windows setup window (scripts/windows-setup.ps1) against the
 // local setup server and resolves with its exit code. Rejects if PowerShell
 // cannot be started, so the caller can fall back to the browser page.
-export function runNativeSetup(url, { scriptPath, selfTest = false, spawnProcess = spawn } = {}) {
+export function runNativeSetup(url, { scriptPath, selfTest = false, visibilityProbe = false, probeWithoutShowFix = false, spawnProcess = spawn } = {}) {
   const parsed = loopbackSetupUrl(url);
   if (parsed.hostname !== "127.0.0.1") throw new TypeError("native setup needs a 127.0.0.1 URL");
   if (typeof scriptPath !== "string" || !scriptPath.endsWith("windows-setup.ps1")) throw new TypeError("scriptPath must point at windows-setup.ps1");
   const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-File", scriptPath, "-Url", parsed.href];
   if (selfTest) args.push("-SelfTest");
+  if (visibilityProbe) args.push("-VisibilityProbe");
+  if (visibilityProbe && probeWithoutShowFix) args.push("-ProbeWithoutShowFix");
+  const piped = selfTest || visibilityProbe;
   return new Promise((resolve, reject) => {
-    const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, stdio: selfTest ? ["ignore", "pipe", "pipe"] : "ignore" });
+    const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, stdio: piped ? ["ignore", "pipe", "pipe"] : "ignore" });
     let output = "";
     let errors = "";
     child.stdout?.on("data", (chunk) => { output += chunk; });

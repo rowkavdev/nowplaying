@@ -43,3 +43,38 @@ test("native setup window walks every step, including sign-in, against the real 
     await app.close();
   }
 });
+
+// Launches the real window exactly as the app does (windowsHide) and asks
+// Windows whether it is actually visible. The headless self-test above can't
+// catch a window that renders correctly but never appears (#87 first launch).
+test("native setup window is actually visible when launched like the app launches it", { skip: process.platform !== "win32" }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-native-visible-"));
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json"), deviceId: "selftest-device", discover: async () => [] });
+  try {
+    const scriptPath = fileURLToPath(new URL("../scripts/windows-setup.ps1", import.meta.url));
+    const unfixed = await runNativeSetup(app.url, { scriptPath, visibilityProbe: true, probeWithoutShowFix: true });
+    console.log(`without the first-show fix: ${unfixed.output || unfixed.errors}`);
+    const { code, output, errors } = await runNativeSetup(app.url, { scriptPath, visibilityProbe: true });
+    assert.equal(code, 0, `${output}\n${errors}`);
+    assert.deepEqual(JSON.parse(output), { visible: true });
+  } finally {
+    await app.close();
+  }
+});
+
+test("runNativeSetup launches hidden PowerShell with the probe flags only when asked", async () => {
+  const calls = [];
+  const spawnProcess = (command, args, options) => {
+    calls.push({ command, args, options });
+    const child = { stdout: null, stderr: null, on(event, fn) { if (event === "close") setImmediate(() => fn(0)); return child; } };
+    return child;
+  };
+  const scriptPath = "C:\\app\\scripts\\windows-setup.ps1";
+  await runNativeSetup("http://127.0.0.1:4321/setup", { scriptPath, spawnProcess });
+  await runNativeSetup("http://127.0.0.1:4321/setup", { scriptPath, spawnProcess, visibilityProbe: true });
+  await runNativeSetup("http://127.0.0.1:4321/setup", { scriptPath, spawnProcess, probeWithoutShowFix: true });
+  assert.ok(calls.every((call) => call.command === "powershell.exe" && call.options.windowsHide === true && call.args.includes("-STA")));
+  assert.ok(!calls[0].args.includes("-VisibilityProbe") && calls[0].options.stdio === "ignore");
+  assert.ok(calls[1].args.includes("-VisibilityProbe") && !calls[1].args.includes("-ProbeWithoutShowFix"));
+  assert.ok(!calls[2].args.includes("-ProbeWithoutShowFix"), "the unfixed probe needs visibilityProbe too");
+});
