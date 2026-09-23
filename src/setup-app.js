@@ -57,8 +57,10 @@ export function runNativeSetup(url, { scriptPath, selfTest = false, spawnProcess
   return new Promise((resolve, reject) => {
     const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, stdio: selfTest ? ["ignore", "pipe", "pipe"] : "ignore" });
     let output = "";
+    let errors = "";
     child.stdout?.on("data", (chunk) => { output += chunk; });
+    child.stderr?.on("data", (chunk) => { errors += chunk; });
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code, output }));
+    child.on("close", (code) => resolve({ code, output, errors }));
   });
 }
