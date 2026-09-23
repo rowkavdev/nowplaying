@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ test("native setup window walks every step, including sign-in, against the real 
   };
   const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
   const app = await startSetupApp({
-    draftFile: join(dir, "draft.json"), credentialStore, deviceId: "selftest-device", signIn,
+    draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn,
     discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }],
   });
   try {
@@ -32,6 +32,10 @@ test("native setup window walks every step, including sign-in, against the real 
     assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "selftest" }, "nd-secret"]]);
     const draft = await (await fetch(new URL("/api/setup/draft", app.url))).json();
     assert.deepEqual([draft.draft.step, draft.draft.provider, draft.draft.account.id], ["complete", "navidrome", "selftest"]);
+    const configText = await readFile(join(dir, "config.json"), "utf8");
+    const config = JSON.parse(configText);
+    assert.deepEqual([config.provider, config.serverUrl, config.credentialRef], ["navidrome", "http://127.0.0.1:4533", { provider: "navidrome", identityId: "selftest" }]);
+    assert.doesNotMatch(configText, /nd-secret|selftest-password/);
   } finally {
     await app.close();
   }

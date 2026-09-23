@@ -44,3 +44,10 @@ test("refuses raw credentials and unsupported providers", () => {
   assert.throws(() => createSetupConfig({ ...input, token: "secret-token" }), /cannot contain credentials/);
   assert.throws(() => createSetupConfig({ ...input, provider: "other" }), /provider is invalid/);
 });
+
+test("carries the server address and refuses one with credentials in it", () => {
+  assert.equal(createSetupConfig({ ...input, serverUrl: "http://127.0.0.1:32400" }).serverUrl, "http://127.0.0.1:32400");
+  for (const bad of ["ftp://x", "http://u:p@x", "http://x/?token=1", "not a url", 5]) {
+    assert.throws(() => createSetupConfig({ ...input, serverUrl: bad }), /serverUrl is invalid/);
+  }
+});

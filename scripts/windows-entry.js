@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
 import { createCredentialStore } from "../src/credential-store.js";
-import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
+import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 
 const command = process.argv[2] ?? "help";
@@ -39,7 +39,8 @@ if (command === "--version" || command === "version") {
   const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
-  const setup = await startSetupApp({ draftFile, credentialStore, deviceId, version: manifest.version });
+  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
+  const setup = await startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version });
   const close = async () => { await setup.close(); };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);

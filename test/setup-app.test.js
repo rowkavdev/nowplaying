@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { openSetupUrl, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
+import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
+import { stat } from "node:fs/promises";
 
 test("builds the draft path under LOCALAPPDATA", () => {
   assert.equal(windowsSetupDraftPath({ localAppData: "C:\\Users\\R\\AppData\\Local" }), "C:\\Users\\R\\AppData\\Local\\nowplaying\\setup-draft.json");
@@ -36,7 +37,8 @@ test("a sign-in saves the secret to the credential store and only the account to
   const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
   const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "nd-secret" }) };
   const draftFile = join(dir, "draft.json");
-  const app = await startSetupApp({ draftFile, credentialStore, deviceId: "device-0001", signIn });
+  const configFile = join(dir, "config.json");
+  const app = await startSetupApp({ draftFile, configFile, credentialStore, deviceId: "device-0001", signIn });
   try {
     const api = (path, method, body) => fetch(new URL(path, app.url), { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
     await api("/api/setup/draft", "POST", { action: "next" });
@@ -46,12 +48,46 @@ test("a sign-in saves the secret to the credential store and only the account to
     assert.deepEqual([status, body.status], [200, "signed_in"]);
     assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "rowan" }, "nd-secret"]]);
     const draft = (await api("/api/setup/draft", "GET"))[1].draft;
-    assert.deepEqual([draft.step, draft.account], ["signin", { provider: "navidrome", id: "rowan", displayName: "Rowan" }]);
+    assert.deepEqual([draft.step, draft.account], ["signin", { provider: "navidrome", id: "rowan", displayName: "Rowan", serverUrl: "http://127.0.0.1:4533" }]);
     assert.doesNotMatch(await readFile(draftFile, "utf8"), /nd-secret|pw-123/);
     assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "discord");
+    await assert.rejects(readFile(configFile), { code: "ENOENT" });
+    await api("/api/setup/draft", "POST", { action: "next", changes: { discordEnabled: false } });
+    assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "complete");
+    const configText = await readFile(configFile, "utf8");
+    assert.deepEqual(JSON.parse(configText), {
+      version: 1,
+      provider: "navidrome",
+      serverUrl: "http://127.0.0.1:4533",
+      identity: { id: "rowan", displayName: "Rowan" },
+      credentialRef: { provider: "navidrome", identityId: "rowan" },
+      discord: { enabled: false, idleBehavior: "clear" },
+    });
+    assert.doesNotMatch(configText, /nd-secret|pw-123/);
+    if (process.platform !== "win32") assert.equal((await stat(configFile)).mode & 0o777, 0o600);
   } finally {
     await app.close();
   }
+});
+
+test("Finish writes no config when sign-in is unavailable", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const configFile = join(dir, "config.json");
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json"), configFile });
+  try {
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    await post({ action: "next" });
+    await post({ action: "next", changes: { provider: "plex" } });
+    for (let i = 0; i < 2; i += 1) await post({ action: "next" });
+    assert.equal((await post({ action: "next" })).draft.step, "complete");
+    await assert.rejects(readFile(configFile), { code: "ENOENT" });
+  } finally {
+    await app.close();
+  }
+});
+
+test("builds the config path next to the draft", () => {
+  assert.equal(windowsConfigPath({ localAppData: "C:\\Users\\R\\AppData\\Local" }), "C:\\Users\\R\\AppData\\Local\\nowplaying\\config.json");
 });
 
 test("refuses non-loopback hosts", async () => {

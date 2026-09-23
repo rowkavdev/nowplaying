@@ -49,7 +49,7 @@ const JS = `"use strict";
   var SIGNIN_API = "/api/setup/signin";
   var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
   var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
-  var DEFAULT_URLS = { jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
+  var DEFAULT_URLS = { plex: "http://127.0.0.1:32400", jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
   var SIGNIN_ERRORS = {
     authentication_failed: "That username or password didn't work.",
     invalid_server_url: "Enter the server address, like http://127.0.0.1:8096.",
@@ -140,6 +140,7 @@ const JS = `"use strict";
     var parts = [el("h2", { textContent: "Sign in to " + name })];
     if (draft.account) parts.push(el("p", { textContent: "Signed in as " + draft.account.displayName + ". Your sign-in is saved in Windows Credential Manager, not in this page." }));
     if (draft.provider === "plex") {
+      parts.push(field("serverUrl", "Plex server address", "url", DEFAULT_URLS.plex));
       parts.push(el("p", { textContent: signin.flowId ? "Finish signing in on the Plex page. This page updates when you're done." : "Plex opens in a new tab so you can approve NowPlaying." }));
       parts.push(el("button", { type: "button", id: "signinStart", textContent: draft.account ? "Sign in again" : "Open Plex sign-in" }));
     } else if (draft.provider === "jellyfin") {
@@ -157,7 +158,7 @@ const JS = `"use strict";
   }
 
   function onSignInClick() {
-    if (draft.provider === "plex") return startSignIn({ action: "start", provider: "plex" });
+    if (draft.provider === "plex") return startSignIn({ action: "start", provider: "plex", baseUrl: value("serverUrl") });
     if (draft.provider === "jellyfin") return startSignIn({ action: "start", provider: "jellyfin", baseUrl: value("serverUrl") });
     var password = document.getElementById("password");
     var body = { action: "password", provider: draft.provider, baseUrl: value("serverUrl"), username: value("username"), password: password ? password.value : "" };
