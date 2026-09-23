@@ -1,11 +1,12 @@
 import { classifyFailure } from "./resilient-card.js";
+import { createDiagnosticRecord } from "./diagnostics.js";
 
 const PROVIDER_LABELS = Object.freeze({ jellyfin: "Jellyfin", emby: "Emby", plex: "Plex", navidrome: "Navidrome" });
 const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", unreachable: "unreachable", timeout: "unreachable", error: "error" });
 
 // Tracks what the local status page shows. It only keeps the latest poll
 // outcome and the current track; never secrets, tokens or raw error text.
-export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000 } = {}) {
+export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null } = {}) {
   if (!config || typeof config.provider !== "string") throw new TypeError("config: expected an app config");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   const startedAt = now();
@@ -68,7 +69,27 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     });
   }
 
-  return Object.freeze({ wrapProvider, setDiscord, refresh, snapshot });
+  // Support bundle for bug reports (#115): allow-listed labels only. The
+  // address, user name and current track are passed as sensitive values so
+  // they are scrubbed even if they turn up inside an error string.
+  function diagnostics() {
+    const s = snapshot();
+    const outputs = ["card", ...(s.discord.enabled ? ["discord"] : [])];
+    const health = s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready") ? "healthy" : s.server.state === "starting" ? "starting" : "degraded";
+    const sensitiveValues = [config.serverUrl, s.server.address, s.server.user, playing?.title, playing?.subtitle].filter((value) => typeof value === "string");
+    return createDiagnosticRecord({
+      version: s.version ?? undefined,
+      platform,
+      packageType: packageType ?? undefined,
+      enabledOutputs: outputs,
+      provider: { type: config.provider, status: s.server.state },
+      health,
+      errors: [failure, s.discord.error].filter((value) => typeof value === "string"),
+      sensitiveValues,
+    });
+  }
+
+  return Object.freeze({ wrapProvider, setDiscord, refresh, snapshot, diagnostics });
 }
 
 function serverOrigin(value) {
