@@ -36,7 +36,10 @@ export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgen
 
   return async function lookup({ title, artist } = {}) {
     if (typeof title !== "string" || !title.trim()) return null;
-    const query = artist && String(artist).trim() ? `recording:${luceneTerm(title)} AND artist:${luceneTerm(artist)}` : `recording:${luceneTerm(title)}`;
+    // A title on its own matches whichever song of that name scores highest,
+    // which is usually someone else's. No artist means no guess (#154).
+    if (typeof artist !== "string" || !artist.trim()) return null;
+    const query = `recording:${luceneTerm(title)} AND artist:${luceneTerm(artist)}`;
     const response = await limited(`${API}?${new URLSearchParams({ query, fmt: "json", limit: "5" })}`, { redirect: "error" });
     if (!response.ok) return null;
     const body = await response.json();

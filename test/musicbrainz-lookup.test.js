@@ -51,7 +51,7 @@ test("spaces every request at least one second apart", async () => {
   let clock = 0; const waits = [];
   const net = fakeNetwork({ recordings: [{ score: 100, releases: [{ id: RELEASE }] }], covers: { [RELEASE]: 200 } });
   const lookup = createMusicBrainzLookup({ fetchImpl: net.fetchImpl, now: () => clock, sleep: async (ms) => { waits.push(ms); clock += ms; } });
-  await Promise.all([lookup({ title: "a" }), lookup({ title: "b" })]);
+  await Promise.all([lookup({ title: "a", artist: "x" }), lookup({ title: "b", artist: "x" })]);
   assert.equal(net.calls.length, 4);
   assert.deepEqual(waits, [1100, 1100, 1100]);
   assert.throws(() => createMusicBrainzLookup({ userAgent: "nowplaying" }), /contact/);
@@ -66,4 +66,11 @@ test("stays off by default and is enabled only by artworkLookup: musicbrainz", a
   assert.equal(options.metadataLookup, true);
   const result = await createDiscordArtworkResolver(options).resolve({ title: "Teardrop", artist: "Massive Attack" });
   assert.deepEqual([result.strategy, result.image], ["lookup", `https://coverartarchive.org/release/${RELEASE}/front-250`]);
+});
+
+test("never guesses from a title alone", async () => {
+  let calls = 0;
+  const lookup = createMusicBrainzLookup({ fetchImpl: async () => { calls += 1; return new Response("{}"); }, minIntervalMs: 0 });
+  for (const artist of [undefined, "", "   ", 5]) assert.equal(await lookup({ title: "Teardrop", artist }), null);
+  assert.equal(calls, 0);
 });
