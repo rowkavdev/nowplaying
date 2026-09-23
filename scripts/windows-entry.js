@@ -8,6 +8,7 @@ import { createCredentialStore } from "../src/credential-store.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
+import { ensureConfigured, parseStartArgs } from "../src/first-run.js";
 
 const command = process.argv[2] ?? "help";
 
@@ -20,9 +21,19 @@ if (command === "--version" || command === "version") {
   let app;
   try {
     const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
+    let startArgs;
+    try { startArgs = parseStartArgs(process.argv.slice(3)); }
+    catch (error) { console.error(`nowplaying: ${error.message}`); process.exit(2); }
     // An explicit config module wins. With no argument, the wizard's config is
     // used; installs from before the wizard keep their nowplaying.config.mjs.
-    const legacyModule = process.argv[3] ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
+    const legacyModule = startArgs.module ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
+    // First launch: no config yet, so open setup instead of failing. `start
+    // --no-setup` (scripts, CI) keeps the plain "run setup" message.
+    if (!legacyModule && startArgs.setup && process.platform === "win32" && !existsSync(configFile)) {
+      console.log("NowPlaying isn't set up yet. Opening setup...");
+      const outcome = await ensureConfigured({ configExists: () => existsSync(configFile), runSetup: () => openSetupWindow() });
+      await logger.event("startup", "first_run_setup", { code: outcome });
+    }
     if (legacyModule) {
       // Hand-written config module (advanced / pre-wizard setups).
       const configPath = resolve(legacyModule);
@@ -54,18 +65,7 @@ if (command === "--version" || command === "version") {
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
 } else if (command === "setup") {
-  const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
-  const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
-  const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
-  const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
-  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
-  // "Start with Windows" is offered only from the installed/portable bundle,
-  // where nowplaying.exe sits next to the app folder.
-  const launcher = resolve("nowplaying.exe");
-  const startup = process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
-    ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
-    : undefined;
-  const setup = await startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup });
+  const setup = await startSetup();
   const close = async () => { await setup.close(); };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
@@ -85,8 +85,34 @@ if (command === "--version" || command === "version") {
     if (!flags.has("--no-open")) openSetupUrl(setup.url);
   }
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start            (runs from the setup config)\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start            (runs from the setup config; opens setup the first time)\n       nowplaying.exe start --no-setup\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;
+}
+
+async function startSetup() {
+  const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
+  const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
+  const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
+  const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
+  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
+  // "Start with Windows" is offered only from the installed/portable bundle,
+  // where nowplaying.exe sits next to the app folder.
+  const launcher = resolve("nowplaying.exe");
+  const startup = process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
+    ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
+    : undefined;
+  return startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup });
+}
+
+// Shows the native setup window and resolves true once it closes normally.
+async function openSetupWindow() {
+  const setup = await startSetup();
+  try {
+    const { code } = await runNativeSetup(setup.url, { scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
+    return code === 0;
+  } finally {
+    await setup.close();
+  }
 }
