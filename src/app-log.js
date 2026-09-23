@@ -48,3 +48,26 @@ export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } =
 
   return Object.freeze({ file, write });
 }
+
+
+export function createAppLogger({ env = process.env, platform = process.platform, now = () => new Date(), createLog = createRotatingLog } = {}) {
+  let log = null;
+  if (platform === "win32" && typeof env?.LOCALAPPDATA === "string" && env.LOCALAPPDATA.trim()) {
+    try { log = createLog({ file: windowsLogPath({ localAppData: env.LOCALAPPDATA }) }); }
+    catch { log = null; }
+  }
+  let failures = 0;
+
+  async function event(component, status, { level = "info", code = null } = {}) {
+    if (!log) return false;
+    try {
+      await log.write({ time: now(), level, component, status, code });
+      return true;
+    } catch {
+      failures += 1;
+      return false;
+    }
+  }
+
+  return Object.freeze({ enabled: Boolean(log), event, failures: () => failures });
+}
