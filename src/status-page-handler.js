@@ -19,7 +19,7 @@ const PAGE = `<!doctype html>
 <section aria-labelledby="h-help"><h2 id="h-help">Reporting a problem</h2>
 <p>Copies a short report with your version, server type and connection state. It leaves out your server address, user name, what you're playing and any sign-in details.</p>
 <p><button type="button" id="copy-diagnostics">Copy diagnostics</button> <a href="/api/diagnostics" download="nowplaying-diagnostics.json">Download</a> <span id="copy-result" role="status" aria-live="polite"></span></p></section>
-<footer><p>Version <span id="version">-</span></p></footer>
+<footer><p>Version <span id="version">-</span><span id="build"></span></p></footer>
 </main><script src="/status.js"></script></body></html>
 `;
 
@@ -67,6 +67,8 @@ async function load() {
     set("discord-state", discord[0] + (s.discord.error ? " (" + s.discord.error + ")" : ""), discord[1]);
     set("discord-last", s.discord.enabled ? ago(s.discord.lastPublishedAt) : "-");
     set("version", s.version);
+    const b = s.build;
+    set("build", b ? " - build " + b.commit + ", " + b.channel + ", " + (b.signed ? "signed" : "unsigned") + ", built " + new Date(b.builtAt).toLocaleString() : "");
     if (++cardTick % 3 === 0) document.getElementById("card").src = "/card.svg?t=" + Date.now();
   } catch {
     set("summary", "Can't reach NowPlaying. It may have been closed.", "bad");

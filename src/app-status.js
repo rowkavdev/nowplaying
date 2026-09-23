@@ -1,12 +1,13 @@
 import { classifyFailure } from "./resilient-card.js";
 import { createDiagnosticRecord } from "./diagnostics.js";
+import { createBuildProvenance } from "./build-provenance.js";
 
 const PROVIDER_LABELS = Object.freeze({ jellyfin: "Jellyfin", emby: "Emby", plex: "Plex", navidrome: "Navidrome" });
 const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", unreachable: "unreachable", timeout: "unreachable", error: "error" });
 
 // Tracks what the local status page shows. It only keeps the latest poll
 // outcome and the current track; never secrets, tokens or raw error text.
-export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null } = {}) {
+export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null, build = null } = {}) {
   if (!config || typeof config.provider !== "string") throw new TypeError("config: expected an app config");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   const startedAt = now();
@@ -55,6 +56,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     try { discordState = discord(); } catch { discordState = { enabled: true, state: "unknown" }; }
     return Object.freeze({
       version: typeof version === "string" ? version : null,
+      build: buildLabel(build),
       uptimeMs: Math.max(0, now() - startedAt),
       server: Object.freeze({
         type: PROVIDER_LABELS[config.provider] ?? config.provider,
@@ -86,10 +88,19 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       health,
       errors: [failure, s.discord.error].filter((value) => typeof value === "string"),
       sensitiveValues,
+      build: build ?? undefined,
     });
   }
 
   return Object.freeze({ wrapProvider, setDiscord, refresh, snapshot, diagnostics });
+}
+
+function buildLabel(value) {
+  if (!value) return null;
+  try {
+    const b = createBuildProvenance(value);
+    return Object.freeze({ commit: b.commitSha.slice(0, 7), builtAt: b.buildTime, channel: b.channel, signed: b.signed });
+  } catch { return null; }
 }
 
 function serverOrigin(value) {

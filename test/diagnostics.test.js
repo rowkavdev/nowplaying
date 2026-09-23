@@ -43,7 +43,7 @@ test("diagnostic records expose only the documented allow-list", () => {
     sensitiveValues: ["alice", "Inception"],
     configuration: { token: "must-not-leak" },
   });
-  assert.deepEqual(Object.keys(record), ["schemaVersion", "version", "platform", "packageType", "enabledOutputs", "provider", "health", "updater", "tray", "errors"]);
+  assert.deepEqual(Object.keys(record), ["schemaVersion", "version", "platform", "packageType", "enabledOutputs", "provider", "health", "updater", "tray", "errors", "build"]);
   assert.deepEqual(record.provider, { type: "plex", status: "offline" });
   const serialized = JSON.stringify(record);
   for (const value of ["secret.lan", "must-not-leak", "alice", "10.0.0.5", "Inception"]) assert.doesNotMatch(serialized, new RegExp(value.replaceAll(".", "\\."), "i"));

@@ -136,6 +136,7 @@ test("diagnostics export keeps only safe labels and scrubs private values (#115)
     updater: null,
     tray: null,
     errors: [],
+    build: null,
   });
   const json = JSON.stringify(record);
   for (const leak of ["Rowan", "192.168", "secret", "Secret Song", "Private Artist", "pw"]) assert.equal(json.includes(leak), false, leak);
@@ -154,4 +155,15 @@ test("diagnostics endpoint is same-origin only and downloads as a file", async (
   assert.equal(post.status, 405);
   const page = await handle({ method: "GET", url: "/status" });
   assert.match(page.body, /Copy diagnostics/);
+});
+
+test("status and diagnostics show validated build details (#119)", () => {
+  const build = { version: "0.1.1", commitSha: "227ababbbe9bc4cfe34d80417ca3298d28194bf8", buildTime: "2026-09-23T22:18:09.000Z", channel: "development", signed: false };
+  const status = createAppStatus({ config, version: "0.1.1", build, packageType: "installer" });
+  assert.deepEqual(status.snapshot().build, { commit: "227abab", builtAt: "2026-09-23T22:18:09.000Z", channel: "development", signed: false });
+  assert.deepEqual(status.diagnostics().build, build);
+  assert.equal(status.diagnostics().packageType, "installer");
+  const broken = createAppStatus({ config, build: { version: "x", commitSha: "nope" } });
+  assert.equal(broken.snapshot().build, null);
+  assert.equal(broken.diagnostics().build, null);
 });

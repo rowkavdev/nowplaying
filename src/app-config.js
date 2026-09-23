@@ -132,7 +132,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -149,7 +149,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     if (error instanceof StartupError) throw error;
     throw invalidConfig();
   }
-  const status = createAppStatus({ config, version });
+  const status = createAppStatus({ config, version, build, packageType });
   provider = status.wrapProvider(provider);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
   const handler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });

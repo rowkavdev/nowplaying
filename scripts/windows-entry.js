@@ -136,7 +136,11 @@ async function openSetupWindow() {
 async function startFromWizardConfig(configFile) {
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
-  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null });
+  // build-info.json is written by build-windows.ps1; a source checkout has none.
+  let build = null;
+  try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
+  const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
+  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType });
   console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }

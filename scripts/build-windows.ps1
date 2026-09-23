@@ -27,6 +27,11 @@ Copy-Item (Join-Path $Root 'src') (Join-Path $Bundle 'app/src') -Recurse
 Copy-Item (Join-Path $Root 'scripts') (Join-Path $Bundle 'app/scripts') -Recurse
 Copy-Item (Join-Path $Root 'node_modules') (Join-Path $Bundle 'app/node_modules') -Recurse
 Copy-Item (Join-Path $Root 'package.json') (Join-Path $Bundle 'app/package.json')
+# Build details for the status page and diagnostics (#119). Unsigned until code signing ships.
+$Commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { (git -C $Root rev-parse HEAD).Trim() }
+$Channel = if ($env:NOWPLAYING_CHANNEL) { $env:NOWPLAYING_CHANNEL } else { 'development' }
+[ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"); channel = $Channel; signed = $false } |
+  ConvertTo-Json | Set-Content -Encoding utf8NoBOM (Join-Path $Bundle 'app/build-info.json')
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
 Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse

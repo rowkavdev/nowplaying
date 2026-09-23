@@ -1,3 +1,5 @@
+import { createBuildProvenance } from "./build-provenance.js";
+
 const REDACTED = "[redacted]";
 
 /**
@@ -19,7 +21,7 @@ export function redactDiagnosticText(value, { sensitiveValues = [] } = {}) {
 }
 
 /** Build an allow-listed, JSON-serializable diagnostic record. */
-export function createDiagnosticRecord({ version, platform, packageType, enabledOutputs = [], provider, health, updater, tray, errors = [], sensitiveValues = [] } = {}) {
+export function createDiagnosticRecord({ version, platform, packageType, enabledOutputs = [], provider, health, updater, tray, errors = [], sensitiveValues = [], build } = {}) {
   return Object.freeze({
     schemaVersion: 1,
     version: safeLabel(version),
@@ -31,7 +33,15 @@ export function createDiagnosticRecord({ version, platform, packageType, enabled
     updater: safeLabel(updater),
     tray: safeLabel(tray),
     errors: Object.freeze(errors.map((error) => redactDiagnosticText(error, { sensitiveValues }))),
+    build: safeBuild(build),
   });
+}
+
+// Build details come from the packaged build-info.json; anything that
+// doesn't validate is dropped rather than guessed.
+function safeBuild(value) {
+  if (value === undefined || value === null) return null;
+  try { return createBuildProvenance(value); } catch { return null; }
 }
 
 function safeLabel(value) {
