@@ -11,6 +11,10 @@ export const STATE_TTL_SECONDS = 600;
 export const MAX_CLOCK_SKEW_MS = 120_000;
 export const SEQ_TTL_SECONDS = 60 * 60 * 24 * 30;
 export const REGISTRATIONS_PER_HOUR = 5;
+// The desktop app sends on change plus a 4-minute heartbeat, so a real device
+// stays far below this. It only stops a leaked token or a looping client from
+// hammering Redis.
+export const INGESTS_PER_MINUTE = 30;
 
 const STATES = new Set(["playing", "paused", "idle"]);
 const KINDS = new Set(["track", "episode", "movie", "show", "unknown"]);
@@ -80,6 +84,10 @@ export function createService({ redis, now = () => Date.now() } = {}) {
 
   async function ingest({ token, payload }) {
     const device = await authenticate(token);
+    const bucket = `np:rl:ingest:${device.deviceId}:${Math.floor(now() / 60_000)}`;
+    const count = await cmd("INCR", bucket);
+    if (count === 1) await cmd("EXPIRE", bucket, 120);
+    if (count > INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited");
     const update = validateIngest(payload, { now: now() });
     const seqKey = `np:seq:${device.deviceId}`;
     const lastSeq = Number(await cmd("GET", seqKey) ?? -1);

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryRedis, createUpstashRedis } from "../hosted/lib/redis.js";
-import { createService, validateIngest, STATE_TTL_SECONDS, REGISTRATIONS_PER_HOUR } from "../hosted/lib/service.js";
+import { createService, validateIngest, STATE_TTL_SECONDS, REGISTRATIONS_PER_HOUR, INGESTS_PER_MINUTE } from "../hosted/lib/service.js";
 
 function setup(start = 1_800_000_000_000) {
   let clock = start;
@@ -105,4 +105,22 @@ test("upstash client posts commands with bearer auth and hides error bodies", as
   const failing = createUpstashRedis({ url: "https://example.upstash.io", token: "t", fetchImpl: async () => ({ ok: true, json: async () => ({ error: "secret detail" }) }) });
   await assert.rejects(failing.command(["GET", "k"]), (error) => !error.message.includes("secret"));
   assert.throws(() => createUpstashRedis({ url: "http://insecure", token: "t" }), TypeError);
+});
+
+test("ingest is rate limited per device and resets each minute", async () => {
+  const { service, now, advance } = setup(1_800_000_000_000 - (1_800_000_000_000 % 60_000));
+  const first = await service.register({ clientKey: "one" });
+  const second = await service.register({ clientKey: "two" });
+  let seq = 0;
+  for (let i = 0; i < INGESTS_PER_MINUTE; i += 1) await service.ingest({ token: first.token, payload: update(now(), { seq: ++seq }) });
+  await assert.rejects(service.ingest({ token: first.token, payload: update(now(), { seq: ++seq }) }), { status: 429, code: "rate_limited" });
+  await service.ingest({ token: second.token, payload: update(now(), { seq: 1 }) });
+  advance(60_000);
+  await service.ingest({ token: first.token, payload: update(now(), { seq: ++seq }) });
+});
+
+test("a bad token is rejected before it counts against any limit", async () => {
+  const { service, redis, now } = setup();
+  await assert.rejects(service.ingest({ token: "x".repeat(43), payload: update(now()) }), { status: 401 });
+  assert.equal([...redis.data.keys()].some((key) => key.startsWith("np:rl:ingest:")), false);
 });
