@@ -8,7 +8,7 @@ The updater is dependency-free and supports private GitHub releases.
 - `notify` (default): check and report an available update without changing files.
 - `install`: download, verify and atomically install the update.
 
-Choose `stable` or `beta` explicitly. Channels never cross. Private repositories require a GitHub token with read access; keep it in an environment variable or secret store.
+Choose `stable` or `beta` explicitly: there is no default, and the updater refuses to start without one unless the policy is `off`. Channels never cross, and the updater never offers a version lower than or equal to the one installed, so it cannot downgrade. Private repositories require a GitHub token with read access; keep it in an environment variable or secret store.
 
 ## Safety model
 
@@ -19,7 +19,7 @@ import { createAutoUpdater } from "nowplaying";
 
 const updater = createAutoUpdater({
   currentVersion: "0.1.0",
-  repository: "rowkav09/nowplaying",
+  repository: "rowkavdev/nowplaying",
   token: process.env.GITHUB_TOKEN,
   targetDir: "/opt/nowplaying",
   channel: "beta",

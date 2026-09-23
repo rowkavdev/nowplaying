@@ -15,10 +15,18 @@ test("deduplicates concurrent checks", async () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const fetchImpl = async () => { calls += 1; await gate; return { ok: true, json: async () => [] }; };
-  const updater = createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", fetchImpl });
+  const updater = createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", channel: "beta", fetchImpl });
   const first = updater.check();
   const second = updater.check();
   release();
   assert.deepEqual(await Promise.all([first, second]), [{ status: "current", version: "0.1.0" }, { status: "current", version: "0.1.0" }]);
   assert.equal(calls, 1);
+});
+
+test("the update channel is never picked for the user (#172)", () => {
+  assert.throws(() => createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y" }), /choose stable or beta/);
+  assert.throws(() => createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", mode: "install" }), /choose stable or beta/);
+  assert.throws(() => createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", mode: "off", channel: "nightly" }), /expected stable or beta/);
+  assert.equal(createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", mode: "off" }).channel, undefined);
+  assert.equal(createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", channel: "stable" }).channel, "stable");
 });
