@@ -127,11 +127,11 @@ function Show-Step {
       $enabled.Name = 'discordEnabled'; $enabled.Text = "Show what I'm playing on Discord"; $enabled.AutoSize = $true; $enabled.Checked = [bool]$script:Draft.discordEnabled
       $panel.Controls.Add($enabled)
       $panel.Controls.Add((New-Text 'When nothing is playing:'))
-      $idle = [System.Windows.Forms.ComboBox]::new()
-      $idle.Name = 'discordIdleBehavior'; $idle.DropDownStyle = 'DropDownList'; $idle.Width = 320; $idle.DisplayMember = 'Value'
-      foreach ($entry in $Idle.GetEnumerator()) { [void]$idle.Items.Add([pscustomobject]@{ Key = $entry.Key; Value = $entry.Value }) }
-      $idle.SelectedIndex = [math]::Max(0, @($Idle.Keys).IndexOf([string]$script:Draft.discordIdleBehavior))
-      $panel.Controls.Add($idle)
+      $idleBox = [System.Windows.Forms.ComboBox]::new()
+      $idleBox.Name = 'discordIdleBehavior'; $idleBox.DropDownStyle = 'DropDownList'; $idleBox.Width = 320; $idleBox.DisplayMember = 'Value'
+      foreach ($entry in $Idle.GetEnumerator()) { [void]$idleBox.Items.Add([pscustomobject]@{ Key = $entry.Key; Value = $entry.Value }) }
+      $idleBox.SelectedIndex = [math]::Max(0, @($Idle.Keys).IndexOf([string]$script:Draft.discordIdleBehavior))
+      $panel.Controls.Add($idleBox)
     }
     'review' {
       $title.Text = 'Check your choices'
