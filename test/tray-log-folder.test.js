@@ -19,7 +19,7 @@ test("tray offers Open log folder at the same fixed per-user path", () => {
 });
 
 test("log folder action takes no path from overridable settings", () => {
-  const action = script.slice(script.indexOf("Open log folder"), script.indexOf("Exit tray"));
+  const action = script.slice(script.indexOf("Open log folder"), script.indexOf("Quit NowPlaying"));
   assert.doesNotMatch(action, /NOWPLAYING_|\$DashboardUrl|param\(/);
   assert.doesNotMatch(action, /Invoke-Expression|iex /i);
 });

@@ -18,9 +18,9 @@ export async function ensureConfigured({ configExists, runSetup } = {}) {
 // Splits `start` arguments into an optional config module and flags.
 export function parseStartArgs(args = []) {
   const flags = new Set(args.filter((arg) => arg.startsWith("--")));
-  const unknown = [...flags].filter((flag) => flag !== "--no-setup");
+  const unknown = [...flags].filter((flag) => flag !== "--no-setup" && flag !== "--no-tray");
   if (unknown.length) throw new TypeError(`unknown start option: ${unknown[0]}`);
   const positional = args.filter((arg) => !arg.startsWith("--"));
   if (positional.length > 1) throw new TypeError("start takes at most one config module");
-  return Object.freeze({ module: positional[0] ?? null, setup: !flags.has("--no-setup") });
+  return Object.freeze({ module: positional[0] ?? null, setup: !flags.has("--no-setup"), tray: !flags.has("--no-tray") });
 }
