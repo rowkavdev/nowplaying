@@ -38,7 +38,7 @@ test("native setup window walks every step, including sign-in, against the real 
   });
   try {
     const scriptPath = fileURLToPath(new URL("../scripts/windows-setup.ps1", import.meta.url));
-    const { code, output, errors } = await runNativeSetup(app.url, { scriptPath, selfTest: true });
+    const { code, output, errors } = await runNativeSetup(app.url, { sessionSecret: app.sessionSecret, scriptPath, selfTest: true });
     assert.equal(code, 0, `${output}\n${errors}`);
     const result = JSON.parse(output);
     assert.deepEqual(result.steps, ["welcome", "provider", "signin", "signin", "discord", "review", "complete"]);
@@ -65,9 +65,9 @@ test("native setup window is actually visible when launched like the app launche
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), deviceId: "selftest-device", discover: async () => [] });
   try {
     const scriptPath = fileURLToPath(new URL("../scripts/windows-setup.ps1", import.meta.url));
-    const unfixed = await runNativeSetup(app.url, { scriptPath, visibilityProbe: true, probeWithoutShowFix: true });
+    const unfixed = await runNativeSetup(app.url, { sessionSecret: app.sessionSecret, scriptPath, visibilityProbe: true, probeWithoutShowFix: true });
     console.log(`without the first-show fix: ${unfixed.output || unfixed.errors}`);
-    const { code, output, errors } = await runNativeSetup(app.url, { scriptPath, visibilityProbe: true });
+    const { code, output, errors } = await runNativeSetup(app.url, { sessionSecret: app.sessionSecret, scriptPath, visibilityProbe: true });
     assert.equal(code, 0, `${output}\n${errors}`);
     assert.deepEqual(JSON.parse(output), { visible: true });
   } finally {

@@ -95,7 +95,7 @@ test("startSetupApp serves the connection test when a credential store is suppli
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), credentialStore: { save: async () => ({}), read: async () => "x" }, deviceId: "device-0123456789" });
   try {
     const url = new URL("/api/setup/test", app.url);
-    const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-nowplaying-session": app.sessionSecret }, body: "{}" });
     assert.equal(response.status, 409);
     assert.equal((await response.json()).status, "not_signed_in");
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }

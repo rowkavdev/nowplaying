@@ -49,8 +49,14 @@ $script:SignIn = @{ FlowId = $null; Code = $null }
 $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; navidrome = 'Navidrome' }
 $Idle = [ordered]@{ clear = 'Clear my status'; grace = 'Keep it for a short grace period'; show = 'Show that nothing is playing'; recent = 'Show what I played last' }
 
+# The setup server only accepts changes that carry this run's session secret.
+$script:SessionSecret = $env:NOWPLAYING_SETUP_SESSION
+Remove-Item Env:NOWPLAYING_SETUP_SESSION -ErrorAction SilentlyContinue
+
 function Invoke-Setup([string]$Method, [string]$Path, $Body = $null) {
-  $params = @{ Method = $Method; Uri = "$Base$Path"; TimeoutSec = 10; UseBasicParsing = $true; Headers = @{ Accept = 'application/json' } }
+  $headers = @{ Accept = 'application/json' }
+  if ($script:SessionSecret) { $headers['X-Nowplaying-Session'] = $script:SessionSecret }
+  $params = @{ Method = $Method; Uri = "$Base$Path"; TimeoutSec = 10; UseBasicParsing = $true; Headers = $headers }
   if ($null -ne $Body) {
     $params.ContentType = 'application/json'
     $params.Body = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Compress -Depth 4))

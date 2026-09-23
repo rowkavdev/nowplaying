@@ -88,10 +88,13 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const connectionTest = credentialStore?.read
     ? createSetupTestHandler({ store, credentialStore, ...(fetchImpl ? { fetchImpl } : {}) })
     : async () => null;
-  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
+  // Per-run secret: the browser page gets it as a SameSite=Strict cookie, the
+  // native window gets it through its environment. Other local sites get neither.
+  const sessionSecret = randomBytes(32).toString("base64url");
+  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
-  return Object.freeze({ url: `http://${authority}:${address.port}/setup`, close: () => app.close() });
+  return Object.freeze({ url: `http://${authority}:${address.port}/setup`, sessionSecret, close: () => app.close() });
 }
 
 // Until the user chooses, the "Start with Windows" box shows what is set now
@@ -134,17 +137,21 @@ export function openSetupUrl(url, { platform = process.platform, spawnProcess = 
 // Runs the native Windows setup window (scripts/windows-setup.ps1) against the
 // local setup server and resolves with its exit code. Rejects if PowerShell
 // cannot be started, so the caller can fall back to the browser page.
-export function runNativeSetup(url, { scriptPath, selfTest = false, visibilityProbe = false, probeWithoutShowFix = false, spawnProcess = spawn } = {}) {
+export function runNativeSetup(url, { scriptPath, sessionSecret, env = process.env, selfTest = false, visibilityProbe = false, probeWithoutShowFix = false, spawnProcess = spawn } = {}) {
   const parsed = loopbackSetupUrl(url);
   if (parsed.hostname !== "127.0.0.1") throw new TypeError("native setup needs a 127.0.0.1 URL");
   if (typeof scriptPath !== "string" || !scriptPath.endsWith("windows-setup.ps1")) throw new TypeError("scriptPath must point at windows-setup.ps1");
+  if (sessionSecret !== undefined && (typeof sessionSecret !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(sessionSecret))) throw new TypeError("sessionSecret is invalid");
   const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-File", scriptPath, "-Url", parsed.href];
   if (selfTest) args.push("-SelfTest");
   if (visibilityProbe) args.push("-VisibilityProbe");
   if (visibilityProbe && probeWithoutShowFix) args.push("-ProbeWithoutShowFix");
   const piped = selfTest || visibilityProbe;
   return new Promise((resolve, reject) => {
-    const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, stdio: piped ? ["ignore", "pipe", "pipe"] : "ignore" });
+    // The secret goes through the environment, not argv, so it never shows up
+    // in process listings.
+    const childEnv = sessionSecret ? { ...env, NOWPLAYING_SETUP_SESSION: sessionSecret } : env;
+    const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, env: childEnv, stdio: piped ? ["ignore", "pipe", "pipe"] : "ignore" });
     let output = "";
     let errors = "";
     child.stdout?.on("data", (chunk) => { output += chunk; });

@@ -154,9 +154,9 @@ test("the setup server only offers sign-in when a credential store is supplied",
     const plain = await startSetupApp({ draftFile: join(dir, "draft.json"), discover: async () => [] });
     const withStore = await startSetupApp({ draftFile: join(dir, "draft2.json"), discover: async () => [], credentialStore: fakeStore(), deviceId: DEVICE });
     try {
-      const call = (base) => fetch(new URL("/api/setup/signin", base), { method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(base).origin }, body: JSON.stringify({ action: "poll", flowId: "x" }) });
-      assert.notEqual((await call(plain.url)).status, 410);
-      assert.equal((await call(withStore.url)).status, 410);
+      const call = ({ url: base, sessionSecret }) => fetch(new URL("/api/setup/signin", base), { method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(base).origin, "X-Nowplaying-Session": sessionSecret }, body: JSON.stringify({ action: "poll", flowId: "x" }) });
+      assert.notEqual((await call(plain)).status, 410);
+      assert.equal((await call(withStore)).status, 410);
     } finally {
       await plain.close();
       await withStore.close();

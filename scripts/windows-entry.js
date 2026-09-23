@@ -88,7 +88,7 @@ if (command === "--version" || command === "version") {
   let native = process.platform === "win32" && !flags.has("--browser") && !flags.has("--no-open");
   if (native) {
     try {
-      const { code } = await runNativeSetup(setup.url, { scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
+      const { code } = await runNativeSetup(setup.url, { sessionSecret: setup.sessionSecret, scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
       if (code === 0) await close();
       else native = false; // the window failed to start or crashed: keep the server and use the browser page
     } catch {
@@ -126,7 +126,7 @@ async function startSetup() {
 async function openSetupWindow() {
   const setup = await startSetup();
   try {
-    const { code } = await runNativeSetup(setup.url, { scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
+    const { code } = await runNativeSetup(setup.url, { sessionSecret: setup.sessionSecret, scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
     return code === 0;
   } finally {
     await setup.close();
