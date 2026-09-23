@@ -29,6 +29,13 @@ jobs:
       - name: Build installer and portable ZIP
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Give assets stable development names
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object {
+            $name = $_.Name -replace '^nowplaying-v[0-9]+\.[0-9]+\.[0-9]+-', 'nowplaying-dev-'
+            if ($name -ne $_.Name) { Rename-Item $_.FullName $name }
+          }
       - name: Checksums
         shell: pwsh
         run: |
@@ -71,7 +78,7 @@ jobs:
             esac
             # shellcheck disable=SC2016 # awk field references must remain literal.
             stats=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {printf "%012d", a+d+f}')
-            pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null | grep -m1 -E '^[0-9]+$' || true)
             key=${pr:-commit-$sha}
             printf '%s\t%s\t%s\t%s\t%s\n' "$rank" "$stats" "$key" "$sha" "$subject" >> ranked-changes.tsv
           done < all-changes.tsv
@@ -80,7 +87,7 @@ jobs:
           sort -t$'\t' -k1,1n -k2,2nr ranked-changes.tsv | awk -F '\t' '!seen[$3]++' | head -10 > top-changes.tsv
           {
             # shellcheck disable=SC2016 # Markdown backticks are intentional.
-            printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
+            printf '**Dev build #%s** (`%s`), built from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "$GITHUB_RUN_NUMBER" "$DEV_VERSION" "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
             printf "## What's Changed\n\n"
             while IFS=$'\t' read -r rank stats key sha subject; do
@@ -107,7 +114,7 @@ jobs:
           set -euo pipefail
           git tag -f dev "$GITHUB_SHA"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev
-          title="nowplaying development build ${DEV_VERSION}"
+          title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
           if gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload dev --repo "$GITHUB_REPOSITORY" --clobber dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
             # Drop assets from older builds (file names carry the version).
