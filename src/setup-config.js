@@ -1,4 +1,5 @@
 import { createProviderIdentity } from "./provider-identity.js";
+import { isServerUrl } from "./setup.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 
@@ -12,9 +13,11 @@ export function createSetupConfig(input = {}) {
   if (input.discordEnabled !== undefined && typeof input.discordEnabled !== "boolean") {
     throw new TypeError("setup config.discordEnabled must be a boolean");
   }
+  if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
   return Object.freeze({
     version: 1,
     provider: input.provider,
+    ...(input.serverUrl ? { serverUrl: input.serverUrl } : {}),
     identity,
     credentialRef: Object.freeze({ provider: input.provider, identityId: identity.id }),
     discord: Object.freeze({

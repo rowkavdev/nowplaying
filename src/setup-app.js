@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, win32 } from "node:path";
 import { createHttpServer } from "./http-server.js";
 import { createSetupDraftHandler } from "./setup-draft-handler.js";
@@ -8,11 +8,34 @@ import { createSetupDraftStore } from "./setup-draft-store.js";
 import { createSetupPageHandler } from "./setup-page-handler.js";
 import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
+import { serializeSetupConfig } from "./setup-config.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
   if (!/^[A-Za-z0-9._-]+$/.test(appName)) throw new TypeError("appName is invalid");
   return win32.join(win32.resolve(localAppData), appName, "setup-draft.json");
+}
+
+export function windowsConfigPath({ localAppData, appName = "nowplaying" } = {}) {
+  return win32.join(win32.dirname(windowsSetupDraftPath({ localAppData, appName })), "config.json");
+}
+
+// Writes the finished setup as the app config: atomic, owner-only, and built by
+// createSetupConfig, which refuses anything that looks like a credential.
+export async function writeSetupConfig(file, draft) {
+  if (!draft?.account) throw new TypeError("setup is not signed in");
+  const body = serializeSetupConfig({
+    provider: draft.provider,
+    ...(draft.account.serverUrl ? { serverUrl: draft.account.serverUrl } : {}),
+    identity: { id: draft.account.id, displayName: draft.account.displayName },
+    credentialStored: true,
+    discordEnabled: draft.discordEnabled,
+    discordIdleBehavior: draft.discordIdleBehavior,
+  });
+  await mkdir(dirname(file), { recursive: true });
+  const temporary = `${file}.tmp`;
+  await writeFile(temporary, body, { encoding: "utf8", mode: 0o600 });
+  await rename(temporary, file);
 }
 
 // A random per-install id that providers see as the device (Plex client id,
@@ -33,18 +56,21 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 
 // Starts the first-run wizard on a loopback-only port and returns its URL.
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
-export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi } = {}) {
+export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi } = {}) {
   const page = createSetupPageHandler();
   const store = createSetupDraftStore({ file: draftFile });
   // Sign-in is only offered when a credential store is supplied, so a secret
   // can never be obtained without somewhere safe to put it. Without one the
   // wizard skips the sign-in step.
-  const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore) });
+  // Finish writes the real config only when there is a signed-in account to
+  // point it at; without a credential store there is nothing to run from yet.
+  const onFinish = configFile && credentialStore ? (finished) => writeSetupConfig(configFile, finished) : undefined;
+  const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore), ...(onFinish ? { onFinish } : {}) });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
-  const onSignedIn = async ({ provider, identity }) => {
+  const onSignedIn = async ({ provider, identity, serverUrl }) => {
     const { draft: current } = await store.load();
-    await store.save({ ...current, provider, account: { provider, id: identity.id, displayName: identity.displayName } });
+    await store.save({ ...current, provider, account: { provider, id: identity.id, displayName: identity.displayName, ...(serverUrl ? { serverUrl } : {}) } });
   };
   const signIn = credentialStore
     ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })

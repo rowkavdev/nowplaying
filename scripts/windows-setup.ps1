@@ -16,7 +16,7 @@ Add-Type -AssemblyName System.Drawing
 
 $Steps = @('welcome', 'provider', 'signin', 'discord', 'review', 'complete')
 $StepLabels = @{ welcome = 'Welcome'; provider = 'Media server'; signin = 'Sign in'; discord = 'Discord'; review = 'Review'; complete = 'Done' }
-$DefaultUrls = @{ jellyfin = 'http://127.0.0.1:8096'; emby = 'http://127.0.0.1:8096'; navidrome = 'http://127.0.0.1:4533' }
+$DefaultUrls = @{ plex = 'http://127.0.0.1:32400'; jellyfin = 'http://127.0.0.1:8096'; emby = 'http://127.0.0.1:8096'; navidrome = 'http://127.0.0.1:4533' }
 $SignInErrors = @{
   authentication_failed = "That username or password didn't work."
   invalid_server_url = 'Enter the server address, like http://127.0.0.1:8096.'
@@ -149,7 +149,7 @@ function Start-SignIn($Body) {
 
 $onSignIn = {
   switch ([string]$script:Draft.provider) {
-    'plex' { Start-SignIn @{ action = 'start'; provider = 'plex' } }
+    'plex' { Start-SignIn @{ action = 'start'; provider = 'plex'; baseUrl = (Get-Field 'serverUrl') } }
     'jellyfin' { Start-SignIn @{ action = 'start'; provider = 'jellyfin'; baseUrl = (Get-Field 'serverUrl') } }
     default {
       $passwordBox = @($panel.Controls | Where-Object { $_.Name -eq 'password' })[0]
@@ -228,6 +228,7 @@ function Show-Step {
       $button.Name = 'signinStart'; $button.AutoSize = $true
       switch ([string]$script:Draft.provider) {
         'plex' {
+          [void](New-Field 'serverUrl' 'Plex server address' $serverUrl)
           $panel.Controls.Add((New-Text $(if ($script:SignIn.FlowId) { "Finish signing in on the Plex page in your browser. This window updates when you're done." } else { 'Plex opens in your browser so you can approve NowPlaying.' })))
           $button.Text = if ($script:Draft.account) { 'Sign in again' } else { 'Open Plex sign-in' }
         }

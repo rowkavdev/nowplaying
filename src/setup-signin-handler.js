@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
-  SignInError, pollJellyfinQuickConnect, pollPlexPin, signInEmby, signInNavidrome, startJellyfinQuickConnect, startPlexPin,
+  SignInError, normalizeServerUrl, pollJellyfinQuickConnect, pollPlexPin, signInEmby, signInNavidrome, startJellyfinQuickConnect, startPlexPin,
 } from "./provider-signin.js";
 
 // Local setup API for provider sign-in. The page (or the native window) only
@@ -31,7 +31,7 @@ export function createSetupSignInHandler({
     for (const [id, flow] of flows) if (flow.expiresAt <= time) flows.delete(id);
   }
 
-  async function finish(result) {
+  async function finish(result, serverUrl) {
     try {
       await credentialStore.save({ provider: result.provider, identityId: result.identity.id }, result.secret);
     } catch {
@@ -39,7 +39,7 @@ export function createSetupSignInHandler({
     }
     const identity = { id: result.identity.id, displayName: result.identity.displayName };
     try {
-      await onSignedIn({ provider: result.provider, identity });
+      await onSignedIn({ provider: result.provider, identity, ...(serverUrl ? { serverUrl } : {}) });
     } catch {
       return json(500, { error: "draft_update_failed" });
     }
@@ -52,14 +52,16 @@ export function createSetupSignInHandler({
     if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
     const flowId = newFlowId();
     if (input.provider === "plex") {
-      if (input.baseUrl !== undefined) return json(400, { error: "invalid_request" });
+      // Plex signs in through plex.tv; baseUrl is only the local server the
+      // app will read from afterwards, remembered with the account.
+      const serverUrl = input.baseUrl === undefined ? undefined : normalizeServerUrl(input.baseUrl);
       const pin = await signIn.startPlexPin({ clientId: deviceId });
-      flows.set(flowId, { provider: "plex", pinId: pin.pinId, expiresAt: now() + flowTtlMs });
+      flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: now() + flowTtlMs });
       return json(200, { status: "pending", flowId, provider: "plex", authUrl: pin.authUrl });
     }
     if (!text(input.baseUrl)) return json(400, { error: "invalid_request" });
     const qc = await signIn.startJellyfinQuickConnect({ baseUrl: input.baseUrl, deviceId, version });
-    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, secret: qc.secret, expiresAt: now() + flowTtlMs });
+    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl: normalizeServerUrl(input.baseUrl), secret: qc.secret, expiresAt: now() + flowTtlMs });
     return json(200, { status: "pending", flowId, provider: "jellyfin", code: qc.code });
   }
 
@@ -79,7 +81,7 @@ export function createSetupSignInHandler({
     }
     if (result.status !== "signed_in") return json(200, { status: "pending" });
     flows.delete(input.flowId);
-    return finish(result);
+    return finish(result, flow.serverUrl);
   }
 
   async function password(input) {
@@ -88,7 +90,7 @@ export function createSetupSignInHandler({
     const result = input.provider === "emby"
       ? await signIn.signInEmby({ baseUrl: input.baseUrl, username: input.username, password: input.password, deviceId, version })
       : await signIn.signInNavidrome({ baseUrl: input.baseUrl, username: input.username, password: input.password });
-    return finish(result);
+    return finish(result, normalizeServerUrl(input.baseUrl));
   }
 
   async function cancel(input) {

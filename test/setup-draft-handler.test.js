@@ -33,6 +33,23 @@ test("walks the wizard forward and back, persisting each step", async () => {
   assert.deepEqual([parse(reopened).resumed, parse(reopened).draft.provider], [true, "navidrome"]);
 });
 
+test("Finish runs once, on review -> complete, and a failure keeps the user on review", async () => {
+  const { store } = await setup();
+  const account = { provider: "plex", id: "1", displayName: "Rowan" };
+  await store.save({ step: "review", provider: "plex", account });
+  let calls = 0;
+  const failing = createSetupDraftHandler({ store, onFinish: async () => { calls += 1; throw new Error("disk full"); } });
+  const failed = await failing(post({ action: "next" }));
+  assert.deepEqual([failed.status, parse(failed).error], [500, "finish_failed"]);
+  assert.equal((await store.load()).draft.step, "review");
+  const finished = [];
+  const handle = createSetupDraftHandler({ store, onFinish: async (draft) => { finished.push(draft); } });
+  assert.equal(parse(await handle(post({ action: "next" }))).draft.step, "complete");
+  await handle(post({ action: "next" }));
+  await handle(post({ action: "save" }));
+  assert.deepEqual([calls, finished.length, finished[0].account], [1, 1, account]);
+});
+
 test("the page cannot set the signed-in account itself", async () => {
   const { handle } = await setup();
   const response = await handle(post({ action: "save", changes: { provider: "plex", account: { provider: "plex", id: "1", displayName: "x" } } }));

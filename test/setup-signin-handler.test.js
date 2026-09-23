@@ -135,7 +135,7 @@ test("rejects bad input and other routes", async () => {
   assert.equal((await handler({ method: "POST", url: "/api/setup/signin?x=1", body: "{}" })).status, 400);
   assert.deepEqual(read(await post(handler, "not json")), { error: "invalid_json" });
   for (const body of [
-    [], { action: "nope" }, { action: "__proto__" }, { action: "start", provider: "emby" }, { action: "start", provider: "plex", baseUrl: "http://x" },
+    [], { action: "nope" }, { action: "__proto__" }, { action: "start", provider: "emby" }, { action: "start", provider: "plex", baseUrl: "ftp://x" }, { action: "start", provider: "plex", baseUrl: "http://u:p@x" },
     { action: "start", provider: "jellyfin" }, { action: "start", provider: "plex", extra: 1 },
     { action: "password", provider: "plex", baseUrl: "http://x", username: "a", password: "b" },
     { action: "password", provider: "emby", baseUrl: "http://x", username: " ", password: "b" },
@@ -178,4 +178,27 @@ test("the device id is created once and then reused", async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("a sign-in reports the server address it used, never the secret", async () => {
+  const signedIn = [];
+  const signIn = fakeSignIn({ pollJellyfinQuickConnect: async () => ({ status: "signed_in", provider: "jellyfin", identity: { id: "j1", displayName: "Rowan" }, secret: "jf-token" }) });
+  let n = 0;
+  const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn, newFlowId: () => `flow-${n += 1}`, onSignedIn: async (event) => { signedIn.push(event); } });
+  await post(handler, { action: "start", provider: "plex", baseUrl: "http://127.0.0.1:32400/" });
+  await post(handler, { action: "poll", flowId: "flow-1" });
+  await post(handler, { action: "start", provider: "plex" });
+  await post(handler, { action: "poll", flowId: "flow-2" });
+  await post(handler, { action: "start", provider: "jellyfin", baseUrl: "http://127.0.0.1:8096" });
+  await post(handler, { action: "poll", flowId: "flow-3" });
+  await post(handler, { action: "password", provider: "emby", baseUrl: "https://emby.local:8920/", username: "rowan", password: "hunter2" });
+  assert.deepEqual(signedIn.map((event) => event.serverUrl), ["http://127.0.0.1:32400", undefined, "http://127.0.0.1:8096", "https://emby.local:8920"]);
+  assert.doesNotMatch(JSON.stringify(signedIn), SECRETS);
+});
+
+test("a failure to record the account is reported, after the secret is saved", async () => {
+  const store = fakeStore();
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn(), onSignedIn: async () => { throw new Error("disk"); } });
+  const response = await post(handler, { action: "password", provider: "emby", baseUrl: "http://x", username: "rowan", password: "hunter2" });
+  assert.deepEqual([response.status, read(response)], [500, { error: "draft_update_failed" }]);
 });

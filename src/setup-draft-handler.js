@@ -4,7 +4,9 @@ const PATH = "/api/setup/draft";
 const ACTIONS = new Set(["save", "next", "back"]);
 const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior"]);
 
-export function createSetupDraftHandler({ store, signIn = true } = {}) {
+// onFinish runs when the review step is confirmed, before the draft moves to
+// "complete"; if it throws, the wizard stays on review so the user can retry.
+export function createSetupDraftHandler({ store, signIn = true, onFinish = async () => {} } = {}) {
   if (!store || typeof store.load !== "function" || typeof store.save !== "function" || typeof store.clear !== "function") {
     throw new TypeError("setup draft handler.store is invalid");
   }
@@ -44,6 +46,10 @@ export function createSetupDraftHandler({ store, signIn = true } = {}) {
     } catch (error) {
       if (error instanceof SetupStepError) return json(409, { error: error.code });
       return json(400, { error: "invalid_changes" });
+    }
+    if (input.action === "next" && next.step === "complete" && next.step !== (await store.load()).draft.step) {
+      try { await onFinish(next); }
+      catch { return json(500, { error: "finish_failed" }); }
     }
     const saved = await store.save(next);
     return json(200, { draft: saved });

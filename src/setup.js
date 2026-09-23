@@ -28,9 +28,19 @@ function createAccount(input) {
   if (input === undefined || input === null) return null;
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("setup.account is invalid");
   const keys = Object.keys(input);
-  if (keys.some((key) => !["provider", "id", "displayName"].includes(key)) || !PROVIDERS.has(input.provider)) throw new TypeError("setup.account is invalid");
+  if (keys.some((key) => !["provider", "id", "displayName", "serverUrl"].includes(key)) || !PROVIDERS.has(input.provider)) throw new TypeError("setup.account is invalid");
   if (!accountText(input.id) || !accountText(input.displayName)) throw new TypeError("setup.account is invalid");
-  return Object.freeze({ provider: input.provider, id: input.id, displayName: input.displayName });
+  if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup.account is invalid");
+  return Object.freeze({ provider: input.provider, id: input.id, displayName: input.displayName, ...(input.serverUrl ? { serverUrl: input.serverUrl } : {}) });
+}
+
+// The media server address the app will talk to. Not a secret, but it must be a
+// plain http(s) origin/path with no embedded credentials.
+export function isServerUrl(value) {
+  if (typeof value !== "string" || value.length > 2048) return false;
+  let url;
+  try { url = new URL(value); } catch { return false; }
+  return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
 }
 
 function accountText(value) {
