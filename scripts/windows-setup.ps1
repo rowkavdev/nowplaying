@@ -390,7 +390,7 @@ if ($SelfTest) {
   } elseif ($startupBox) { throw 'Start with Windows must be hidden when it is not offered' }
   foreach ($i in 1..2) { & $onNext; $seen += $script:Draft.step }
   if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text) ($script:LastError)" }
-  [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName; startWithWindows = $script:Draft.startWithWindows } | ConvertTo-Json -Compress))
+  [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName; connectionTest = $resultText; startWithWindows = $script:Draft.startWithWindows } | ConvertTo-Json -Compress))
   $form.Dispose()
   exit 0
 }
