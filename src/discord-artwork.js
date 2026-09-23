@@ -133,3 +133,9 @@ export function createDiscordArtworkResolver({
 
   return Object.freeze({ resolve, status: () => last, size: () => cache.size });
 }
+
+
+export function artworkResolverOptions(discordSettings = {}) {
+  const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
+  return Object.freeze({ publicProxyBase: proxy, metadataLookup: false });
+}

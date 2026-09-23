@@ -1,4 +1,4 @@
-
+import { classifyArtworkUrl } from "./discord-artwork.js";
 
 const PRIVACY_MODES = new Set(["private", "friends", "public", "custom"]);
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
@@ -39,6 +39,7 @@ export const defaultSettings = Object.freeze({
     state: "{subtitle}",
     timestamps: "elapsed",
     idleBehavior: "clear",
+    artworkProxy: "",
   }),
 });
 
@@ -135,6 +136,12 @@ function validateDiscord(value) {
   }
   if (value.idleBehavior !== undefined && !IDLE_BEHAVIORS.has(value.idleBehavior)) {
     throw new TypeError("discord.idleBehavior: expected clear, grace, show or recent");
+  }
+  if (value.artworkProxy !== undefined && value.artworkProxy !== "") {
+    const checked = typeof value.artworkProxy === "string" ? classifyArtworkUrl(value.artworkProxy) : { ok: false };
+    if (!checked.ok || new URL(value.artworkProxy).search) {
+      throw new TypeError("discord.artworkProxy: expected a public HTTPS URL without credentials or a query");
+    }
   }
 }
 
