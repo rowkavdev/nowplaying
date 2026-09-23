@@ -46,3 +46,28 @@ test("opens only loopback setup URLs, without a shell", () => {
   }
   assert.equal(calls.length, 1);
 });
+
+
+test("launches the native window through PowerShell without a shell", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { runNativeSetup } = await import("../src/setup-app.js");
+  let call;
+  const spawnProcess = (command, args, options) => {
+    const child = new EventEmitter();
+    call = { command, args, options };
+    setImmediate(() => child.emit("close", 0));
+    return child;
+  };
+  const result = await runNativeSetup("http://127.0.0.1:4567/setup", { scriptPath: "C:\\np\\app\\scripts\\windows-setup.ps1", spawnProcess });
+  assert.equal(result.code, 0);
+  assert.equal(call.command, "powershell.exe");
+  assert.equal(call.options.shell, false);
+  assert.deepEqual(call.args.slice(-4), ["-File", "C:\\np\\app\\scripts\\windows-setup.ps1", "-Url", "http://127.0.0.1:4567/setup"]);
+  assert.ok(call.args.includes("-STA"));
+  for (const bad of ["http://localhost:1/setup", "http://evil.example/setup", "http://127.0.0.1:1/setup?x=;calc"]) {
+    assert.throws(() => runNativeSetup(bad, { scriptPath: "x\\windows-setup.ps1", spawnProcess }), /URL/, bad);
+  }
+  assert.throws(() => runNativeSetup("http://127.0.0.1:1/setup", { scriptPath: "evil.ps1", spawnProcess }), /scriptPath/);
+  const failing = () => { const child = new EventEmitter(); setImmediate(() => child.emit("error", new Error("ENOENT"))); return child; };
+  await assert.rejects(runNativeSetup("http://127.0.0.1:1/setup", { scriptPath: "x\\windows-setup.ps1", spawnProcess: failing }), /ENOENT/);
+});
