@@ -91,3 +91,20 @@ test("the default fallback is a real public image, not a missing asset key", () 
   assert.throws(() => createDiscordArtworkResolver({ fallbackAsset: "http://192.168.1.20/x.png" }), TypeError);
   assert.doesNotThrow(() => createDiscordArtworkResolver({ fallbackAsset: "media" }));
 });
+
+test("only music looks up covers, and media kinds never share a cache entry", async () => {
+  const cover = "https://coverartarchive.org/release/00000000-0000-4000-8000-000000000002/front-250";
+  const asked = [];
+  const resolver = createDiscordArtworkResolver({ metadataLookup: true, lookup: async (query) => { asked.push(query.title); return cover; } });
+  const base = { title: "Heat", subtitle: "1995" };
+  for (const kind of ["movie", "episode", "show", "unknown"]) {
+    const result = await resolver.resolve({ ...base, kind });
+    assert.deepEqual([result.image, result.strategy], [FALLBACK_ARTWORK_URL, "fallback"]);
+  }
+  assert.deepEqual(asked, []);
+  const song = await resolver.resolve({ ...base, kind: "track" });
+  assert.deepEqual([song.image, song.strategy, song.cached], [cover, "lookup", false]);
+  assert.deepEqual(asked, ["Heat"]);
+  const film = await resolver.resolve({ ...base, kind: "movie" });
+  assert.equal(film.image, FALLBACK_ARTWORK_URL);
+});

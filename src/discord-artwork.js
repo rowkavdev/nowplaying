@@ -99,7 +99,9 @@ export function createDiscordArtworkResolver({
 
   async function resolve(presence = {}) {
     const ref = presence.artwork ? JSON.stringify([presence.artwork.provider, presence.artwork.itemId, presence.artwork.imageId, presence.artwork.imageTag]) : "";
-    const key = createHash("sha256").update(JSON.stringify([ref, presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
+    // The media kind is part of the key so a film, an episode and a song that
+    // share a title and subtitle never reuse each other's artwork (#154).
+    const key = createHash("sha256").update(JSON.stringify([presence.kind ?? "", ref, presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
     const cached = cache.get(key);
     if (cached && cached.expiresAt > now()) {
       cache.delete(key); cache.set(key, cached);
@@ -123,7 +125,10 @@ export function createDiscordArtworkResolver({
       remember(key, entry, ttlMs);
       return finish({ ...entry, cached: false });
     }
-    if (metadataLookup && presence.title) {
+    // MusicBrainz only knows music: a film or episode title would match a
+    // random song and show a confidently wrong cover, so only tracks look up.
+    const music = presence.kind === undefined || presence.kind === "track";
+    if (metadataLookup && music && presence.title) {
       try {
         const found = await lookup(Object.freeze({ title: String(presence.title), artist: String(presence.artist ?? presence.subtitle ?? "") }));
         const checked = classifyArtworkUrl(found);
