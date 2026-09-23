@@ -31,8 +31,7 @@ const PAGE = `<!doctype html>
 </main><script src="/settings.js"></script></body></html>
 `;
 
-const CSS = `nav{display:flex;gap:16px;margin-bottom:8px}nav a{color:inherit}nav [aria-current]{font-weight:600}
-.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:96px;color:#555}
+const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:96px;color:#555}
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}button[disabled]{opacity:.6;cursor:default}
 @media (prefers-color-scheme:dark){select{background:#2c2c31;border-color:#555}.row label[for],.hint{color:#aaa}}
