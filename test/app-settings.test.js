@@ -1,0 +1,81 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { applyDiscordChanges, createAppSettingsStore, discordSettingsView } from "../src/app-settings.js";
+import { parseAppConfig, startAppFromConfig } from "../src/app-config.js";
+import { serializeSetupConfig } from "../src/setup-config.js";
+
+const JELLYFIN = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true, discordArtworkLookup: "musicbrainz", hostedEnabled: true };
+
+async function configFile(input = JELLYFIN) {
+  const dir = await mkdtemp(join(tmpdir(), "np-app-settings-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig(input));
+  return file;
+}
+
+test("shows the Discord settings with defaults for older configs", () => {
+  const config = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, discordArtworkLookup: undefined }));
+  assert.deepEqual({ ...discordSettingsView(config) }, { enabled: true, timestamps: "both", artworkLookup: "off" });
+});
+
+test("applies Discord changes and keeps everything else", () => {
+  const before = parseAppConfig(serializeSetupConfig(JELLYFIN));
+  const { config } = applyDiscordChanges(before, { enabled: false, timestamps: "remaining" });
+  assert.deepEqual({ ...config.discord }, { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", timestamps: "remaining" });
+  assert.deepEqual(config.identity, before.identity);
+  assert.equal(config.serverUrl, before.serverUrl);
+  assert.deepEqual({ ...config.hosted }, { ...before.hosted });
+});
+
+test("rejects unknown keys and bad values", () => {
+  const config = parseAppConfig(serializeSetupConfig(JELLYFIN));
+  assert.throws(() => applyDiscordChanges(config, { token: "x" }), TypeError);
+  assert.throws(() => applyDiscordChanges(config, {}), TypeError);
+  assert.throws(() => applyDiscordChanges(config, []), TypeError);
+  assert.throws(() => applyDiscordChanges(config, { timestamps: "forever" }), TypeError);
+  assert.throws(() => applyDiscordChanges(config, { artworkLookup: "itunes" }), TypeError);
+  assert.throws(() => applyDiscordChanges(config, { enabled: "yes" }), TypeError);
+});
+
+test("saves to config.json in one step and leaves no temp files", async () => {
+  const file = await configFile();
+  const store = createAppSettingsStore({ file });
+  await Promise.all([store.updateDiscord({ timestamps: "none" }), store.updateDiscord({ artworkLookup: "off" })]);
+  const saved = parseAppConfig(await readFile(file, "utf8"));
+  assert.equal(saved.discord.timestamps, "none");
+  assert.equal(saved.discord.artworkLookup, "off");
+  assert.deepEqual(await readdir(join(file, "..")), ["config.json"]);
+  await assert.rejects(store.updateDiscord({ timestamps: "forever" }), TypeError);
+  assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "none");
+});
+
+test("the running app saves Discord settings from its own page only", async () => {
+  const file = await configFile();
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" } });
+  try {
+    const page = await fetch(`${app.url}/settings`);
+    assert.equal(page.status, 200);
+    assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
+    const cookie = page.headers.get("set-cookie").split(";")[0];
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).discord, { enabled: true, timestamps: "both", artworkLookup: "musicbrainz" });
+    const put = (headers, body = { discord: { enabled: false, timestamps: "elapsed" } }) => fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    // No session cookie, or a request from another site: refused, nothing saved.
+    assert.equal((await put({})).status, 403);
+    assert.equal((await put({ Cookie: cookie, Origin: "http://evil.example" })).status, 403);
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.enabled, true);
+    assert.equal((await put({ Cookie: cookie }, { discord: { timestamps: "forever" } })).status, 400);
+    assert.equal((await put({ Cookie: cookie }, { hosted: { enabled: false } })).status, 400);
+    const saved = await put({ Cookie: cookie });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).discord, { enabled: false, timestamps: "elapsed", artworkLookup: "musicbrainz" });
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "elapsed");
+    // Applied without a restart: Discord is now off.
+    assert.equal(app.discord, "off");
+    assert.equal((await (await fetch(`${app.url}/api/status`)).json()).discord.enabled, false);
+  } finally {
+    await app.close();
+  }
+});

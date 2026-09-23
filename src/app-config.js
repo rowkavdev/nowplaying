@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { createAppSettingsStore, discordSettingsView } from "./app-settings.js";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
 import { createAppStatus } from "./app-status.js";
 import { createStatusPageHandler } from "./status-page-handler.js";
+import { createSettingsPageHandler } from "./settings-page-handler.js";
 import { createResilientCardResolver } from "./resilient-card.js";
 import { createSetupConfig } from "./setup-config.js";
 import { createConfigMigrationStore } from "./config-migration-store.js";
@@ -59,6 +62,7 @@ export function parseAppConfig(text) {
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
       discordArtworkLookup: parsed.discord?.artworkLookup,
+      discordTimestamps: parsed.discord?.timestamps,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
     });
   } catch {
@@ -154,7 +158,7 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {} });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
   const artwork = createArtwork(config.discord);
-  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
+  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop() });
 }
@@ -205,8 +209,29 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const status = createAppStatus({ config, version, build, packageType });
   provider = status.wrapProvider(provider);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
-  const handler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
-  const server = createHttpServer({ host, port, handler });
+  let current = config;
+  let discord;
+  const launchDiscord = (settings) => {
+    try { return startDiscordFromConfig(settings, provider, discordOptions); }
+    catch { return Object.freeze({ status: "failed", stop: async () => {} }); }
+  };
+  // Discord changes from the settings page are saved to config.json first,
+  // then the Discord loop restarts with them; no app restart needed.
+  const settingsStore = createAppSettingsStore({ file: configFile });
+  const settings = Object.freeze({
+    read: () => ({ discord: discordSettingsView(current) }),
+    async updateDiscord(changes) {
+      const next = await settingsStore.updateDiscord(changes);
+      current = next;
+      await discord.stop().catch(() => {});
+      discord = launchDiscord(next);
+    },
+  });
+  const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
+  const handler = createSettingsPageHandler({ settings, fallback: statusHandler });
+  // Saves need the cookie the app's own pages set, so another local program
+  // or web page can't change settings.
+  const server = createHttpServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
   let address;
   try {
     address = await server.listen();
@@ -215,12 +240,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
   }
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
-  let discord;
-  try {
-    discord = startDiscordFromConfig(config, provider, discordOptions);
-  } catch {
-    discord = Object.freeze({ status: "failed", stop: async () => {} });
-  }
+  discord = launchDiscord(config);
   status.setDiscord(() => discord.status === "on"
     ? { enabled: true, ...discord.connection() }
     : { enabled: discord.status !== "off", state: discord.status });
@@ -238,7 +258,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), status, close });
 }
 
 function invalidConfig() {
