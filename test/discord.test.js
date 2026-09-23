@@ -1,6 +1,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { FALLBACK_ARTWORK_URL } from "../src/discord-artwork.js";
 
 import { formatDiscordActivity, validateDiscordSettings } from "../src/discord.js";
 
@@ -24,7 +25,7 @@ test("formats activity from shared templates", () => {
     type: "listening",
     details: "Episode",
     state: "Watching Example Show",
-    largeImage: "media",
+    largeImage: FALLBACK_ARTWORK_URL,
     largeText: "Playing · 33%",
     startTimestamp: 1_789_905_600,
     endTimestamp: 1_789_905_690,
@@ -43,7 +44,7 @@ test("supports elapsed, remaining, both and no timestamps", () => {
       type: "listening",
       details: "Episode",
       state: "Example Show",
-      largeImage: "media",
+      largeImage: FALLBACK_ARTWORK_URL,
       largeText: "Playing",
       startTimestamp: 1_789_905_600,
       endTimestamp: 1_789_905_690,
@@ -64,7 +65,7 @@ test("clears idle by default or shows an explicit idle activity", () => {
   assert.deepEqual(formatDiscordActivity(idle, { idleBehavior: "show" }), {
     type: "listening",
     details: "Nothing playing",
-    largeImage: "media",
+    largeImage: FALLBACK_ARTWORK_URL,
     largeText: "Idle",
   });
 });
@@ -74,10 +75,11 @@ test("validates fields and Discord asset keys", () => {
     () => validateDiscordSettings({ details: "{serverToken}" }),
     { message: "discord.details: unknown field {serverToken}" },
   );
-  assert.throws(
-    () => validateDiscordSettings({ largeImage: "https://example.test/image.png" }),
-    { message: "discord.largeImage: expected an asset key" },
-  );
+  assert.doesNotThrow(() => validateDiscordSettings({ largeImage: "https://example.test/image.png" }));
+  assert.doesNotThrow(() => validateDiscordSettings({ largeImage: "media" }));
+  for (const bad of ["http://example.test/image.png", "https://192.168.1.20/image.png", "https://example.test/i.png?api_key=x", "bad key"]) {
+    assert.throws(() => validateDiscordSettings({ largeImage: bad }), { message: "discord.largeImage: expected an asset key or a public HTTPS image URL" });
+  }
   assert.deepEqual(formatDiscordActivity(playing, { buttons: [{ label: "Open Plex", url: "https://app.plex.tv" }] }).buttons, [{ label: "Open Plex", url: "https://app.plex.tv" }]);
   assert.throws(() => validateDiscordSettings({ buttons: [{ label: "Bad", url: "http://private.test" }] }), /valid HTTPS URL/);
   assert.throws(() => validateDiscordSettings({ buttons: [{ label: "One", url: "https://example.test/1" }, { label: "Two", url: "https://example.test/2" }, { label: "Three", url: "https://example.test/3" }] }), /up to two buttons/);

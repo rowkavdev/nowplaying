@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { FALLBACK_ARTWORK_URL } from "../src/discord-artwork.js";
 import { createDiscordController } from "../src/discord-controller.js";
 
 const playing = {
@@ -23,7 +24,7 @@ test("previews the exact Discord payload without publishing", () => {
     type: "listening",
     details: "Playing Example track",
     state: "by Example artist",
-    largeImage: "media",
+    largeImage: FALLBACK_ARTWORK_URL,
     largeText: "Playing",
   });
   assert.deepEqual(calls, []);
@@ -78,17 +79,17 @@ test("publishes a resolved public artwork URL and reports only strategy", async 
   const result = await controller.publish(playing);
   assert.equal(calls[0].largeImage, "https://art.example.com/d/abc");
   assert.deepEqual(result.artwork, { strategy: "proxy", failure: "private_host" });
-  assert.equal(controller.preview(playing).largeImage, "media");
+  assert.equal(controller.preview(playing).largeImage, FALLBACK_ARTWORK_URL);
 });
 
 test("keeps the configured asset on fallback or resolver failure", async () => {
   const calls = [];
   const client = { publish: async (activity) => { calls.push(activity); return true; } };
-  const fallback = createDiscordController({ client, settings: { largeImage: "custom" }, artwork: { resolve: async () => ({ image: "media", strategy: "fallback", failure: "lookup_miss" }) } });
+  const fallback = createDiscordController({ client, settings: { largeImage: "custom" }, artwork: { resolve: async () => ({ image: FALLBACK_ARTWORK_URL, strategy: "fallback", failure: "lookup_miss" }) } });
   assert.equal((await fallback.publish(playing)).activity.largeImage, "custom");
   const broken = createDiscordController({ client, artwork: { resolve: async () => { throw new Error("http://10.0.0.2 refused"); } } });
   const result = await broken.publish(playing);
-  assert.equal(result.activity.largeImage, "media");
+  assert.equal(result.activity.largeImage, FALLBACK_ARTWORK_URL);
   assert.deepEqual(result.artwork, { strategy: "fallback", failure: "resolver_error" });
   assert.doesNotMatch(JSON.stringify(result), /10\.0\.0\.2/);
 });

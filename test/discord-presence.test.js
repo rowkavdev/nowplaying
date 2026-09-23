@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { FALLBACK_ARTWORK_URL } from "../src/discord-artwork.js";
 import { createDiscordPresenceLoop } from "../src/discord-presence.js";
 import { NOWPLAYING_DISCORD_CLIENT_ID, resolveDiscordClientId } from "../src/discord-app.js";
 import { startDiscordFromConfig } from "../src/app-config.js";
@@ -115,9 +116,9 @@ test("startDiscordFromConfig sends only public, token-free artwork to Discord", 
     return sets[0]?.largeImage;
   }
   assert.equal(await published("https://images.example.com/cover.jpg"), "https://images.example.com/cover.jpg");
-  assert.equal(await published("http://192.168.1.20:8096/Items/1/Images/Primary"), "media");
-  assert.equal(await published("https://media.example.com/Items/1/Images/Primary?api_key=secret"), "media");
-  assert.equal(await published(undefined), "media");
+  assert.equal(await published("http://192.168.1.20:8096/Items/1/Images/Primary"), FALLBACK_ARTWORK_URL);
+  assert.equal(await published("https://media.example.com/Items/1/Images/Primary?api_key=secret"), FALLBACK_ARTWORK_URL);
+  assert.equal(await published(undefined), FALLBACK_ARTWORK_URL);
 });
 
 test("startDiscordFromConfig exposes a privacy-safe connection status", async () => {

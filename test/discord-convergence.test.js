@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { FALLBACK_ARTWORK_URL } from "../src/discord-artwork.js";
 import { createPresence } from "../src/presence.js";
 import { createDiscordConvergence, reconnectDelay } from "../src/discord-convergence.js";
 
@@ -16,7 +17,7 @@ test("connects, publishes transitions, clears idle and deduplicates unchanged ac
   assert.equal((await controller.reconcile(playing())).changed, true);
   assert.equal((await controller.reconcile(playing())).changed, false);
   assert.equal((await controller.reconcile(createPresence({ state: "idle", updatedAt: new Date(at) }))).changed, true);
-  assert.deepEqual(calls, ["connect", { type: "listening", details: "Track A", largeImage: "media", largeText: "Playing" }, null]);
+  assert.deepEqual(calls, ["connect", { type: "listening", details: "Track A", largeImage: FALLBACK_ARTWORK_URL, largeText: "Playing" }, null]);
   assert.equal(controller.status().lastPublishedAt, "2026-09-23T01:30:00.000Z");
 });
 

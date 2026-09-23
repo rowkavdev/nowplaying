@@ -6,6 +6,16 @@ const ASSET_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 const SECRET_PARAM = /(^|[_-])(token|key|apikey|api_key|auth|sig|signature|secret|password|pass|session|s|t|u)$/i;
 const LOCAL_SUFFIXES = [".local", ".lan", ".home", ".internal", ".localdomain", ".home.arpa", ".corp"];
 
+// Shown when no real cover can be used. The NowPlaying Discord app has no
+// uploaded art assets, so an asset key like "media" renders as a "?" in
+// Discord. A public HTTPS image always works (#268).
+export const FALLBACK_ARTWORK_URL = "https://raw.githubusercontent.com/rowkavdev/nowplaying/main/assets/discord-fallback.png";
+
+// An uploaded Discord asset key, or a public HTTPS image URL.
+export function isDiscordImage(value) {
+  return typeof value === "string" && (ASSET_PATTERN.test(value) || classifyArtworkUrl(value).ok);
+}
+
 export const artworkFailures = Object.freeze(["invalid", "not_https", "credentials", "private_host", "secret_query", "too_long"]);
 
 function ipv4Private(host) {
@@ -55,7 +65,7 @@ function validateOptions({ publicProxyBase, metadataLookup, fallbackAsset, ttlMs
     if (!checked.ok || new URL(publicProxyBase).search) throw new TypeError("discord artwork: publicProxyBase must be a public HTTPS URL without a query");
   }
   if (typeof metadataLookup !== "boolean") throw new TypeError("discord artwork: metadataLookup must be a boolean");
-  if (!ASSET_PATTERN.test(fallbackAsset)) throw new TypeError("discord artwork: fallbackAsset must be an asset key");
+  if (!isDiscordImage(fallbackAsset)) throw new TypeError("discord artwork: fallbackAsset must be an asset key or a public HTTPS image URL");
   for (const [name, value, min, max] of [["ttlMs", ttlMs, 1_000, 86_400_000], ["negativeTtlMs", negativeTtlMs, 1_000, 86_400_000], ["maxEntries", maxEntries, 1, 10_000]]) {
     if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`discord artwork: ${name} is out of range`);
   }
@@ -65,7 +75,7 @@ export function createDiscordArtworkResolver({
   publicProxyBase = "",
   metadataLookup = false,
   lookup,
-  fallbackAsset = "media",
+  fallbackAsset = FALLBACK_ARTWORK_URL,
   ttlMs = 6 * 60 * 60_000,
   negativeTtlMs = 10 * 60_000,
   maxEntries = 500,
