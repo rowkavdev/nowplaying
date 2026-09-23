@@ -26,7 +26,15 @@ export async function installVerifiedUpdate({ update, targetDir, unpack = unpack
     await rm(backup, { recursive: true, force: true });
     try { await renameImpl(target, backup); movedCurrent = true; } catch (error) { if (error.code !== "ENOENT") throw error; }
     try { await renameImpl(staged, target); }
-    catch (error) { if (movedCurrent) await rename(backup, target); throw error; }
+    catch (error) {
+      // Restore with the real rename: if even that fails, say so, because the
+      // install is then only in the backup folder.
+      if (movedCurrent) {
+        try { await rename(backup, target); }
+        catch (restoreError) { throw new AggregateError([error, restoreError], `update swap failed and the previous install is left at ${backup}`); }
+      }
+      throw error;
+    }
     return Object.freeze({ version: update.version, target, backup: movedCurrent ? backup : null, restartRequired: true });
   } finally {
     await rm(work, { recursive: true, force: true });
@@ -34,7 +42,8 @@ export async function installVerifiedUpdate({ update, targetDir, unpack = unpack
 }
 
 function safeArchiveName(value) {
-  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) && !value.includes("..") ? value : null;
+  // A bare file name: no separators, no "..", and only ever a .tar.gz.
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.tar\.gz$/.test(value) && !value.includes("..") ? value : null;
 }
 
 function unpackTar(archive, destination) {

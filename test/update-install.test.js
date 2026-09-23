@@ -67,3 +67,28 @@ test("a hostile archive filename can't write outside the work folder", async () 
   assert.equal(basename(archivePath), "update.tar.gz");
   assert.ok(!(await readdir(root)).includes("escape.tar.gz"));
 });
+
+test("if restoring the old install also fails, the error says where it is", async () => {
+  const { target } = await installRoot();
+  // Fail the swap, then make the restore fail too by putting a file where the install goes.
+  const renameImpl = async (from, to) => {
+    if (to === target) { await writeFile(target, "blocker"); throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); }
+    return rename(from, to);
+  };
+  await assert.rejects(installVerifiedUpdate({ update: { bytes, version: "0.2.0" }, targetDir: target, unpack: goodUnpack, renameImpl }), (error) => {
+    assert.ok(error instanceof AggregateError);
+    assert.match(error.message, /previous install is left at .*app\.backup/);
+    return true;
+  });
+  assert.equal(await readFile(join(`${target}.backup`, "old.txt"), "utf8"), "old");
+});
+
+test("only plain .tar.gz archive names are kept", async () => {
+  const { target } = await installRoot();
+  const names = [];
+  const unpack = async (archive, staged) => { names.push(basename(archive)); await goodUnpack(archive, staged); };
+  for (const filename of ["nowplaying-v0.2.0.tar.gz", "..tar.gz", "a/b.tar.gz", "x.exe", ".hidden.tar.gz"]) {
+    await installVerifiedUpdate({ update: { bytes, version: "0.2.0", filename }, targetDir: target, unpack });
+  }
+  assert.deepEqual(names, ["nowplaying-v0.2.0.tar.gz", "update.tar.gz", "update.tar.gz", "update.tar.gz", "update.tar.gz"]);
+});
