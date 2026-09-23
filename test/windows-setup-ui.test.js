@@ -19,7 +19,8 @@ test("native setup window walks every step, including sign-in, against the real 
   };
   const credentialStore = {
     save: async (key, secret) => { saved.push([key, secret]); },
-    read: async (key) => saved.find(([k]) => k.provider === key.provider && k.identityId === key.identityId)?.[1],
+    // A real Navidrome sign-in is stored as token + salt JSON.
+    read: async (key) => (saved.some(([k]) => k.identityId === key.identityId) ? JSON.stringify({ token: "t", salt: "s" }) : undefined),
   };
   // Fake Navidrome for "Test connection": nothing playing, and the sign-in is the selftest user.
   const fetchImpl = async (url) => {

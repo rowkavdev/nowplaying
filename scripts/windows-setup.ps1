@@ -336,7 +336,7 @@ function Send-Step([string]$Method, $Body) {
 $onTestConnection = {
   $form.UseWaitCursor = $true
   try {
-    $reply = try { Invoke-Setup 'POST' '/api/setup/test' $null } catch {
+    $reply = try { Invoke-Setup 'POST' '/api/setup/test' @{} } catch {
       $text = $_.ErrorDetails.Message
       if ($text) { try { $text | ConvertFrom-Json } catch { $null } } else { $null }
     }
