@@ -40,3 +40,51 @@ test("omits invalid cache diagnostic values", async () => {
   assert.equal(response.headers["X-Nowplaying-Source"], undefined);
   assert.equal(response.headers["X-Nowplaying-Age"], undefined);
 });
+
+
+function clock(...values) {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)];
+}
+
+test("reports live render time, cache state and provider health", async () => {
+  const handler = createCardHandler({ resolveCard: async () => ({ svg, source: "live", ageMs: 1_500, cache: "miss", provider: "ok" }), now: clock(100, 142.4) });
+  const response = await handler({ url: "/card.svg" });
+  assert.equal(response.headers["X-Nowplaying-Source"], "live");
+  assert.equal(response.headers["X-Nowplaying-Age"], "1");
+  assert.equal(response.headers["X-Nowplaying-Cache"], "miss");
+  assert.equal(response.headers["X-Nowplaying-Provider"], "ok");
+  assert.equal(response.headers["X-Nowplaying-Render-Ms"], "42");
+  assert.equal(response.headers["Server-Timing"], "render;dur=42");
+});
+
+test("stale last-good output names the provider failure class only", async () => {
+  const handler = createCardHandler({ resolveCard: async () => ({ svg, source: "last-good", ageMs: 95_000, cache: "hit", provider: "timeout", error: "connect ETIMEDOUT 10.0.0.4:8096", user: "rowan" }), now: clock(0, 3) });
+  const first = await handler({ url: "/card.svg" });
+  assert.equal(first.headers["X-Nowplaying-Source"], "last-good");
+  assert.equal(first.headers["X-Nowplaying-Age"], "95");
+  assert.equal(first.headers["X-Nowplaying-Provider"], "timeout");
+  assert.doesNotMatch(JSON.stringify(first.headers), /10\.0\.0\.4|ETIMEDOUT|rowan/);
+  const conditional = await handler({ url: "/card.svg", headers: { "If-None-Match": first.headers.ETag } });
+  assert.equal(conditional.status, 304);
+  assert.equal(conditional.headers["X-Nowplaying-Source"], "last-good");
+});
+
+test("provider errors without a last-good card are uncached and labelled unavailable", async () => {
+  const handler = createCardHandler({ resolveCard: async () => { throw new Error("401 token=abc"); }, now: clock(10, 15) });
+  const response = await handler({ url: "/card.svg" });
+  assert.equal(response.status, 503);
+  assert.equal(response.headers["Cache-Control"], "no-store");
+  assert.equal(response.headers["X-Nowplaying-Source"], "unavailable");
+  assert.equal(response.headers["X-Nowplaying-Render-Ms"], "5");
+  assert.doesNotMatch(JSON.stringify(response), /token|401/);
+});
+
+test("drops unknown cache and provider values and clamps timing", async () => {
+  const handler = createCardHandler({ resolveCard: async () => ({ svg, cache: "http://x", provider: "Bearer abc" }), now: clock(10, 5) });
+  const response = await handler({ url: "/card.svg" });
+  assert.equal(response.headers["X-Nowplaying-Cache"], undefined);
+  assert.equal(response.headers["X-Nowplaying-Provider"], undefined);
+  assert.equal(response.headers["X-Nowplaying-Render-Ms"], "0");
+  assert.throws(() => createCardHandler({ resolveCard: async () => svg, now: 1 }), TypeError);
+});
