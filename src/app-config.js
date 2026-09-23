@@ -189,7 +189,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {} } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -211,7 +211,13 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
   let current = config;
   let discord;
+  // Safe mode (#122, after repeated failed starts): only the local card and
+  // status page run. Discord and hosted uploads, which poll in the background,
+  // stay off until the user retries a normal start, even if Discord settings
+  // are changed from the settings page meanwhile.
+  const paused = Object.freeze({ status: "safe_mode", stop: async () => {}, cardUrl: async () => null, connection: () => null });
   const launchDiscord = (settings) => {
+    if (safeMode) return paused;
     try { return startDiscordFromConfig(settings, provider, discordOptions); }
     catch { return Object.freeze({ status: "failed", stop: async () => {} }); }
   };
@@ -246,7 +252,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     : { enabled: discord.status !== "off", state: discord.status });
   let hosted;
   try {
-    hosted = startHostedFromConfig(config, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions });
+    hosted = safeMode ? paused : startHostedFromConfig(config, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions });
   } catch {
     hosted = Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null });
   }
@@ -258,7 +264,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), safeMode, status, close });
 }
 
 function invalidConfig() {

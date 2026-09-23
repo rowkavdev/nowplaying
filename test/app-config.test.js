@@ -195,3 +195,19 @@ test("start-up migration leaves a current config alone and refuses a newer one (
   await assert.rejects(loadAppConfig(file), code("CONFIG_INVALID"));
   assert.deepEqual((await readdir(dir)).sort(), ["config.json"]);
 });
+
+test("safe mode runs the card and status page but keeps Discord and hosted uploads off", async () => {
+  const store = fakeStore({ "jellyfin:u1": "jf-token" });
+  const fetchImpl = async () => Response.json([]);
+  const config = { ...JELLYFIN, discordEnabled: true };
+  const app = await startAppFromConfig({ configFile: await configFile(config), credentialStore: store, port: 0, fetchImpl, safeMode: true, discord: { env: {}, builtInClientId: "123456789012345678", createTransport: () => { throw new Error("Discord must not start in safe mode"); } } });
+  try {
+    assert.equal(app.safeMode, true);
+    assert.equal(app.discord, "safe_mode");
+    assert.equal(app.hosted, "safe_mode");
+    assert.equal((await fetch(`${app.url}/card.svg`)).status, 200);
+    assert.equal((await fetch(`${app.url}/healthz`)).status, 200);
+  } finally {
+    await app.close();
+  }
+});
