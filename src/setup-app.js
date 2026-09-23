@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
-import { win32 } from "node:path";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, win32 } from "node:path";
 import { createHttpServer } from "./http-server.js";
 import { createSetupDraftHandler } from "./setup-draft-handler.js";
 import { createSetupDraftStore } from "./setup-draft-store.js";
 import { createSetupPageHandler } from "./setup-page-handler.js";
 import { createSetupDiscoveryHandler } from "./setup-discovery.js";
+import { createSetupSignInHandler } from "./setup-signin-handler.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
@@ -12,13 +15,32 @@ export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } =
   return win32.join(win32.resolve(localAppData), appName, "setup-draft.json");
 }
 
+// A random per-install id that providers see as the device (Plex client id,
+// Jellyfin/Emby DeviceId). It is not secret, but it must stay stable so the
+// server shows one "nowplaying" device instead of a new one per sign-in.
+export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16).toString("hex") } = {}) {
+  try {
+    const existing = (await readFile(file, "utf8")).trim();
+    if (/^[A-Za-z0-9_-]{8,128}$/.test(existing)) return existing;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const id = random();
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, `${id}\n`, { encoding: "utf8", mode: 0o600 });
+  return id;
+}
+
 // Starts the first-run wizard on a loopback-only port and returns its URL.
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
-export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover } = {}) {
+export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version } = {}) {
   const page = createSetupPageHandler();
   const draft = createSetupDraftHandler({ store: createSetupDraftStore({ file: draftFile }) });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
-  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await draft(request)) });
+  // Sign-in is only offered when a credential store is supplied, so a secret
+  // can never be obtained without somewhere safe to put it.
+  const signIn = credentialStore ? createSetupSignInHandler({ credentialStore, deviceId, version }) : async () => null;
+  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, close: () => app.close() });
