@@ -34,6 +34,9 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Codecov OIDC upload, no stored token
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -43,7 +46,12 @@ jobs:
         with:
           node-version: 22
       - run: npm install --ignore-scripts
-      - run: npm run test:coverage
+      - run: npm run test:coverage -- --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: lcov.info
+          use_oidc: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) }}
+          fail_ci_if_error: false
 
   build:
     runs-on: ubuntu-latest
