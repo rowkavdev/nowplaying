@@ -111,7 +111,7 @@ jobs:
           if gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload dev --repo "$GITHUB_REPOSITORY" --clobber dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
             # Drop assets from older builds (file names carry the version).
-            keep=$(cd dist/windows && ls -1 ./*.exe ./*.zip SHA256SUMS | sed 's|^\./||')
+            keep=$(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) -printf '%f\n')
             gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > current-assets.txt
             while IFS= read -r asset; do
               if [[ -n "$asset" ]] && ! grep -qxF "$asset" <<<"$keep"; then
@@ -122,3 +122,22 @@ jobs:
           else
             gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
           fi
+      # Old scheme: one immutable vX.Y.Z-dev.N pre-release per merge. Remove those
+      # (release and tag) only after the moving dev release is confirmed to carry
+      # this commit's assets. Stable releases never match the pattern.
+      - name: Remove old per-merge development pre-releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          target=$(gh release view dev --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets,tagName --jq 'select(.isPrerelease) | [.assets[].name | select(endswith(".zip"))] | length')
+          [[ "${target:-0}" -ge 1 ]] || { echo "dev release not ready; skipping cleanup"; exit 0; }
+          [[ "$(git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev | cut -f1)" == "$GITHUB_SHA" ]] || { echo "dev tag not at this commit; skipping cleanup"; exit 0; }
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 500 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' > prereleases.txt
+          while IFS= read -r tag; do
+            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
+              echo "Deleting $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            fi
+          done < prereleases.txt
