@@ -10,8 +10,14 @@ test("starts with privacy-first, testable defaults", () => {
     account: null,
     discordEnabled: true,
     discordIdleBehavior: "clear",
+    discordArtworkLookup: true,
     startWithWindows: null,
   });
+});
+
+test("album art lookup is on by default and must be a boolean", () => {
+  assert.equal(createSetupDraft({ discordArtworkLookup: false }).discordArtworkLookup, false);
+  assert.throws(() => createSetupDraft({ discordArtworkLookup: "yes" }), /discordArtworkLookup is invalid/);
 });
 
 test("advances one resumable setup step at a time", () => {

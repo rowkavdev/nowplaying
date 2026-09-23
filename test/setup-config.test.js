@@ -14,7 +14,7 @@ test("creates a versioned config with a stable OS credential reference", () => {
     provider: "plex",
     identity: { id: "user-42", displayName: "Rowan" },
     credentialRef: { provider: "plex", identityId: "user-42" },
-    discord: { enabled: true, idleBehavior: "clear" },
+    discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
   });
 });
 
@@ -32,7 +32,14 @@ test("carries reviewed Discord choices", () => {
     discordEnabled: false,
     discordIdleBehavior: "show",
   });
-  assert.deepEqual(config.discord, { enabled: false, idleBehavior: "show" });
+  assert.deepEqual(config.discord, { enabled: false, idleBehavior: "show", artworkLookup: "off" });
+});
+
+test("carries the album art lookup choice and refuses unknown lookups", () => {
+  assert.equal(createSetupConfig({ ...input, discordArtworkLookup: "musicbrainz" }).discord.artworkLookup, "musicbrainz");
+  assert.equal(createSetupConfig({ ...input, discordArtworkLookup: "off" }).discord.artworkLookup, "off");
+  assert.throws(() => createSetupConfig({ ...input, discordArtworkLookup: true }), /discordArtworkLookup/);
+  assert.throws(() => createSetupConfig({ ...input, discordArtworkLookup: "itunes" }), /discordArtworkLookup/);
 });
 
 test("requires stable identity and a stored credential", () => {

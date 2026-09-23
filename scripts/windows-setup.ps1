@@ -195,6 +195,7 @@ function Get-Changes {
     if ($control -is [System.Windows.Forms.RadioButton] -and $control.Checked) { $changes.provider = [string]$control.Tag }
     if ($control.Name -eq 'discordEnabled') { $changes.discordEnabled = [bool]$control.Checked }
     if ($control.Name -eq 'discordIdleBehavior' -and $control.SelectedItem) { $changes.discordIdleBehavior = [string]$control.SelectedItem.Key }
+    if ($control.Name -eq 'discordArtworkLookup') { $changes.discordArtworkLookup = [bool]$control.Checked }
     if ($control.Name -eq 'startWithWindows') { $changes.startWithWindows = [bool]$control.Checked }
   }
   $changes
@@ -299,6 +300,10 @@ function Show-Step {
       foreach ($entry in $Idle.GetEnumerator()) { [void]$idleBox.Items.Add([pscustomobject]@{ Key = $entry.Key; Value = $entry.Value }) }
       $idleBox.SelectedIndex = [math]::Max(0, @($Idle.Keys).IndexOf([string]$script:Draft.discordIdleBehavior))
       $panel.Controls.Add($idleBox)
+      $art = [System.Windows.Forms.CheckBox]::new()
+      $art.Name = 'discordArtworkLookup'; $art.Text = 'Look up album art online'; $art.AutoSize = $true; $art.Checked = ($script:Draft.discordArtworkLookup -ne $false)
+      $panel.Controls.Add($art)
+      $panel.Controls.Add((New-Text 'Sends only the track title and artist to MusicBrainz to find the cover. Your server address and account are never sent.'))
       if ($null -ne $script:Draft.startWithWindows) {
         $startup = [System.Windows.Forms.CheckBox]::new()
         $startup.Name = 'startWithWindows'; $startup.Text = 'Start NowPlaying when I sign in to Windows'; $startup.AutoSize = $true; $startup.Checked = [bool]$script:Draft.startWithWindows
@@ -312,6 +317,7 @@ function Show-Step {
       $who = if ($script:Draft.account) { " as $($script:Draft.account.displayName)" } else { '' }
       $panel.Controls.Add((New-Text "Media server: $provider$who"))
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
+      $panel.Controls.Add((New-Text "Album art lookup: $(if ($script:Draft.discordArtworkLookup -ne $false) { 'On' } else { 'Off' })"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
     }
     default {

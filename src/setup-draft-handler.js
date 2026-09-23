@@ -2,7 +2,7 @@ import { SetupStepError, advanceSetupDraft, createSetupDraft, previousSetupDraft
 
 const PATH = "/api/setup/draft";
 const ACTIONS = new Set(["save", "next", "back"]);
-const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "startWithWindows"]);
+const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "discordArtworkLookup", "startWithWindows"]);
 
 // onFinish runs when the review step is confirmed, before the draft moves to
 // "complete"; if it throws, the wizard stays on review so the user can retry.
