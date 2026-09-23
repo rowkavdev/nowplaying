@@ -33,6 +33,11 @@ Name: "{group}\nowplaying"; Filename: "{app}\nowplaying.exe"; Parameters: "start
 Name: "{autodesktop}\nowplaying"; Filename: "{app}\nowplaying.exe"; Parameters: "start"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{userstartup}\nowplaying"; Filename: "{app}\nowplaying.exe"; Parameters: "start"; WorkingDir: "{app}"; Tasks: startup
 
+[UninstallDelete]
+; "Start with Windows" in setup writes this same shortcut, which the installer
+; didn't create, so remove it explicitly.
+Type: files; Name: "{userstartup}\nowplaying.lnk"
+
 [Run]
 ; First install only: an upgrade over a working setup doesn't rerun it.
 Filename: "{app}\nowplaying.exe"; Parameters: "setup"; WorkingDir: "{app}"; Description: "Set up nowplaying now"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup

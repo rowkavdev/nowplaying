@@ -9,6 +9,7 @@ Use this index to find the current reference or the design target for work that 
 | [Provider configuration](providers.md) | Plex, Jellyfin, Navidrome and Emby authentication, behavior and normalized output | Current |
 | [Deployment](deployment.md) | Local validation, planned README/Discord runtimes, networking, caching and operations | Current plus clearly labelled plans |
 | [Customization](customization.md) | Shared templates, privacy, card themes and deep Discord settings | Design target for issue #25 |
+| [Testing a dev build](testing-dev-build.md) | Checklist for trying the `dev` pre-release on a clean Windows machine | Current |
 | [Security policy](../SECURITY.md) | Vulnerability reporting, deployment hardening, private data and secret handling | Current |
 
 ## Understand and contribute
