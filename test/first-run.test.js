@@ -25,9 +25,10 @@ test("a setup window that can't be shown (or throws) is reported as unavailable"
 });
 
 test("parses start arguments", () => {
-  assert.deepEqual(parseStartArgs([]), { module: null, setup: true });
-  assert.deepEqual(parseStartArgs(["--no-setup"]), { module: null, setup: false });
-  assert.deepEqual(parseStartArgs(["my.config.mjs"]), { module: "my.config.mjs", setup: true });
+  assert.deepEqual(parseStartArgs([]), { module: null, setup: true, tray: true });
+  assert.deepEqual(parseStartArgs(["--no-setup"]), { module: null, setup: false, tray: true });
+  assert.deepEqual(parseStartArgs(["--no-tray"]), { module: null, setup: true, tray: false });
+  assert.deepEqual(parseStartArgs(["my.config.mjs"]), { module: "my.config.mjs", setup: true, tray: true });
   assert.throws(() => parseStartArgs(["--nope"]), /unknown start option: --nope/);
   assert.throws(() => parseStartArgs(["a.mjs", "b.mjs"]), /at most one/);
 });

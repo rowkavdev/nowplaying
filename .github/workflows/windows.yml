@@ -46,6 +46,8 @@ jobs:
         run: node --test test/discord-ipc.test.js
       - name: Start with Windows shortcut (write, read back, remove)
         run: node --test test/windows-startup.test.js
+      - name: Tray menu self-test
+        run: node --test test/windows-tray.test.js
       - name: Attest published Windows bundles
         if: ${{ github.event_name == 'release' && github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2

@@ -9,6 +9,8 @@ import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, wind
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { ensureConfigured, parseStartArgs } from "../src/first-run.js";
+import { runTraySession } from "../src/tray-session.js";
+import { spawn } from "node:child_process";
 
 const command = process.argv[2] ?? "help";
 
@@ -19,14 +21,15 @@ if (command === "--version" || command === "version") {
   const logger = createAppLogger();
   await logger.event("startup", "starting");
   let app;
+  let startArgs;
+  let legacyModule;
+  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
   try {
-    const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
-    let startArgs;
     try { startArgs = parseStartArgs(process.argv.slice(3)); }
     catch (error) { console.error(`nowplaying: ${error.message}`); process.exit(2); }
     // An explicit config module wins. With no argument, the wizard's config is
     // used; installs from before the wizard keep their nowplaying.config.mjs.
-    const legacyModule = startArgs.module ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
+    legacyModule = startArgs.module ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
     // First launch: no config yet, so open setup instead of failing. `start
     // --no-setup` (scripts, CI) keeps the plain "run setup" message.
     if (!legacyModule && startArgs.setup && process.platform === "win32" && !existsSync(configFile)) {
@@ -45,9 +48,7 @@ if (command === "--version" || command === "version") {
       if (!app || typeof app.close !== "function") throw Object.assign(new TypeError("config start() must return an app with close()"), { startupCode: "APP_INVALID" });
     } else {
       // The config written by `nowplaying.exe setup`; the sign-in comes from Credential Manager.
-      const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
-      app = await startAppFromConfig({ configFile, credentialStore });
-      console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
+      app = await startFromWizardConfig(configFile);
     }
   } catch (error) {
     await logger.event("startup", "failed", { level: "error", code: error?.startupCode ?? "START_FAILED" });
@@ -64,6 +65,20 @@ if (command === "--version" || command === "version") {
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
+  // The tray runs alongside the installed app (not hand-written configs, not
+  // dev checkouts). Quit closes the app; "Run setup again" restarts it.
+  if (process.platform === "win32" && !legacyModule && startArgs.tray && existsSync(resolve("nowplaying.exe"))) {
+    const session = await runTraySession({
+      app,
+      runTray: (current) => runTrayProcess(`${current.url}/`),
+      runSetup: () => openSetupWindow(),
+      restartApp: () => startFromWizardConfig(configFile),
+      onRestart: (current) => { app = current; },
+    });
+    await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
+    if (session.outcome === "quit") { await logger.event("startup", "stopped"); process.exit(0); }
+    if (session.outcome === "restart-failed") { console.error(session.error?.message ?? "NowPlaying couldn't restart."); process.exit(1); }
+  }
 } else if (command === "setup") {
   const setup = await startSetup();
   const close = async () => { await setup.close(); };
@@ -85,7 +100,7 @@ if (command === "--version" || command === "version") {
     if (!flags.has("--no-open")) openSetupUrl(setup.url);
   }
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start            (runs from the setup config; opens setup the first time)\n       nowplaying.exe start --no-setup\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start            (runs from the setup config; opens setup the first time)\n       nowplaying.exe start [--no-setup] [--no-tray]\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;
@@ -115,4 +130,22 @@ async function openSetupWindow() {
   } finally {
     await setup.close();
   }
+}
+
+async function startFromWizardConfig(configFile) {
+  const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
+  const app = await startAppFromConfig({ configFile, credentialStore });
+  console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
+  return app;
+}
+
+// Runs the tray icon and resolves with its exit code (0 quit, 3 run setup).
+function runTrayProcess(dashboardUrl) {
+  const scriptPath = fileURLToPath(new URL("./windows-tray.ps1", import.meta.url));
+  const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", scriptPath, "-DashboardUrl", dashboardUrl, "-CanRunSetup"];
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn("powershell.exe", args, { shell: false, windowsHide: true, stdio: "ignore" });
+    child.on("error", reject);
+    child.on("close", (code) => resolvePromise(code));
+  });
 }
