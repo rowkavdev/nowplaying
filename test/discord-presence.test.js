@@ -133,3 +133,11 @@ test("startDiscordFromConfig exposes a privacy-safe connection status", async ()
   assert.doesNotMatch(JSON.stringify(status), /Song|Artist/);
   await d.stop();
 });
+
+test("uses the saved timer setting", async () => {
+  const { l, client } = loop("clear", [playing], { timestamps: "none" });
+  await l.tick();
+  assert.equal(client.calls[0].startTimestamp, undefined);
+  assert.equal(client.calls[0].endTimestamp, undefined);
+  assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => playing, timestamps: "forever" }), TypeError);
+});

@@ -6,6 +6,7 @@ const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying status</title><link rel="stylesheet" href="/status.css"></head>
 <body><main>
+<nav><span aria-current="page">Status</span> <a href="/settings">Settings</a></nav>
 <h1>NowPlaying</h1>
 <p id="summary" role="status" aria-live="polite">Loading status...</p>
 <section aria-labelledby="h-playing"><h2 id="h-playing">Now playing</h2><p id="playing">-</p></section>
@@ -27,6 +28,7 @@ const PAGE = `<!doctype html>
 // the owner is deuteranopic. The words carry the meaning; colour only helps.
 const CSS = `body{font:15px/1.5 "Segoe UI",system-ui,sans-serif;margin:0;background:#f6f6f8;color:#1b1b1f}
 main{max-width:640px;margin:0 auto;padding:24px}
+nav{display:flex;gap:16px;margin-bottom:8px}nav a{color:inherit}nav [aria-current]{font-weight:600}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}
 section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin:16px 0}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:0}dt{color:#555}dd{margin:0;overflow-wrap:anywhere}

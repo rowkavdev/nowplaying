@@ -4,6 +4,7 @@ import { normalizeHostedUrl } from "./hosted-uploader.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
+const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 
 export function createSetupConfig(input = {}) {
   if (!PROVIDERS.has(input.provider)) throw new TypeError("setup config.provider is invalid");
@@ -17,6 +18,9 @@ export function createSetupConfig(input = {}) {
   }
   if (input.discordArtworkLookup !== undefined && !ARTWORK_LOOKUPS.has(input.discordArtworkLookup)) {
     throw new TypeError("setup config.discordArtworkLookup must be off or musicbrainz");
+  }
+  if (input.discordTimestamps !== undefined && !TIMESTAMP_MODES.has(input.discordTimestamps)) {
+    throw new TypeError("setup config.discordTimestamps must be elapsed, remaining, both or none");
   }
   if (input.hostedEnabled !== undefined && typeof input.hostedEnabled !== "boolean") {
     throw new TypeError("setup config.hostedEnabled must be a boolean");
@@ -38,6 +42,9 @@ export function createSetupConfig(input = {}) {
       // Configs written before this field existed stay off: nothing new is
       // sent until the user runs setup again or turns it on.
       artworkLookup: input.discordArtworkLookup ?? "off",
+      // Discord timer (set from the settings page): elapsed, remaining, both
+      // or none. Left out means "both", so setup's own output is unchanged.
+      ...(input.discordTimestamps !== undefined ? { timestamps: input.discordTimestamps } : {}),
     }),
     // Hosted card upload (#140) is off unless the user turns it on.
     ...(input.hostedEnabled !== undefined || hostedUrl ? {

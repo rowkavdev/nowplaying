@@ -7,20 +7,22 @@ import { createDiscordController } from "./discord-controller.js";
 //   show   - show "Nothing playing"
 //   recent - keep showing what played last (without a running timer)
 export const IDLE_BEHAVIORS = Object.freeze(["clear", "grace", "show", "recent"]);
+const TIMESTAMP_MODES = Object.freeze(["elapsed", "remaining", "both", "none"]);
 const ACTIVE = new Set(["playing", "paused"]);
 
 export function createDiscordPresenceLoop({
-  getPresence, client, idleBehavior = "clear", artwork,
+  getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
   intervalMs = 15_000, graceMs = 120_000, now = Date.now,
   setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
   if (!client || typeof client.publish !== "function") throw new TypeError("discord client.publish is required");
   if (!IDLE_BEHAVIORS.includes(idleBehavior)) throw new TypeError("idleBehavior is invalid");
+  if (!TIMESTAMP_MODES.includes(timestamps)) throw new TypeError("timestamps is invalid");
   if (!Number.isInteger(intervalMs) || intervalMs < 1000) throw new RangeError("intervalMs must be at least 1000");
   if (!Number.isInteger(graceMs) || graceMs < 0) throw new RangeError("graceMs is invalid");
 
-  const live = createDiscordController({ client, settings: { idleBehavior: idleBehavior === "show" ? "show" : "clear" }, ...(artwork ? { artwork } : {}) });
+  const live = createDiscordController({ client, settings: { idleBehavior: idleBehavior === "show" ? "show" : "clear", timestamps }, ...(artwork ? { artwork } : {}) });
   const frozen = createDiscordController({ client, settings: { timestamps: "none" }, ...(artwork ? { artwork } : {}) });
   let lastActive = null;
   let idleSince = null;
