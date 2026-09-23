@@ -8,6 +8,7 @@ import { createSetupDraftStore } from "./setup-draft-store.js";
 import { createSetupPageHandler } from "./setup-page-handler.js";
 import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
+import { createSetupTestHandler } from "./setup-test-handler.js";
 import { serializeSetupConfig } from "./setup-config.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
@@ -58,7 +59,7 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
 // `startup` (optional) manages "Start with Windows": { isEnabled(), setEnabled(bool) }.
 // Without it the wizard doesn't offer the choice.
-export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, startup } = {}) {
+export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, startup, fetchImpl } = {}) {
   if (startup !== undefined && (typeof startup?.isEnabled !== "function" || typeof startup?.setEnabled !== "function")) throw new TypeError("startup is invalid");
   const page = createSetupPageHandler();
   const store = withStartupState(createSetupDraftStore({ file: draftFile }), startup);
@@ -82,7 +83,11 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const signIn = credentialStore
     ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })
     : async () => null;
-  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await draft(request)) });
+  // "Test connection" needs the saved sign-in, so it exists only with a credential store.
+  const connectionTest = credentialStore?.read
+    ? createSetupTestHandler({ store, credentialStore, ...(fetchImpl ? { fetchImpl } : {}) })
+    : async () => null;
+  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, close: () => app.close() });
