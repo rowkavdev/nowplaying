@@ -20,15 +20,31 @@ test("walks the wizard forward and back, persisting each step", async () => {
   const first = await handle({ method: "GET", url: "/api/setup/draft" });
   assert.equal(first.status, 200);
   assert.equal(first.headers["Cache-Control"], "no-store");
-  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, discordEnabled: true, discordIdleBehavior: "clear" }, resumed: false, discarded: false });
+  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, account: null, discordEnabled: true, discordIdleBehavior: "clear" }, resumed: false, discarded: false });
 
   assert.equal(parse(await handle(post({ action: "next" }))).draft.step, "provider");
-  const discord = parse(await handle(post({ action: "next", changes: { provider: "navidrome" } }))).draft;
-  assert.deepEqual([discord.step, discord.provider], ["discord", "navidrome"]);
+  const signin = parse(await handle(post({ action: "next", changes: { provider: "navidrome" } }))).draft;
+  assert.deepEqual([signin.step, signin.provider], ["signin", "navidrome"]);
+  const blocked = await handle(post({ action: "next" }));
+  assert.deepEqual([blocked.status, parse(blocked).error], [409, "signin_required"]);
   assert.equal(parse(await handle(post({ action: "back" }))).draft.step, "provider");
 
   const reopened = await createSetupDraftHandler({ store })({ method: "GET", url: "/api/setup/draft" });
   assert.deepEqual([parse(reopened).resumed, parse(reopened).draft.provider], [true, "navidrome"]);
+});
+
+test("the page cannot set the signed-in account itself", async () => {
+  const { handle } = await setup();
+  const response = await handle(post({ action: "save", changes: { provider: "plex", account: { provider: "plex", id: "1", displayName: "x" } } }));
+  assert.equal(response.status, 400);
+});
+
+test("without sign-in the wizard goes straight from server to Discord", async () => {
+  const { store } = await setup();
+  const handle = createSetupDraftHandler({ store, signIn: false });
+  await handle(post({ action: "next" }));
+  assert.equal(parse(await handle(post({ action: "next", changes: { provider: "emby" } }))).draft.step, "discord");
+  assert.equal(parse(await handle(post({ action: "back" }))).draft.step, "provider");
 });
 
 test("rejects credentials and unknown fields without echoing them", async () => {

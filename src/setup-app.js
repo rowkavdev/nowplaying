@@ -33,13 +33,22 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 
 // Starts the first-run wizard on a loopback-only port and returns its URL.
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
-export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version } = {}) {
+export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi } = {}) {
   const page = createSetupPageHandler();
-  const draft = createSetupDraftHandler({ store: createSetupDraftStore({ file: draftFile }) });
-  const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
+  const store = createSetupDraftStore({ file: draftFile });
   // Sign-in is only offered when a credential store is supplied, so a secret
-  // can never be obtained without somewhere safe to put it.
-  const signIn = credentialStore ? createSetupSignInHandler({ credentialStore, deviceId, version }) : async () => null;
+  // can never be obtained without somewhere safe to put it. Without one the
+  // wizard skips the sign-in step.
+  const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore) });
+  const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
+  // A successful sign-in records who signed in on the draft (never the secret).
+  const onSignedIn = async ({ provider, identity }) => {
+    const { draft: current } = await store.load();
+    await store.save({ ...current, provider, account: { provider, id: identity.id, displayName: identity.displayName } });
+  };
+  const signIn = credentialStore
+    ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })
+    : async () => null;
   const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;

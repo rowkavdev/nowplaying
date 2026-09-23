@@ -1,5 +1,6 @@
 // Serves the browser-based first-run wizard. The page is static; all state goes
-// through /api/setup/draft. Served with page: true so the loopback server applies
+// through /api/setup/draft, and sign-in through /api/setup/signin (which never
+// returns a secret). Served with page: true so the loopback server applies
 // PAGE_CSP (same-origin script/style only, no inline code).
 
 const HTML = `<!doctype html>
@@ -45,8 +46,19 @@ button:disabled{opacity:.5;cursor:default}
 const JS = `"use strict";
 (function () {
   var API = "/api/setup/draft";
-  var STEPS = ["welcome", "provider", "discord", "review", "complete"];
-  var LABELS = { welcome: "Welcome", provider: "Media server", discord: "Discord", review: "Review", complete: "Done" };
+  var SIGNIN_API = "/api/setup/signin";
+  var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
+  var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
+  var DEFAULT_URLS = { jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
+  var SIGNIN_ERRORS = {
+    authentication_failed: "That username or password didn't work.",
+    invalid_server_url: "Enter the server address, like http://127.0.0.1:8096.",
+    unreachable: "Couldn't reach that server. Check the address and that the server is running.",
+    quick_connect_disabled: "Quick Connect is turned off on this Jellyfin server. Turn it on in the Jellyfin dashboard and try again.",
+    expired: "That sign-in expired. Start again.",
+    too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
+  };
+  var signin = { flowId: null, code: null, timer: null };
   var PROVIDERS = [["plex", "Plex"], ["jellyfin", "Jellyfin"], ["emby", "Emby"], ["navidrome", "Navidrome"]];
   var IDLE = [["clear", "Clear my status"], ["grace", "Keep it for a short grace period"], ["show", "Show that nothing is playing"], ["recent", "Show what I played last"]];
   var draft = null;
@@ -68,7 +80,93 @@ const JS = `"use strict";
     });
   }
 
+  function callSignIn(body) {
+    var init = { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify(body) };
+    return fetch(SIGNIN_API, init).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (result) {
+        if (!response.ok) throw new Error(SIGNIN_ERRORS[result.error] || "Sign-in didn't work. Check the details and try again.");
+        return result;
+      });
+    });
+  }
+
+  function stopSignIn() {
+    if (signin.timer) clearTimeout(signin.timer);
+    signin = { flowId: null, code: null, timer: null };
+  }
+
+  function signInResult(result) {
+    if (result.status === "signed_in") {
+      stopSignIn();
+      return request("GET").then(function (fresh) { draft = fresh.draft; });
+    }
+    if (result.status === "pending" && signin.flowId) {
+      signin.timer = setTimeout(function () {
+        callSignIn({ action: "poll", flowId: signin.flowId }).then(signInResult)
+          .catch(function (error) { stopSignIn(); showError(error.message); render(); })
+          .then(function () { render(); });
+      }, 2000);
+    }
+  }
+
+  function startSignIn(body) {
+    if (busy) return;
+    busy = true;
+    showError("");
+    stopSignIn();
+    render();
+    callSignIn(body).then(function (result) {
+      if (result.status === "pending") {
+        signin.flowId = result.flowId;
+        signin.code = result.code || null;
+        if (result.authUrl && result.authUrl.indexOf("https://app.plex.tv/") === 0) window.open(result.authUrl, "_blank", "noopener");
+      }
+      return signInResult(result);
+    }).catch(function (error) { showError(error.message); })
+      .then(function () { busy = false; render(); });
+  }
+
+  function field(id, label, type, value) {
+    return el("label", { htmlFor: id }, [label, el("br"), el("input", { id: id, type: type, value: value || "", autocomplete: type === "password" ? "current-password" : "off", size: 36 })]);
+  }
+
+  function value(id) {
+    var node = document.getElementById(id);
+    return node ? node.value.trim() : "";
+  }
+
+  function signInPanel() {
+    var name = nameOf(PROVIDERS, draft.provider);
+    var parts = [el("h2", { textContent: "Sign in to " + name })];
+    if (draft.account) parts.push(el("p", { textContent: "Signed in as " + draft.account.displayName + ". Your sign-in is saved in Windows Credential Manager, not in this page." }));
+    if (draft.provider === "plex") {
+      parts.push(el("p", { textContent: signin.flowId ? "Finish signing in on the Plex page. This page updates when you're done." : "Plex opens in a new tab so you can approve NowPlaying." }));
+      parts.push(el("button", { type: "button", id: "signinStart", textContent: draft.account ? "Sign in again" : "Open Plex sign-in" }));
+    } else if (draft.provider === "jellyfin") {
+      parts.push(field("serverUrl", "Server address", "url", DEFAULT_URLS.jellyfin));
+      if (signin.code) parts.push(el("p", {}, ["In Jellyfin, open Quick Connect and enter this code: ", el("strong", { id: "quickConnectCode", textContent: signin.code })]));
+      parts.push(el("button", { type: "button", id: "signinStart", textContent: signin.code ? "Get a new code" : "Get a Quick Connect code" }));
+    } else {
+      parts.push(field("serverUrl", "Server address", "url", DEFAULT_URLS[draft.provider]));
+      parts.push(field("username", "Username", "text", ""));
+      parts.push(field("password", "Password", "password", ""));
+      parts.push(el("p", { textContent: "Your password is only sent to your server. It is never saved." }));
+      parts.push(el("button", { type: "button", id: "signinStart", textContent: "Sign in" }));
+    }
+    return parts;
+  }
+
+  function onSignInClick() {
+    if (draft.provider === "plex") return startSignIn({ action: "start", provider: "plex" });
+    if (draft.provider === "jellyfin") return startSignIn({ action: "start", provider: "jellyfin", baseUrl: value("serverUrl") });
+    var password = document.getElementById("password");
+    var body = { action: "password", provider: draft.provider, baseUrl: value("serverUrl"), username: value("username"), password: password ? password.value : "" };
+    if (password) password.value = "";
+    startSignIn(body);
+  }
+
   function send(method, body) {
+    stopSignIn();
     if (busy) return;
     busy = true;
     showError("");
@@ -108,6 +206,8 @@ const JS = `"use strict";
         return [el("h2", { textContent: "Which media server do you use?" })].concat(PROVIDERS.map(function (item) {
           return el("label", {}, [el("input", { type: "radio", name: "provider", value: item[0], checked: draft.provider === item[0] }), " " + item[1]]);
         }));
+      case "signin":
+        return signInPanel();
       case "discord":
         return [
           el("h2", { textContent: "Discord status" }),
@@ -118,11 +218,11 @@ const JS = `"use strict";
       case "review":
         return [
           el("h2", { textContent: "Check your choices" }),
-          el("p", { textContent: "Media server: " + nameOf(PROVIDERS, draft.provider) }),
+          el("p", { textContent: "Media server: " + nameOf(PROVIDERS, draft.provider) + (draft.account ? " (signed in as " + draft.account.displayName + ")" : "") }),
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
         ];
       default:
-        return [el("h2", { textContent: "All set" }), el("p", { textContent: "Your choices are saved. Next you'll connect your " + nameOf(PROVIDERS, draft.provider) + " account." })];
+        return [el("h2", { textContent: "All set" }), el("p", { textContent: draft.account ? "You're signed in to " + nameOf(PROVIDERS, draft.provider) + " as " + draft.account.displayName + ", and your choices are saved." : "Your choices are saved." })];
     }
   }
 
@@ -137,8 +237,11 @@ const JS = `"use strict";
     var body = document.getElementById("panel");
     body.replaceChildren.apply(body, panel());
     var needsProvider = draft.step === "provider" && !document.querySelector("input[name=provider]:checked");
+    var needsSignIn = draft.step === "signin" && !draft.account;
     document.getElementById("back").disabled = busy || index <= 0;
-    document.getElementById("next").disabled = busy || index >= STEPS.length - 1 || needsProvider;
+    document.getElementById("next").disabled = busy || index >= STEPS.length - 1 || needsProvider || needsSignIn;
+    var start = document.getElementById("signinStart");
+    if (start) start.disabled = busy;
     document.getElementById("next").textContent = draft.step === "review" ? "Finish" : "Next";
     document.getElementById("reset").disabled = busy;
   }
@@ -146,6 +249,9 @@ const JS = `"use strict";
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("panel").addEventListener("change", function () {
       if (draft && draft.step === "provider") document.getElementById("next").disabled = busy || !document.querySelector("input[name=provider]:checked");
+    });
+    document.getElementById("panel").addEventListener("click", function (event) {
+      if (event.target && event.target.id === "signinStart") onSignInClick();
     });
     document.getElementById("next").addEventListener("click", function () { send("POST", { action: "next", changes: changes() }); });
     document.getElementById("back").addEventListener("click", function () { send("POST", { action: "back", changes: changes() }); });
