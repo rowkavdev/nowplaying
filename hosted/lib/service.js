@@ -84,9 +84,12 @@ export function createService({ redis, now = () => Date.now() } = {}) {
 
   async function ingest({ token, payload }) {
     const device = await authenticate(token);
-    const bucket = `np:rl:ingest:${device.deviceId}:${Math.floor(now() / 60_000)}`;
+    const minute = Math.floor(now() / 60_000);
+    const bucket = `np:rl:ingest:${device.deviceId}:${minute}`;
+    // Create the bucket with its TTL first so it can never outlive the window,
+    // even if the function dies between commands; INCR keeps the TTL.
+    await cmd("SET", bucket, "0", "EX", 120, "NX");
     const count = await cmd("INCR", bucket);
-    if (count === 1) await cmd("EXPIRE", bucket, 120);
     if (count > INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited");
     const update = validateIngest(payload, { now: now() });
     const seqKey = `np:seq:${device.deviceId}`;
