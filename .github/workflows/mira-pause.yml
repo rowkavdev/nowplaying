@@ -26,6 +26,11 @@ jobs:
             const issue_number = context.payload.pull_request.number;
             const name = 'mira-paused';
             try { await github.rest.issues.getLabel({ owner, repo, name }); }
-            catch { await github.rest.issues.createLabel({ owner, repo, name, color: '1d76db', description: 'Mira review paused' }); }
-            await github.rest.issues.createComment({ owner, repo, issue_number, body: '/mira pause' });
-            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+            catch { await github.rest.issues.createLabel({ owner, repo, name, color: '1d76db', description: 'Mira review paused' }).catch(() => {}); }
+            try {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: '/mira pause' });
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+            } catch (error) {
+              // Pausing is best-effort: never fail the PR's checks over it.
+              core.warning(`Couldn't pause Mira: ${error.message}`);
+            }
