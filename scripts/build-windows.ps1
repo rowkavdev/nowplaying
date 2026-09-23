@@ -30,8 +30,10 @@ Copy-Item (Join-Path $Root 'package.json') (Join-Path $Bundle 'app/package.json'
 # Build details for the status page and diagnostics (#119). Unsigned until code signing ships.
 $Commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { (git -C $Root rev-parse HEAD).Trim() }
 $Channel = if ($env:NOWPLAYING_CHANNEL) { $env:NOWPLAYING_CHANNEL } else { 'development' }
-[ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"); channel = $Channel; signed = $false } |
-  ConvertTo-Json | Set-Content -Encoding utf8NoBOM (Join-Path $Bundle 'app/build-info.json')
+$BuildInfo = [ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"); channel = $Channel; signed = $false } | ConvertTo-Json
+# UTF-8 without a BOM on both Windows PowerShell 5.1 and PowerShell 7+
+# (Set-Content -Encoding utf8NoBOM only exists on 7+).
+[System.IO.File]::WriteAllText((Join-Path $Bundle 'app/build-info.json'), $BuildInfo, [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
 Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse

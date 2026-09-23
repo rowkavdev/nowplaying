@@ -26,3 +26,11 @@ test("shortcuts and the post-install setup use the no-console launcher", async (
   const build = await readFile(new URL("../scripts/build-windows.ps1", import.meta.url), "utf8");
   assert.match(build, /-p:AssemblyName=nowplayingw -p:OutputType=WinExe -p:DefineConstants=NOWPLAYING_GUI/);
 });
+
+test("the Windows build script runs on Windows PowerShell 5.1", async () => {
+  const build = await readFile(new URL("../scripts/build-windows.ps1", import.meta.url), "utf8");
+  const code = build.split(/\r?\n/).filter((line) => !line.trim().startsWith("#")).join("\n");
+  // -Encoding utf8NoBOM is PowerShell 7+ only and throws on 5.1.
+  assert.doesNotMatch(code, /-Encoding\s+utf8NoBOM/i);
+  assert.match(code, /WriteAllText\([^\n]*build-info\.json[^\n]*UTF8Encoding\]::new\(\$false\)\)/);
+});
