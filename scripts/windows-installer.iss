@@ -34,4 +34,12 @@ Name: "{autodesktop}\nowplaying"; Filename: "{app}\nowplaying.exe"; Parameters: 
 Name: "{userstartup}\nowplaying"; Filename: "{app}\nowplaying.exe"; Parameters: "start"; WorkingDir: "{app}"; Tasks: startup
 
 [Run]
+; First install only: an upgrade over a working setup doesn't rerun it.
+Filename: "{app}\nowplaying.exe"; Parameters: "setup"; WorkingDir: "{app}"; Description: "Set up nowplaying now"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup
 Filename: "{app}\nowplaying.exe"; Parameters: "--help"; Description: "Open nowplaying help"; Flags: postinstall nowait skipifsilent unchecked
+
+[Code]
+function NeedsSetup: Boolean;
+begin
+  Result := not FileExists(ExpandConstant('{localappdata}\nowplaying\config.json'));
+end;

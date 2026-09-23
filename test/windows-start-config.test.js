@@ -14,8 +14,8 @@ import { createWindowsCredentialAdapter } from "../src/windows-credential-adapte
 const ENTRY = fileURLToPath(new URL("../scripts/windows-entry.js", import.meta.url));
 const windows = { skip: process.platform !== "win32" };
 
-function runStart(localAppData, cwd) {
-  const child = spawn(process.execPath, [ENTRY, "start"], { cwd, env: { ...process.env, LOCALAPPDATA: localAppData }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+function runStart(localAppData, cwd, args = []) {
+  const child = spawn(process.execPath, [ENTRY, "start", ...args], { cwd, env: { ...process.env, LOCALAPPDATA: localAppData }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -24,11 +24,18 @@ function runStart(localAppData, cwd) {
   return { child, exited, output: () => ({ stdout, stderr }) };
 }
 
-test("start with no config tells the user to run setup", windows, async () => {
+test("start --no-setup with no config tells the user to run setup", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-start-"));
-  const run = runStart(dir, dir);
+  const run = runStart(dir, dir, ["--no-setup"]);
   assert.equal(await run.exited, 1);
   assert.match(run.output().stderr, /nowplaying\.exe setup/);
+});
+
+test("start rejects unknown options", windows, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-start-"));
+  const run = runStart(dir, dir, ["--bogus"]);
+  assert.equal(await run.exited, 2);
+  assert.match(run.output().stderr, /unknown start option: --bogus/);
 });
 
 test("start runs from the wizard config and the real Credential Manager", windows, async () => {
