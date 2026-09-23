@@ -20,14 +20,16 @@ const PAGE = `<!doctype html>
 </main><script src="/status.js"></script></body></html>
 `;
 
+// State colours are blue (fine) and orange (problem), never red vs green:
+// the owner is deuteranopic. The words carry the meaning; colour only helps.
 const CSS = `body{font:15px/1.5 "Segoe UI",system-ui,sans-serif;margin:0;background:#f6f6f8;color:#1b1b1f}
 main{max-width:640px;margin:0 auto;padding:24px}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}
 section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin:16px 0}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:0}dt{color:#555}dd{margin:0;overflow-wrap:anywhere}
-img{max-width:100%;height:auto}.ok{color:#0a6b2d}.bad{color:#a4161a}.warn{color:#8a5a00}
+img{max-width:100%;height:auto}.ok{color:#0b5cad}.bad{color:#b85c00;font-weight:600}.warn{color:#6b5a00}
 footer{color:#555;font-size:13px}
-@media (prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#333}dt,footer{color:#aaa}.ok{color:#5fd38b}.bad{color:#ff8a8a}.warn{color:#f0c060}}
+@media (prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#333}dt,footer{color:#aaa}.ok{color:#7ab8ff}.bad{color:#ffa552;font-weight:600}.warn{color:#e0d070}}
 `;
 
 const SCRIPT = `"use strict";

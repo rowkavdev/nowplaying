@@ -108,3 +108,13 @@ test("status api refuses cross-site requests and writes", async () => {
   assert.equal((await h({ method: "POST", url: "/api/status" })).status, 405);
   assert.equal((await h({ method: "GET", url: "/api/status" })).status, 200);
 });
+
+test("status colours avoid red/green pairs", async () => {
+  const css = (await handler()({ method: "GET", url: "/status.css" })).body;
+  for (const hex of css.match(/#[0-9a-f]{6}/gi)) {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const greenish = g > r + 40 && g > b + 40;
+    const reddish = r > g + 80 && r > b + 80 && g < 80;
+    assert.ok(!greenish && !reddish, hex);
+  }
+});
