@@ -56,15 +56,22 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 
 // Starts the first-run wizard on a loopback-only port and returns its URL.
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
-export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi } = {}) {
+// `startup` (optional) manages "Start with Windows": { isEnabled(), setEnabled(bool) }.
+// Without it the wizard doesn't offer the choice.
+export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, startup } = {}) {
+  if (startup !== undefined && (typeof startup?.isEnabled !== "function" || typeof startup?.setEnabled !== "function")) throw new TypeError("startup is invalid");
   const page = createSetupPageHandler();
-  const store = createSetupDraftStore({ file: draftFile });
+  const store = withStartupState(createSetupDraftStore({ file: draftFile }), startup);
   // Sign-in is only offered when a credential store is supplied, so a secret
   // can never be obtained without somewhere safe to put it. Without one the
   // wizard skips the sign-in step.
   // Finish writes the real config only when there is a signed-in account to
   // point it at; without a credential store there is nothing to run from yet.
-  const onFinish = configFile && credentialStore ? (finished) => writeSetupConfig(configFile, finished) : undefined;
+  const writeConfig = configFile && credentialStore;
+  const onFinish = writeConfig || startup ? async (finished) => {
+    if (writeConfig) await writeSetupConfig(configFile, finished);
+    if (startup && typeof finished.startWithWindows === "boolean") await startup.setEnabled(finished.startWithWindows);
+  } : undefined;
   const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore), ...(onFinish ? { onFinish } : {}) });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
@@ -79,6 +86,22 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, close: () => app.close() });
+}
+
+// Until the user chooses, the "Start with Windows" box shows what is set now
+// (the installer may already have added the startup shortcut).
+function withStartupState(store, startup) {
+  if (!startup) return store;
+  return Object.freeze({
+    ...store,
+    async load() {
+      const loaded = await store.load();
+      if (loaded.draft.startWithWindows !== null) return loaded;
+      let enabled = false;
+      try { enabled = await startup.isEnabled(); } catch { enabled = false; }
+      return { ...loaded, draft: Object.freeze({ ...loaded.draft, startWithWindows: enabled }) };
+    },
+  });
 }
 
 // Opens a loopback setup URL in the default browser without a shell, so the URL

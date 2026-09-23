@@ -20,7 +20,7 @@ test("walks the wizard forward and back, persisting each step", async () => {
   const first = await handle({ method: "GET", url: "/api/setup/draft" });
   assert.equal(first.status, 200);
   assert.equal(first.headers["Cache-Control"], "no-store");
-  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, account: null, discordEnabled: true, discordIdleBehavior: "clear" }, resumed: false, discarded: false });
+  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, account: null, discordEnabled: true, discordIdleBehavior: "clear", startWithWindows: null }, resumed: false, discarded: false });
 
   assert.equal(parse(await handle(post({ action: "next" }))).draft.step, "provider");
   const signin = parse(await handle(post({ action: "next", changes: { provider: "navidrome" } }))).draft;
