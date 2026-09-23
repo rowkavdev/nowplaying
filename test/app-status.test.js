@@ -202,4 +202,7 @@ test("tray endpoint serves the same line", async () => {
   assert.equal(res.status, 200);
   assert.equal(JSON.parse(res.body).text, "NowPlaying: starting...");
   assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "cross-site" } })).status, 403);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "same-site" } })).status, 403);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "same-origin" } })).status, 200);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "none" } })).status, 200);
 });
