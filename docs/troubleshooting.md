@@ -15,6 +15,14 @@ Then check, in order:
 5. the server clock is correct;
 6. no credential or private media data appears in copied logs.
 
+## Windows logs
+
+nowplaying's privacy-safe Windows log lives at `%LOCALAPPDATA%\nowplaying\logs\nowplaying.log`. Right-click the tray icon and choose **Open log folder** to open it in File Explorer. Logging is still being connected to every part of the app for v0.2, so on current development builds the folder may be empty or sparse.
+
+- Each entry records only the time, level, component (`startup`, `provider`, `discord`, `updater`, `tray`), a status and an optional short error code. Titles, usernames, provider URLs and credentials are never written.
+- When the file reaches 1 MB it rotates to `nowplaying.log.1`, and older files shift up. Three rotated files are kept, so the folder stays around 4 MB at most.
+- Logs survive restarts. You can attach the folder's files to a bug report as they are.
+
 ## Card is offline or stale
 
 - Confirm `/health` responds before testing `/card.svg`.
