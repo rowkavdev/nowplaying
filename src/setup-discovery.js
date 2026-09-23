@@ -1,5 +1,8 @@
-// Finds media servers running on this PC so the setup wizard can offer them
-// first. Read-only, loopback-only, no credentials, short timeouts.
+// Finds media servers so the setup wizard can offer them first: HTTP probes
+// on this PC plus Jellyfin/Emby UDP discovery on the local network.
+// Read-only, no credentials, short timeouts.
+
+import { discoverLanServers } from "./setup-lan-discovery.js";
 
 const MAX_BODY = 64 * 1024;
 const HOST = "127.0.0.1";
@@ -10,10 +13,29 @@ export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 32400, path: "/identity", classify: classifyPlex }),
 ]);
 
-export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES } = {}) {
+export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
-  const results = await Promise.all(probes.map((probe) => runProbe(probe, fetchImpl, timeoutMs)));
-  return Object.freeze(results.filter(Boolean));
+  const [results, lan] = await Promise.all([
+    Promise.all(probes.map((probe) => runProbe(probe, fetchImpl, timeoutMs))),
+    typeof discoverLan === "function" ? discoverLan({ timeoutMs }).catch(() => []) : [],
+  ]);
+  return mergeServers(results.filter(Boolean), lan);
+}
+
+// Loopback results win; a LAN reply for a server already found on this PC
+// (same provider and server id) is dropped so the list has no duplicates.
+export function mergeServers(local, lan) {
+  const merged = [...local];
+  const seenIds = new Set(local.filter((s) => s.id).map((s) => `${s.provider}:${s.id}`));
+  const seenUrls = new Set(local.map((s) => s.baseUrl));
+  for (const server of Array.isArray(lan) ? lan : []) {
+    const key = server.id ? `${server.provider}:${server.id}` : null;
+    if ((key && seenIds.has(key)) || seenUrls.has(server.baseUrl)) continue;
+    if (key) seenIds.add(key);
+    seenUrls.add(server.baseUrl);
+    merged.push(server);
+  }
+  return Object.freeze(merged);
 }
 
 async function runProbe(probe, fetchImpl, timeoutMs) {
@@ -27,7 +49,9 @@ async function runProbe(probe, fetchImpl, timeoutMs) {
     const text = await response.text();
     if (text.length > MAX_BODY) return null;
     const found = probe.classify({ status: response.status, text });
-    return found ? Object.freeze({ provider: found.provider, baseUrl, version: cleanVersion(found.version) }) : null;
+    if (!found) return null;
+    const id = cleanId(found.id);
+    return Object.freeze({ provider: found.provider, baseUrl, version: cleanVersion(found.version), ...(id ? { id } : {}) });
   } catch {
     return null;
   } finally {
@@ -47,8 +71,8 @@ export function classifyJellyfinOrEmby({ status, text }) {
   const info = parseJson(text);
   if (!info || typeof info.Id !== "string" || typeof info.Version !== "string") return null;
   const product = String(info.ProductName ?? "").toLowerCase();
-  if (product.includes("jellyfin")) return { provider: "jellyfin", version: info.Version };
-  if (product.includes("emby") || !product) return { provider: "emby", version: info.Version };
+  if (product.includes("jellyfin")) return { provider: "jellyfin", version: info.Version, id: info.Id };
+  if (product.includes("emby") || !product) return { provider: "emby", version: info.Version, id: info.Id };
   return null;
 }
 
@@ -58,6 +82,7 @@ export function classifyPlex({ status, text }) {
 }
 
 function parseJson(text) { try { return JSON.parse(text); } catch { return null; } }
+export function cleanId(value) { return typeof value === "string" && /^[0-9A-Za-z-]{1,64}$/.test(value) ? value : null; }
 function cleanVersion(value) { return typeof value === "string" && /^[0-9A-Za-z.+_-]{1,40}$/.test(value) ? value : null; }
 
 export function createSetupDiscoveryHandler({ discover = discoverLocalServers, cacheMs = 5000, now = Date.now } = {}) {
