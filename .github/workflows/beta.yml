@@ -16,6 +16,11 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-2022
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -43,6 +48,13 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)" | Add-Content dist/windows/SHA256SUMS
           }
+      - name: Attest development build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
       - name: Name this development build
         shell: bash
         run: |
@@ -53,6 +65,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO_VISIBILITY: ${{ github.event.repository.visibility }}
         run: |
           set -euo pipefail
           stable_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft --jq 'select(.isPrerelease == false and .isDraft == false) | .tagName')
@@ -89,6 +102,10 @@ jobs:
             # shellcheck disable=SC2016 # Markdown backticks are intentional.
             printf '**Dev build #%s** (`%s`), built from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "$GITHUB_RUN_NUMBER" "$DEV_VERSION" "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
+            if [[ "$REPO_VISIBILITY" == public ]]; then
+              # shellcheck disable=SC2016 # Markdown backticks are intentional.
+              printf 'Check where a download was built with `gh attestation verify <file> --repo %s`.\n\n' "$GITHUB_REPOSITORY"
+            fi
             printf "## What's Changed\n\n"
             while IFS=$'\t' read -r rank stats key sha subject; do
               short=${sha:0:7}
