@@ -13,8 +13,8 @@ test("native setup window walks every step against the real server", { skip: pro
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }] });
   try {
     const scriptPath = fileURLToPath(new URL("../scripts/windows-setup.ps1", import.meta.url));
-    const { code, output } = await runNativeSetup(app.url, { scriptPath, selfTest: true });
-    assert.equal(code, 0, output);
+    const { code, output, errors } = await runNativeSetup(app.url, { scriptPath, selfTest: true });
+    assert.equal(code, 0, `${output}\n${errors}`);
     const result = JSON.parse(output);
     assert.deepEqual(result.steps, ["welcome", "provider", "provider", "discord", "review", "complete"]);
     assert.equal(result.provider, "navidrome");
