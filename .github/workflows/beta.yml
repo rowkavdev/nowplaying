@@ -29,6 +29,13 @@ jobs:
       - name: Build installer and portable ZIP
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Give assets stable development names
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object {
+            $name = $_.Name -replace '^nowplaying-v[0-9]+\.[0-9]+\.[0-9]+-', 'nowplaying-dev-'
+            if ($name -ne $_.Name) { Rename-Item $_.FullName $name }
+          }
       - name: Checksums
         shell: pwsh
         run: |
@@ -71,7 +78,7 @@ jobs:
             esac
             # shellcheck disable=SC2016 # awk field references must remain literal.
             stats=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {printf "%012d", a+d+f}')
-            pr=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null | grep -m1 -E '^[0-9]+$' || true)
             key=${pr:-commit-$sha}
             printf '%s\t%s\t%s\t%s\t%s\n' "$rank" "$stats" "$key" "$sha" "$subject" >> ranked-changes.tsv
           done < all-changes.tsv
