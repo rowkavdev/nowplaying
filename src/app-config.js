@@ -9,6 +9,7 @@ import { createJellyfinProvider } from "./providers/jellyfin.js";
 import { createNavidromeProvider } from "./providers/navidrome.js";
 import { createPlexProvider } from "./providers/plex.js";
 import { resolveDiscordClientId } from "./discord-app.js";
+import { artworkResolverOptions, createDiscordArtworkResolver } from "./discord-artwork.js";
 import { createDiscordClient } from "./discord-client.js";
 import { createDiscordIpcClient } from "./discord-ipc.js";
 import { createDiscordPresenceLoop } from "./discord-presence.js";
@@ -99,12 +100,16 @@ function defaultDiscordTransport(clientId) {
 
 // Discord runs only when setup turned it on and the build has an application
 // ID. Discord not running is fine: the client retries in the background.
-export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, intervalMs, now } = {}) {
+// Artwork: a public HTTPS image from the server is used as is; private or
+// local server images fall back to the app's "media" asset. No title or artist
+// leaves the machine unless the config opts in to a lookup.
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {} });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {} });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
-  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
+  const artwork = createArtwork(config.discord);
+  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   return Object.freeze({ status: "on", stop: () => loop.stop() });
 }

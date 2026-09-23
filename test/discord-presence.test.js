@@ -102,3 +102,20 @@ test("startDiscordFromConfig respects setup and the app ID", async () => {
   assert.equal(calls.at(-1), "close");
   assert.ok(calls.some((c) => Array.isArray(c) && c[0] === "set"));
 });
+
+test("startDiscordFromConfig sends only public, token-free artwork to Discord", async () => {
+  async function published(artworkUrl) {
+    const sets = [];
+    const transport = { connect: async () => {}, setActivity: async (a) => sets.push(a), clearActivity: async () => {}, close: async () => {} };
+    const provider = { getPresence: async () => ({ ...playing, ...(artworkUrl ? { artworkUrl } : {}) }) };
+    const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, provider, {
+      env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport, intervalMs: 60_000,
+    });
+    await d.stop();
+    return sets[0]?.largeImage;
+  }
+  assert.equal(await published("https://images.example.com/cover.jpg"), "https://images.example.com/cover.jpg");
+  assert.equal(await published("http://192.168.1.20:8096/Items/1/Images/Primary"), "media");
+  assert.equal(await published("https://media.example.com/Items/1/Images/Primary?api_key=secret"), "media");
+  assert.equal(await published(undefined), "media");
+});
