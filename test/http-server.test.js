@@ -203,3 +203,21 @@ test("uses the page policy only for opted-in HTML pages", async () => {
     }
   } finally { await app.close(); }
 });
+
+test("the local app defaults to a rarely used port, overridable with NOWPLAYING_PORT", async () => {
+  const { DEFAULT_APP_PORT, resolveAppPort } = await import("../src/app-config.js");
+  assert.equal(DEFAULT_APP_PORT, 47832);
+  assert.equal(resolveAppPort({}), 47832);
+  assert.equal(resolveAppPort({ NOWPLAYING_PORT: "52001" }), 52001);
+  for (const bad of ["80", "70000", "abc", "3000.5"]) assert.throws(() => resolveAppPort({ NOWPLAYING_PORT: bad }), /NOWPLAYING_PORT/);
+});
+
+test("the app serves a small home page at / instead of Not Found", async () => {
+  const { createCardHandler } = await import("../src/http-handler.js");
+  const handle = createCardHandler({ resolveCard: async () => "<svg/>" });
+  const home = await handle({ method: "GET", url: "/" });
+  assert.equal(home.status, 200);
+  assert.equal(home.page, true);
+  assert.match(home.body, /NowPlaying is running/);
+  assert.match(home.body, /href="\/card\.svg"/);
+});

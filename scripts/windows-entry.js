@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
-import { StartupError, startAppFromConfig } from "../src/app-config.js";
+import { StartupError, resolveAppPort, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
@@ -135,7 +135,7 @@ async function openSetupWindow() {
 
 async function startFromWizardConfig(configFile) {
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
-  const app = await startAppFromConfig({ configFile, credentialStore });
+  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort() });
   console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }

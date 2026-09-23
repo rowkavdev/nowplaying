@@ -17,7 +17,7 @@ export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 
-export function createHttpServer({ handler, host = "127.0.0.1", port = 3000, shutdownMs = 10000, maxBodyBytes = 16 * 1024 } = {}) {
+export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024 } = {}) {
   if (typeof handler !== "function") throw new TypeError("handler: expected a function");
   if (!isLoopbackHost(host)) throw new TypeError("host: expected a loopback address");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("port must be an integer from 0 to 65535");

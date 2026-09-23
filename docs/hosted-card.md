@@ -50,7 +50,7 @@ How to read the result:
 Use `/healthz` for the process liveness check. Example container check:
 
 ```sh
-wget -qO- http://127.0.0.1:3000/healthz | grep -qx ok
+wget -qO- http://127.0.0.1:47832/healthz | grep -qx ok
 ```
 
 This proves that the HTTP process can answer, not that the media server is currently reachable. Alert separately on repeated card 503 responses.

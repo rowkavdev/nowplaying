@@ -56,7 +56,7 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 }
 
 // Starts the first-run wizard on a loopback-only port and returns its URL.
-// Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
+// Port 0 lets the OS pick a free port so a busy app port never blocks setup.
 // `startup` (optional) manages "Start with Windows": { isEnabled(), setEnabled(bool) }.
 // Without it the wizard doesn't offer the choice.
 export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, startup, fetchImpl } = {}) {

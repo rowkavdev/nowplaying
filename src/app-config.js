@@ -114,7 +114,21 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop() });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = 3000, fetchImpl = fetch, discord: discordOptions = {} } = {}) {
+// 3000 clashes with most dev servers, so the local app uses a rarely used port.
+// Override with NOWPLAYING_PORT (see resolveAppPort).
+export const DEFAULT_APP_PORT = 47832;
+
+export function resolveAppPort(env = process.env) {
+  const raw = env?.NOWPLAYING_PORT;
+  if (raw === undefined || raw === "") return DEFAULT_APP_PORT;
+  const port = Number(raw);
+  if (!/^\d{1,5}$/.test(String(raw)) || port < 1024 || port > 65535) {
+    throw new StartupError("CONFIG_INVALID", "NOWPLAYING_PORT must be a number from 1024 to 65535.");
+  }
+  return port;
+}
+
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {} } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
