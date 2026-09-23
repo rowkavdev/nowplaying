@@ -87,7 +87,7 @@ jobs:
           sort -t$'\t' -k1,1n -k2,2nr ranked-changes.tsv | awk -F '\t' '!seen[$3]++' | head -10 > top-changes.tsv
           {
             # shellcheck disable=SC2016 # Markdown backticks are intentional.
-            printf 'Automated development build from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
+            printf '**Dev build #%s** (`%s`), built from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "$GITHUB_RUN_NUMBER" "$DEV_VERSION" "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
             printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing.\n\n' "$baseline_label"
             printf "## What's Changed\n\n"
             while IFS=$'\t' read -r rank stats key sha subject; do
@@ -114,7 +114,7 @@ jobs:
           set -euo pipefail
           git tag -f dev "$GITHUB_SHA"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev
-          title="nowplaying development build ${DEV_VERSION}"
+          title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
           if gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload dev --repo "$GITHUB_REPOSITORY" --clobber dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
             # Drop assets from older builds (file names carry the version).
