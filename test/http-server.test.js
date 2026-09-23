@@ -221,3 +221,19 @@ test("the app serves a small home page at / instead of Not Found", async () => {
   assert.match(home.body, /NowPlaying is running/);
   assert.match(home.body, /href="\/card\.svg"/);
 });
+
+test("refuses websocket upgrades", async () => {
+  const { request } = await import("node:http");
+  const app = createHttpServer({ port: 0, handler: async () => ({ status: 200, headers: {}, body: "ok" }) });
+  const { port } = await app.listen();
+  try {
+    const outcome = await new Promise((resolve) => {
+      const req = request({ host: "127.0.0.1", port, path: "/", headers: { Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==", "Sec-WebSocket-Version": "13" } });
+      req.on("upgrade", () => resolve("upgraded"));
+      req.on("response", (res) => { res.resume(); resolve(res.statusCode); });
+      req.on("error", () => resolve("closed"));
+      req.end();
+    });
+    assert.notEqual(outcome, "upgraded");
+  } finally { await app.close(); }
+});

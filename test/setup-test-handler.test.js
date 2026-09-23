@@ -100,3 +100,29 @@ test("startSetupApp serves the connection test when a credential store is suppli
     assert.equal((await response.json()).status, "not_signed_in");
   } finally { await app.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test("rate-limits tests so the endpoint can't hammer the media server", async () => {
+  let clock = 0;
+  const provider = providerThat(async () => ({ state: "idle" }));
+  const handler = createSetupTestHandler({ store: store({ provider: "jellyfin", account: ACCOUNT }), credentialStore: creds(), createProvider: provider.create, now: () => clock });
+  for (let i = 0; i < 10; i += 1) assert.equal((await post(handler)).status, 200);
+  const limited = await post(handler);
+  assert.equal(limited.status, 429);
+  assert.deepEqual(read(limited), { ok: false, status: "too_many_tests" });
+  assert.equal(provider.seen.length, 10);
+  clock += 60_000;
+  assert.equal((await post(handler)).status, 200);
+});
+
+test("runs one test at a time", async () => {
+  let release;
+  let calls = 0;
+  const provider = providerThat(() => (calls++ === 0 ? new Promise((resolve) => { release = () => resolve({ state: "idle" }); }) : Promise.resolve({ state: "idle" })));
+  const handler = createSetupTestHandler({ store: store({ provider: "jellyfin", account: ACCOUNT }), credentialStore: creds(), createProvider: provider.create });
+  const first = post(handler);
+  while (!release) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await post(handler)).status, 429);
+  release();
+  assert.equal((await first).status, 200);
+  assert.equal((await post(handler)).status, 200);
+});
