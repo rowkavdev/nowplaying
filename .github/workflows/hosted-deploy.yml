@@ -1,0 +1,60 @@
+name: Hosted card deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - hosted/**
+      - src/card.js
+      - .github/workflows/hosted-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy hosted card service to Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Test hosted service
+        run: node --test test/hosted-service.test.js test/hosted-http.test.js
+      - name: Pull Vercel project settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@59.25.4 pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@59.25.4 build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@59.25.4 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+      - name: Smoke test production domain
+        env:
+          BASE_URL: ${{ vars.HOSTED_BASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$BASE_URL"
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/healthz" | grep -qx ok
+          curl --fail --silent --show-error "$BASE_URL/api/card?id=AAAAAAAAAAAAAAAAAAAAAA" | grep -q 'NOT PLAYING'
