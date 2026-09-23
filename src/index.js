@@ -38,3 +38,6 @@ export { createAutoUpdater } from "./auto-updater.js";
 export { createAnalyticsStore } from "./analytics-store.js";
 export { createAnalyticsHandler } from "./analytics-handler.js";
 export { withCardAnalytics, createDiscordAnalytics } from "./analytics.js";
+export { createSetupDraftHandler } from "./setup-draft-handler.js";
+export { createSetupPageHandler } from "./setup-page-handler.js";
+export { startSetupApp, openSetupUrl, windowsSetupDraftPath } from "./setup-app.js";
