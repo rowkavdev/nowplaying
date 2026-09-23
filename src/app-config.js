@@ -99,9 +99,9 @@ function defaultDiscordTransport(clientId) {
 
 // Discord runs only when setup turned it on and the build has an application
 // ID. Discord not running is fine: the client retries in the background.
-export function startDiscordFromConfig(config, provider, { env = process.env, createTransport = defaultDiscordTransport, intervalMs, now } = {}) {
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, intervalMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {} });
-  const clientId = resolveDiscordClientId({ env });
+  const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {} });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
   const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });

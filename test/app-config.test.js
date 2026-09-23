@@ -72,8 +72,9 @@ test("builds each provider from the stored sign-in, scoped to the signed-in user
 test("starts the card server from config and the credential store", async () => {
   const store = fakeStore({ "jellyfin:u1": "jf-token" });
   const fetchImpl = async () => Response.json([]);
-  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: store, port: 0, fetchImpl });
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: store, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
   try {
+    assert.equal(app.discord, "no_app_id");
     assert.deepEqual(store.reads, [{ provider: "jellyfin", identityId: "u1" }]);
     assert.match(app.url, /^http:\/\/127\.0\.0\.1:\d+$/);
     const health = await fetch(`${app.url}/healthz`);

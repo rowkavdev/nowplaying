@@ -1,7 +1,7 @@
 // The NowPlaying Discord application. The ID is public (Discord shows the app
-// name on profiles) and ships in the build. Empty until the app is registered;
-// NOWPLAYING_DISCORD_CLIENT_ID can supply one for testing.
-export const NOWPLAYING_DISCORD_CLIENT_ID = "";
+// name on profiles) and ships in the build. NOWPLAYING_DISCORD_CLIENT_ID can
+// point a test build at a different app.
+export const NOWPLAYING_DISCORD_CLIENT_ID = "1552301957299839116";
 
 const APP_ID = /^\d{17,20}$/;
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createDiscordPresenceLoop } from "../src/discord-presence.js";
-import { resolveDiscordClientId } from "../src/discord-app.js";
+import { NOWPLAYING_DISCORD_CLIENT_ID, resolveDiscordClientId } from "../src/discord-app.js";
 import { startDiscordFromConfig } from "../src/app-config.js";
 
 const playing = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1000, durationMs: 60_000, updatedAt: "2026-09-23T12:00:00.000Z" };
@@ -74,6 +74,8 @@ test("rejects bad options", () => {
 });
 
 test("resolveDiscordClientId uses a valid override or the built-in ID", () => {
+  assert.equal(resolveDiscordClientId({ env: {} }), NOWPLAYING_DISCORD_CLIENT_ID);
+  assert.match(NOWPLAYING_DISCORD_CLIENT_ID, /^\d{17,20}$/);
   assert.equal(resolveDiscordClientId({ env: {}, builtIn: "" }), null);
   assert.equal(resolveDiscordClientId({ env: {}, builtIn: "123456789012345678" }), "123456789012345678");
   assert.equal(resolveDiscordClientId({ env: { NOWPLAYING_DISCORD_CLIENT_ID: " 223456789012345678 " }, builtIn: "" }), "223456789012345678");
@@ -83,7 +85,7 @@ test("resolveDiscordClientId uses a valid override or the built-in ID", () => {
 test("startDiscordFromConfig respects setup and the app ID", async () => {
   const provider = { getPresence: async () => playing };
   assert.equal(startDiscordFromConfig({ discord: { enabled: false } }, provider, { env: {} }).status, "off");
-  assert.equal(startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, provider, { env: {} }).status, "no_app_id");
+  assert.equal(startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, provider, { env: {}, builtInClientId: "" }).status, "no_app_id");
 
   const calls = [];
   const transport = { connect: async () => calls.push("connect"), setActivity: async (a) => calls.push(["set", a]), clearActivity: async () => calls.push("clear"), close: async () => calls.push("close") };
