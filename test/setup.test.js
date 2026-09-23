@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { advanceSetupDraft, createSetupDraft, serializeSetupDraft } from "../src/setup.js";
+import { advanceSetupDraft, createSetupDraft, previousSetupDraft, serializeSetupDraft } from "../src/setup.js";
 
 test("starts with privacy-first, testable defaults", () => {
   assert.deepEqual(createSetupDraft(), {
@@ -28,4 +28,25 @@ test("serialized setup state never accepts credentials", () => {
 test("rejects invalid provider and step values", () => {
   assert.throws(() => createSetupDraft({ provider: "other" }), /provider is invalid/);
   assert.throws(() => createSetupDraft({ step: "terminal" }), /step is invalid/);
+});
+
+
+test("round-trips a draft before a provider is chosen", () => {
+  const welcome = createSetupDraft();
+  assert.deepEqual(createSetupDraft(welcome), welcome);
+  assert.equal(advanceSetupDraft(welcome).step, "provider");
+  assert.deepEqual(createSetupDraft(JSON.parse(serializeSetupDraft(welcome))), welcome);
+});
+
+test("steps back without losing choices and stops at welcome", () => {
+  const discord = advanceSetupDraft(advanceSetupDraft(createSetupDraft()), { provider: "emby" });
+  const back = previousSetupDraft(discord);
+  assert.equal(back.step, "provider");
+  assert.equal(back.provider, "emby");
+  assert.equal(previousSetupDraft(createSetupDraft()).step, "welcome");
+});
+
+test("rejects invalid Discord choices", () => {
+  assert.throws(() => createSetupDraft({ discordEnabled: "yes" }), /discordEnabled is invalid/);
+  assert.throws(() => createSetupDraft({ discordIdleBehavior: "explode" }), /discordIdleBehavior is invalid/);
 });
