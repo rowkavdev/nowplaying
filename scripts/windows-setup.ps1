@@ -41,6 +41,7 @@ $TestMessages = @{
   credential_unavailable = 'Your saved sign-in is missing from Windows Credential Manager. Sign in again.'
   invalid_configuration = 'The saved details look wrong. Sign in again.'
   not_signed_in = 'Sign in first, then test the connection.'
+  too_many_tests = 'Too many tests in a row. Wait a few seconds and try again.'
   user_mismatch = 'Your server says this sign-in belongs to a different user. Sign in again with the account you play on.'
 }
 $script:TestResult = $null

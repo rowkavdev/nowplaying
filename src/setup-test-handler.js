@@ -9,7 +9,15 @@ import { checkProviderConnection } from "./setup-connection.js";
 
 const PATH = "/api/setup/test";
 
-export function createSetupTestHandler({ store, credentialStore, fetchImpl = fetch, createProvider = createProviderFromConfig } = {}) {
+// Each test calls the user's media server, so a page (or anything else that
+// can reach loopback) can't use this endpoint to hammer it: one test at a
+// time, and at most RATE_LIMIT tests per RATE_WINDOW_MS.
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
+
+export function createSetupTestHandler({ store, credentialStore, fetchImpl = fetch, createProvider = createProviderFromConfig, now = Date.now } = {}) {
+  let running = false;
+  let recent = [];
   if (typeof store?.load !== "function") throw new TypeError("store.load is required");
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
 
@@ -40,10 +48,17 @@ export function createSetupTestHandler({ store, credentialStore, fetchImpl = fet
     if (url.pathname !== PATH) return null;
     if ((request.method || "GET") !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "POST" });
     if (url.search) return json(400, { error: "invalid_request" });
+    const time = now();
+    recent = recent.filter((at) => time - at < RATE_WINDOW_MS);
+    if (running || recent.length >= RATE_LIMIT) return json(429, { ok: false, status: "too_many_tests" }, { "Retry-After": "10" });
+    recent.push(time);
+    running = true;
     try {
       return await test();
     } catch {
       return json(500, { error: "test_failed" });
+    } finally {
+      running = false;
     }
   };
 }
