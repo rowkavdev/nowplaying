@@ -30,6 +30,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 - Unknown fields are rejected, so a client bug can't upload extra data.
 - Body limit 2 KB, text fields 200 characters.
 - `seq` must go up for each device; replays and out-of-order updates get `409`.
+- Each device can send 30 updates a minute; more get `429`. The app sends on change plus a 4-minute heartbeat, so this only stops runaway clients.
 - `observedAt` must be within 2 minutes of server time.
 - `state: "idle"` clears the card. Any other state expires after 10 minutes without an update, and the card falls back to "Not playing".
 - Only send fields the user enabled for the card. Discord presence stays local and never goes through this service.
