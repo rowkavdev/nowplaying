@@ -3,7 +3,9 @@
 # shared with the browser fallback and survives closing the window.
 param(
   [Parameter(Mandatory = $true)][string]$Url,
-  [switch]$SelfTest
+  [switch]$SelfTest,
+  [switch]$VisibilityProbe,
+  [switch]$ProbeWithoutShowFix
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,6 +15,11 @@ $Base = $Url.Substring(0, $Url.Length - '/setup'.Length)
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -Namespace NowPlaying -Name Win32 -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+'@
 
 $Steps = @('welcome', 'provider', 'signin', 'discord', 'review', 'complete')
 $StepLabels = @{ welcome = 'Welcome'; provider = 'Media server'; signin = 'Sign in'; discord = 'Discord'; review = 'Review'; complete = 'Done' }
@@ -340,6 +347,34 @@ if ($SelfTest) {
   foreach ($i in 1..2) { & $onNext; $seen += $script:Draft.step }
   if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text) ($script:LastError)" }
   [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName; startWithWindows = $script:Draft.startWithWindows } | ConvertTo-Json -Compress))
+  $form.Dispose()
+  exit 0
+}
+
+# The app starts this script with windowsHide so PowerShell's console stays
+# hidden. That also starts the process with SW_HIDE, which Windows applies to
+# the process's first ShowWindow call - the setup form itself - leaving an
+# invisible dialog. Spend that first call on the not-yet-shown form, then show
+# it normally and bring it to the front (a background process can't take focus
+# on its own).
+if (-not $ProbeWithoutShowFix) { [void][NowPlaying.Win32]::ShowWindow($form.Handle, 0) }
+$form.add_Shown({
+  $form.TopMost = $true
+  $form.Activate()
+  [void][NowPlaying.Win32]::SetForegroundWindow($form.Handle)
+  $form.TopMost = $false
+})
+
+if ($VisibilityProbe) {
+  # CI check: show the real window the way the app launches it, confirm Windows
+  # reports it visible, then close.
+  $script:ProbeVisible = $false
+  $timer = [System.Windows.Forms.Timer]::new()
+  $timer.Interval = 500
+  $timer.add_Tick({ $timer.Stop(); $script:ProbeVisible = [NowPlaying.Win32]::IsWindowVisible($form.Handle); $form.Close() })
+  $form.add_Shown({ $timer.Start() })
+  [void]$form.ShowDialog()
+  [Console]::Out.Write((@{ visible = [bool]$script:ProbeVisible } | ConvertTo-Json -Compress))
   $form.Dispose()
   exit 0
 }

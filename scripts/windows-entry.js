@@ -113,8 +113,9 @@ async function startSetup() {
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
   const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
   // "Start with Windows" is offered only from the installed/portable bundle,
-  // where nowplaying.exe sits next to the app folder.
-  const launcher = resolve("nowplaying.exe");
+  // where the launchers sit next to the app folder. The shortcut uses the
+  // no-console launcher when the bundle has it.
+  const launcher = existsSync(resolve("nowplayingw.exe")) ? resolve("nowplayingw.exe") : resolve("nowplaying.exe");
   const startup = process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
     ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
     : undefined;
