@@ -36,13 +36,12 @@ jobs:
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)" | Add-Content dist/windows/SHA256SUMS
           }
-      - name: Choose next patch development version
+      - name: Name this development build
         shell: bash
         run: |
           current=$(node -p "require('./package.json').version")
           IFS=. read -r major minor patch <<<"$current"
-          tag="v${major}.${minor}.$((patch + 1))-dev.${GITHUB_RUN_NUMBER}"
-          echo "DEV_TAG=$tag" >> "$GITHUB_ENV"
+          echo "DEV_VERSION=${major}.${minor}.$((patch + 1))-dev+${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - name: Build cumulative development release notes
         shell: bash
         env:
@@ -95,13 +94,31 @@ jobs:
               fi
             done < top-changes.tsv
             if (( total > 10 )); then printf '\nShowing 10 of %s changes. See Full Changelog for all changes.\n' "$total"; fi
-            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$DEV_TAG"
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$GITHUB_SHA"
           } > development-release-notes.md
-      - name: Publish immutable development pre-release
+      # One moving pre-release: the "dev" tag and its release are updated in place
+      # on every push to main, so the releases page shows a single development
+      # build instead of one per merge. It is never marked Latest.
+      - name: Update the development pre-release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git tag "$DEV_TAG" "$GITHUB_SHA"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$DEV_TAG"
-          gh release create "$DEV_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --title "nowplaying ${DEV_TAG#v}" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          set -euo pipefail
+          git tag -f dev "$GITHUB_SHA"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev
+          title="nowplaying development build ${DEV_VERSION}"
+          if gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload dev --repo "$GITHUB_REPOSITORY" --clobber dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+            # Drop assets from older builds (file names carry the version).
+            keep=$(cd dist/windows && ls -1 ./*.exe ./*.zip SHA256SUMS | sed 's|^\./||')
+            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > current-assets.txt
+            while IFS= read -r asset; do
+              if [[ -n "$asset" ]] && ! grep -qxF "$asset" <<<"$keep"; then
+                gh release delete-asset dev "$asset" --repo "$GITHUB_REPOSITORY" --yes
+              fi
+            done < current-assets.txt
+            gh release edit dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "$title" --notes-file development-release-notes.md
+          else
+            gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md dist/windows/*.exe dist/windows/*.zip dist/windows/SHA256SUMS
+          fi
