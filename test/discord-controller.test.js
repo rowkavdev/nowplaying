@@ -66,3 +66,41 @@ test("reports deferred publish without changing the preview", async () => {
 test("requires the resilient Discord client contract", () => {
   assert.throws(() => createDiscordController(), /client.publish is required/);
 });
+
+
+test("publishes a resolved public artwork URL and reports only strategy", async () => {
+  const calls = [];
+  const controller = createDiscordController({
+    client: { publish: async (activity) => { calls.push(activity); return true; } },
+    settings: { timestamps: "none" },
+    artwork: { resolve: async () => ({ image: "https://art.example.com/d/abc", strategy: "proxy", failure: "private_host" }) },
+  });
+  const result = await controller.publish(playing);
+  assert.equal(calls[0].largeImage, "https://art.example.com/d/abc");
+  assert.deepEqual(result.artwork, { strategy: "proxy", failure: "private_host" });
+  assert.equal(controller.preview(playing).largeImage, "media");
+});
+
+test("keeps the configured asset on fallback or resolver failure", async () => {
+  const calls = [];
+  const client = { publish: async (activity) => { calls.push(activity); return true; } };
+  const fallback = createDiscordController({ client, settings: { largeImage: "custom" }, artwork: { resolve: async () => ({ image: "media", strategy: "fallback", failure: "lookup_miss" }) } });
+  assert.equal((await fallback.publish(playing)).activity.largeImage, "custom");
+  const broken = createDiscordController({ client, artwork: { resolve: async () => { throw new Error("http://10.0.0.2 refused"); } } });
+  const result = await broken.publish(playing);
+  assert.equal(result.activity.largeImage, "media");
+  assert.deepEqual(result.artwork, { strategy: "fallback", failure: "resolver_error" });
+  assert.doesNotMatch(JSON.stringify(result), /10\.0\.0\.2/);
+});
+
+test("does not resolve artwork when the activity is cleared", async () => {
+  let resolved = 0;
+  const controller = createDiscordController({
+    client: { publish: async () => true },
+    artwork: { resolve: async () => { resolved += 1; return { image: "https://a.example.com/x", strategy: "provider" }; } },
+  });
+  const result = await controller.publish({ state: "idle", kind: "track", updatedAt: "2026-09-22T12:00:30.000Z" });
+  assert.equal(result.activity, null);
+  assert.equal(resolved, 0);
+  assert.throws(() => createDiscordController({ client: { publish: async () => true }, artwork: {} }), /artwork.resolve is required/);
+});
