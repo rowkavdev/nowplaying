@@ -109,6 +109,22 @@ Now-playing data can reveal titles, users, artwork and server activity. Treat it
 
 Report security problems privately rather than opening a public issue.
 
+## Verifying downloads
+
+Every Windows download comes with a `SHA256SUMS` file. Check that the hash of the file you downloaded matches its line:
+
+```powershell
+Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
+```
+
+Once the repository is public, builds also get GitHub build provenance, a signed record of which workflow and commit produced each file. Check it with the [GitHub CLI](https://cli.github.com/):
+
+```sh
+gh attestation verify nowplaying-dev-windows-x64-setup.exe --repo rowkav09/nowplaying
+```
+
+The builds are not code-signed yet, so Windows may still show a SmartScreen warning.
+
 ## Project structure
 
 ```text
