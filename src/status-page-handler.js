@@ -103,7 +103,7 @@ export function createStatusPageHandler({ status, fallback } = {}) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
     const asset = assets[url.pathname];
-    const api = url.pathname === "/api/status" || url.pathname === "/api/diagnostics";
+    const api = url.pathname === "/api/status" || url.pathname === "/api/diagnostics" || url.pathname === "/api/tray";
     if (!asset && !api) return fallback(request);
     if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
     if (asset) {
@@ -114,6 +114,10 @@ export function createStatusPageHandler({ status, fallback } = {}) {
     const site = header(request?.headers, "sec-fetch-site");
     if (site !== undefined && !SAFE_FETCH_SITES.has(site)) return response(403, "Forbidden");
     await status.refresh();
+    if (url.pathname === "/api/tray") {
+      if (typeof status.tray !== "function") return response(404, "Not Found");
+      return response(200, method === "HEAD" ? "" : JSON.stringify(status.tray()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    }
     if (url.pathname === "/api/diagnostics") {
       if (typeof status.diagnostics !== "function") return response(404, "Not Found");
       return response(200, method === "HEAD" ? "" : `${JSON.stringify(status.diagnostics(), null, 2)}\n`, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="nowplaying-diagnostics.json"' });

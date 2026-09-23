@@ -167,3 +167,42 @@ test("status and diagnostics show validated build details (#119)", () => {
   assert.equal(broken.snapshot().build, null);
   assert.equal(broken.diagnostics().build, null);
 });
+
+test("tray line is short, private and follows the app's health (#121)", async () => {
+  let t = 1_000_000;
+  let discordState = { enabled: true, state: "ready" };
+  const status = createAppStatus({ config, now: () => t });
+  status.setDiscord(() => discordState);
+  assert.deepEqual(status.tray(), { status: "starting", action: null, text: "NowPlaying: starting..." });
+  let fail = false;
+  const provider = status.wrapProvider({ getPresence: async () => { if (fail) { const e = new Error("x"); e.status = 401; throw e; } return { state: "playing", title: "Secret Song", subtitle: "Artist" }; } });
+  await provider.getPresence();
+  assert.equal(status.tray().text, "NowPlaying: working");
+  discordState = { enabled: true, state: "disconnected" };
+  assert.equal(status.tray().status, "healthy");
+  discordState = { enabled: true, state: "failed" };
+  assert.equal(status.tray().text, "NowPlaying: Discord needs attention");
+  discordState = { enabled: false, state: "off" };
+  t += 10 * 60_000;
+  assert.equal(status.tray().text, "NowPlaying: no update from the server lately");
+  fail = true;
+  await assert.rejects(provider.getPresence());
+  const line = status.tray();
+  assert.deepEqual(line, { status: "degraded", action: "test_provider_connection", text: "NowPlaying: sign-in rejected, run setup" });
+  for (const value of [status.tray(), line]) {
+    assert.ok(value.text.length <= 63);
+    assert.equal(/Secret|Rowan|192\.168/.test(JSON.stringify(value)), false);
+  }
+});
+
+test("tray endpoint serves the same line", async () => {
+  const status = createAppStatus({ config });
+  const handle = createStatusPageHandler({ status, fallback: async () => ({ status: 404, headers: {}, body: "" }) });
+  const res = await handle({ method: "GET", url: "/api/tray" });
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).text, "NowPlaying: starting...");
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "cross-site" } })).status, 403);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "same-site" } })).status, 403);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "same-origin" } })).status, 200);
+  assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "none" } })).status, 200);
+});

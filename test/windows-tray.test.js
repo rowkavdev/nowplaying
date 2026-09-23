@@ -18,11 +18,11 @@ function selfTest(scriptPath, extra = []) {
 
 test("tray menu offers Run setup again when the app can restart", windows, () => {
   const result = selfTest(SCRIPT, ["-CanRunSetup"]);
-  assert.deepEqual(result.items, ["Open dashboard", "Run setup again", "Open log folder", "", "Quit NowPlaying"]);
+  assert.deepEqual(result.items, ["NowPlaying: starting...", "", "Open dashboard", "Run setup again", "Open log folder", "", "Quit NowPlaying"]);
 });
 
 test("tray menu hides Run setup again otherwise", windows, () => {
-  assert.deepEqual(selfTest(SCRIPT).items, ["Open dashboard", "Open log folder", "", "Quit NowPlaying"]);
+  assert.deepEqual(selfTest(SCRIPT).items, ["NowPlaying: starting...", "", "Open dashboard", "Open log folder", "", "Quit NowPlaying"]);
 });
 
 test("tray finds the icon in the bundle layout (app\\scripts next to assets)", windows, async () => {

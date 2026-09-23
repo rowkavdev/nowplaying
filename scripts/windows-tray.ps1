@@ -27,6 +27,10 @@ $notify.Icon = [System.Drawing.Icon]::new((Resolve-Path -LiteralPath $iconPath))
 $notify.Visible = -not $SelfTest
 
 $menu = [System.Windows.Forms.ContextMenuStrip]::new()
+# Health line (#121): the app's /api/tray gives a short, private summary.
+$statusItem = $menu.Items.Add('NowPlaying: starting...')
+$statusItem.Enabled = $false
+$menu.Items.Add('-') | Out-Null
 $open = $menu.Items.Add('Open dashboard')
 $open.add_Click({ Start-Process $DashboardUrl })
 if ($CanRunSetup) {
@@ -54,6 +58,23 @@ if ($SelfTest) {
   exit 0
 }
 
+$trayUrl = $DashboardUrl.TrimEnd('/') + '/api/tray'
+function Update-TrayHealth {
+  $line = 'NowPlaying: not responding'
+  try {
+    $health = Invoke-RestMethod -Uri $trayUrl -TimeoutSec 2 -UseBasicParsing
+    if ($health.text -is [string] -and $health.text.Length -gt 0) { $line = $health.text }
+  } catch { }
+  if ($line.Length -gt 63) { $line = $line.Substring(0, 63) }
+  $statusItem.Text = $line
+  $notify.Text = $line
+}
+$timer = [System.Windows.Forms.Timer]::new()
+$timer.Interval = 15000
+$timer.add_Tick({ Update-TrayHealth })
+$timer.Start()
+Update-TrayHealth
+
 try { [System.Windows.Forms.Application]::Run() }
-finally { $notify.Visible = $false; $notify.Dispose(); $menu.Dispose() }
+finally { $timer.Stop(); $timer.Dispose(); $notify.Visible = $false; $notify.Dispose(); $menu.Dispose() }
 exit $script:ExitCode

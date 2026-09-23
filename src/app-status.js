@@ -1,6 +1,7 @@
 import { classifyFailure } from "./resilient-card.js";
 import { createDiagnosticRecord } from "./diagnostics.js";
 import { createBuildProvenance } from "./build-provenance.js";
+import { createTrayHealth } from "./tray-health.js";
 
 const PROVIDER_LABELS = Object.freeze({ jellyfin: "Jellyfin", emby: "Emby", plex: "Plex", navidrome: "Navidrome" });
 const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", unreachable: "unreachable", timeout: "unreachable", error: "error" });
@@ -101,7 +102,29 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     });
   }
 
-  return Object.freeze({ wrapProvider, setDiscord, setHosted, refresh, snapshot, diagnostics });
+  // Short, privacy-safe line for the tray tooltip and menu (#121): no track,
+  // user name or address. Windows caps tooltips at 63 characters.
+  function tray() {
+    const s = snapshot();
+    const provider = s.server.state === "error" ? "unreachable" : s.server.state;
+    const discordOutput = !s.discord.enabled ? "disabled" : DISCORD_OUTPUT[s.discord.state] ?? "starting";
+    const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, lastSuccessfulPollAt: lastOkAt, now: now() });
+    return Object.freeze({ status: health.status, action: health.action, text: trayText(health, s) });
+  }
+
+  return Object.freeze({ wrapProvider, setDiscord, setHosted, refresh, snapshot, diagnostics, tray });
+}
+
+const DISCORD_OUTPUT = Object.freeze({ ready: "healthy", disconnected: "disabled", off: "disabled", no_app_id: "disabled", degraded: "failed", failed: "failed", closed: "failed" });
+
+function trayText(health, s) {
+  if (health.status === "healthy") return "NowPlaying: working";
+  if (health.status === "starting") return "NowPlaying: starting...";
+  if (health.status === "stopped") return "NowPlaying: stopped";
+  if (s.server.state === "authentication_failed") return "NowPlaying: sign-in rejected, run setup";
+  if (s.server.state === "unreachable" || s.server.state === "error") return "NowPlaying: can't reach your server";
+  if (health.stale) return "NowPlaying: no update from the server lately";
+  return "NowPlaying: Discord needs attention";
 }
 
 function buildLabel(value) {
