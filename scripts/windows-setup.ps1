@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+trap { [Console]::Error.WriteLine("windows-setup.ps1 line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"); exit 1 }
 if ($Url -notmatch '^http://127\.0\.0\.1:([0-9]{1,5})/setup$') { throw 'Setup URL must be a loopback /setup URL.' }
 $Base = $Url.Substring(0, $Url.Length - '/setup'.Length)
 
@@ -152,7 +153,7 @@ function Send-Step([string]$Method, $Body) {
   $errorLabel.Text = ''
   $form.UseWaitCursor = $true
   try { $script:Draft = (Invoke-Setup $Method '/api/setup/draft' $Body).draft }
-  catch { $errorLabel.Text = "Couldn't save that step. Check NowPlaying is still running and try again." }
+  catch { $script:LastError = $_.Exception.Message; $errorLabel.Text = "Couldn't save that step. Check NowPlaying is still running and try again." }
   finally { $form.UseWaitCursor = $false }
   Show-Step
 }
@@ -177,7 +178,7 @@ if ($SelfTest) {
   & $onBack
   $seen += $script:Draft.step
   foreach ($i in 1..3) { & $onNext; $seen += $script:Draft.step }
-  if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text)" }
+  if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text) ($script:LastError)" }
   [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider } | ConvertTo-Json -Compress))
   $form.Dispose()
   exit 0
