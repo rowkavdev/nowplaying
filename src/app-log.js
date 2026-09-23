@@ -1,4 +1,4 @@
-import { mkdir, open, rename, rm } from "node:fs/promises";
+import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, win32 } from "node:path";
 
 const LEVELS = new Set(["info", "warn", "error"]);
@@ -31,20 +31,24 @@ export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } =
     const line = serializeLogEvent(event);
     if (Buffer.byteLength(line) > maxBytes) throw new Error("log entry exceeds maxBytes");
     await mkdir(dirname(file), { recursive: true });
-    // Size check and write go through one open handle, so the file checked is
-    // the file written (no stat-then-append race on the path).
-    let handle = await open(file, "a", 0o600);
+    // Rotate before the append that would overflow, deciding from the size
+    // seen on the same handle that performs the write. The handle is never
+    // reopened by path after a size check, so there is no check-then-use race.
+    const handle = await open(file, "a", 0o600);
+    let rotateFirst = false;
     try {
       const { size } = await handle.stat();
-      if (size > 0 && size + Buffer.byteLength(line) > maxBytes) {
-        await handle.close();
-        handle = null;
-        await rotate();
-        handle = await open(file, "a", 0o600);
-      }
-      await handle.appendFile(line, { encoding: "utf8" });
+      rotateFirst = size > 0 && size + Buffer.byteLength(line) > maxBytes;
+      if (!rotateFirst) await handle.appendFile(line, { encoding: "utf8" });
     } finally {
-      await handle?.close();
+      await handle.close();
+    }
+    if (rotateFirst) {
+      await rotate();
+      // "wx" refuses to follow a file that appeared after rotation (another
+      // writer got there first); in that case append to it instead.
+      try { await writeFile(file, line, { encoding: "utf8", mode: 0o600, flag: "wx" }); }
+      catch (error) { if (error.code !== "EEXIST") throw error; await writeFile(file, line, { encoding: "utf8", flag: "a" }); }
     }
   }
 
