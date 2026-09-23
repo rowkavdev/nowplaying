@@ -42,6 +42,8 @@ jobs:
         run: node --test test/windows-setup-ui.test.js
       - name: Start from the setup config (Credential Manager round trip)
         run: node --test test/windows-start-config.test.js
+      - name: Discord IPC over a named pipe
+        run: node --test test/discord-ipc.test.js
       - name: Attest published Windows bundles
         if: ${{ github.event_name == 'release' && github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
