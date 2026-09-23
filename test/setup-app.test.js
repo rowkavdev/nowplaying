@@ -13,7 +13,7 @@ test("builds the draft path under LOCALAPPDATA", () => {
 
 test("serves the wizard page and draft API together on a free loopback port", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
-  const app = await startSetupApp({ draftFile: join(dir, "draft.json") });
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json"), discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }] });
   try {
     assert.match(app.url, /^http:\/\/127\.0\.0\.1:\d+\/setup$/);
     const page = await fetch(app.url);
@@ -23,6 +23,8 @@ test("serves the wizard page and draft API together on a free loopback port", as
     const next = await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "next" }) });
     assert.equal((await next.json()).draft.step, "provider");
     assert.equal((await fetch(new URL("/other", app.url))).status, 404);
+    const found = await (await fetch(new URL("/api/setup/discover", app.url))).json();
+    assert.equal(found.servers[0].provider, "navidrome");
   } finally {
     await app.close();
   }
