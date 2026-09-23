@@ -6,6 +6,7 @@ import { createAppStatus } from "./app-status.js";
 import { createStatusPageHandler } from "./status-page-handler.js";
 import { createResilientCardResolver } from "./resilient-card.js";
 import { createSetupConfig } from "./setup-config.js";
+import { createConfigMigrationStore } from "./config-migration-store.js";
 import { createEmbyProvider } from "./providers/emby.js";
 import { createJellyfinProvider } from "./providers/jellyfin.js";
 import { createNavidromeProvider } from "./providers/navidrome.js";
@@ -71,7 +72,35 @@ export function parseAppConfig(text) {
   return config;
 }
 
+// Config schema version this build writes and reads. When it goes up, add a
+// migration for the old version below; the store backs the file up first
+// (config.json.backup-<time>) and only replaces it with a validated result.
+export const CONFIG_VERSION = 1;
+const CONFIG_MIGRATIONS = Object.freeze([
+  // 0 -> 1: no version-0 file was ever released.
+  () => { throw new Error("unsupported"); },
+]);
+
+export async function migrateAppConfig(file, { clock } = {}) {
+  const store = createConfigMigrationStore({
+    file,
+    currentVersion: CONFIG_VERSION,
+    migrations: CONFIG_MIGRATIONS,
+    validate: (document) => { parseAppConfig(JSON.stringify(document)); return document; },
+    ...(clock ? { clock } : {}),
+  });
+  try {
+    return await store.migrate();
+  } catch (error) {
+    if (error instanceof RangeError) throw new StartupError("CONFIG_TOO_NEW", "This config was saved by a newer NowPlaying. Update NowPlaying, or run `nowplaying.exe setup` to start again.");
+    // Anything else (malformed, unreadable, failed migration) is reported by
+    // loadAppConfig with the usual message; the file is left untouched.
+    return Object.freeze({ changed: false, status: "failed", backup: null });
+  }
+}
+
 export async function loadAppConfig(file) {
+  await migrateAppConfig(file);
   let text;
   try {
     text = await readFile(file, "utf8");

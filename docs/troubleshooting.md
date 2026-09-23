@@ -74,6 +74,16 @@ Discord Rich Presence is local. A server process running without a desktop sessi
 
 The updater is notify-only unless install behavior has been explicitly enabled.
 
+## Config backups and recovery
+
+NowPlaying keeps its settings in `config.json` (on Windows: `%LOCALAPPDATA%\nowplaying\config.json`). When a new version changes the config format, NowPlaying upgrades the file at start-up. Before it changes anything, it saves a copy next to it as `config.json.backup-<date and time>`. The new file only replaces the old one after it has been checked.
+
+- If the upgrade fails, the original file is left exactly as it was.
+- If the config was saved by a newer NowPlaying (for example after going back to an older version), the app won't start and says so, and the file is not changed. Update NowPlaying, or run `nowplaying.exe setup` to start again.
+- To go back to a backup: close NowPlaying, delete `config.json`, rename the backup you want to `config.json`, then start NowPlaying again.
+
+Backups never contain your sign-in. That stays in Windows Credential Manager.
+
 ## Safe diagnostic information
 
 The status page (the app's local address in your browser, ending in `/status`) has a **Copy diagnostics** button and a **Download** link under "Reporting a problem". The report has exactly these fields and nothing else:
