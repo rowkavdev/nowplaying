@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rowkavdev/nowplaying/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rowkavdev/nowplaying/actions/workflows/ci.yml)
 [![Dev build](https://github.com/rowkavdev/nowplaying/actions/workflows/beta.yml/badge.svg?branch=main)](https://github.com/rowkavdev/nowplaying/releases/tag/dev)
-[![Latest release](https://img.shields.io/github/v/release/rowkavdev/nowplaying?label=release)](https://github.com/rowkav09/nowplaying/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/rowkavdev/nowplaying?label=release)](https://github.com/rowkavdev/nowplaying/releases/latest)
 [![Last commit](https://img.shields.io/github/last-commit/rowkavdev/nowplaying)](https://github.com/rowkav09/nowplaying/commits/main)
 [![License](https://img.shields.io/github/license/rowkavdev/nowplaying)](LICENSE)
 
