@@ -30,7 +30,8 @@ export async function checkForUpdate({ currentVersion, repository, token, channe
 }
 
 function parseVersion(value) {
-  if (typeof value !== "string" || value.length > MAX_VERSION_LENGTH) throw new TypeError("version: expected semver");
+  if (typeof value !== "string") throw new TypeError("version: expected semver");
+  if (value.length > MAX_VERSION_LENGTH) throw new TypeError("version: expected semver (too long)");
   const match = VERSION_PATTERN.exec(value);
   if (!match) throw new TypeError("version: expected semver");
   const prerelease = match[4]?.split(".") ?? [];

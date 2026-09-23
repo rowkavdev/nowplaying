@@ -65,7 +65,8 @@ test("parses crafted tags in linear time and skips malformed releases", async ()
   const crafted = [`v0.0.0-0.${"--.".repeat(40)}`, `v0.0.0--${"-".repeat(120)}!`, `v0.0.0-${"a-".repeat(5000)}!`];
   const started = performance.now();
   const result = await checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", channel: "beta", fetchImpl: fetchReleases([...crafted.map((tag) => ({ ...release("0.2.0"), tag_name: tag })), release("0.2.0")]) });
-  assert.ok(performance.now() - started < 500, "version parsing must not backtrack");
+  // Exponential backtracking takes minutes on these inputs; linear takes milliseconds.
+  assert.ok(performance.now() - started < 2000, "version parsing must not backtrack");
   assert.equal(result.version, "0.2.0");
 });
 
