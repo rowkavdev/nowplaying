@@ -1,5 +1,5 @@
 import { appendFile, mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, win32 } from "node:path";
 
 const LEVELS = new Set(["info", "warn", "error"]);
 const COMPONENTS = new Set(["startup", "provider", "discord", "updater", "tray"]);
@@ -8,7 +8,7 @@ const STATUSES = new Set(["starting", "ok", "idle", "degraded", "failed", "stopp
 export function windowsLogPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
   if (!/^[A-Za-z0-9._-]+$/.test(appName)) throw new TypeError("appName is invalid");
-  return join(resolve(localAppData), appName, "logs", "nowplaying.log");
+  return win32.join(win32.resolve(localAppData), appName, "logs", "nowplaying.log");
 }
 
 export function serializeLogEvent({ time, level, component, status, code = null } = {}) {
