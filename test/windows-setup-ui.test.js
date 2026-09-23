@@ -18,8 +18,10 @@ test("native setup window walks every step, including sign-in, against the real 
     },
   };
   const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const startupApplied = [];
+  const startup = { isEnabled: async () => false, setEnabled: async (value) => { startupApplied.push(value); } };
   const app = await startSetupApp({
-    draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn,
+    draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn, startup,
     discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }],
   });
   try {
@@ -28,7 +30,8 @@ test("native setup window walks every step, including sign-in, against the real 
     assert.equal(code, 0, `${output}\n${errors}`);
     const result = JSON.parse(output);
     assert.deepEqual(result.steps, ["welcome", "provider", "signin", "signin", "discord", "review", "complete"]);
-    assert.deepEqual([result.provider, result.account], ["navidrome", "Self Test"]);
+    assert.deepEqual([result.provider, result.account, result.startWithWindows], ["navidrome", "Self Test", true]);
+    assert.deepEqual(startupApplied, [true]);
     assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "selftest" }, "nd-secret"]]);
     const draft = await (await fetch(new URL("/api/setup/draft", app.url))).json();
     assert.deepEqual([draft.draft.step, draft.draft.provider, draft.draft.account.id], ["complete", "navidrome", "selftest"]);

@@ -131,3 +131,52 @@ test("launches the native window through PowerShell without a shell", async () =
   const failing = () => { const child = new EventEmitter(); setImmediate(() => child.emit("error", new Error("ENOENT"))); return child; };
   await assert.rejects(runNativeSetup("http://127.0.0.1:1/setup", { scriptPath: "x\\windows-setup.ps1", spawnProcess: failing }), /ENOENT/);
 });
+
+test("Start with Windows shows the current state and Finish applies the choice", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const applied = [];
+  const startup = { isEnabled: async () => true, setEnabled: async (value) => { applied.push(value); } };
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json"), startup });
+  try {
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+    // Installer already added the shortcut: the box starts ticked.
+    assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.startWithWindows, true);
+    await post({ action: "next" });
+    await post({ action: "next", changes: { provider: "plex" } });
+    assert.equal((await post({ action: "next", changes: { startWithWindows: false } })).draft.step, "review");
+    assert.deepEqual(applied, []);
+    assert.equal((await post({ action: "next" })).draft.step, "complete");
+    assert.deepEqual(applied, [false]);
+    const reset = await (await fetch(new URL("/api/setup/draft", app.url), { method: "DELETE", headers: { "Content-Type": "application/json" } })).json();
+    assert.equal(reset.draft.startWithWindows, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a failed startup change keeps the wizard on review", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const startup = { isEnabled: async () => false, setEnabled: async () => { throw new Error("denied"); } };
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json"), startup });
+  try {
+    const post = (body) => fetch(new URL("/api/setup/draft", app.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+    await post({ action: "next" });
+    await post({ action: "next", changes: { provider: "plex" } });
+    await post({ action: "next", changes: { startWithWindows: true } });
+    assert.deepEqual(await post({ action: "next" }), [500, { error: "finish_failed" }]);
+    assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.step, "review");
+  } finally {
+    await app.close();
+  }
+});
+
+test("without startup support the choice is not offered", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json") });
+  try {
+    assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.startWithWindows, null);
+    await assert.rejects(startSetupApp({ draftFile: join(dir, "d2.json"), startup: { isEnabled: async () => false } }), /startup is invalid/);
+  } finally {
+    await app.close();
+  }
+});

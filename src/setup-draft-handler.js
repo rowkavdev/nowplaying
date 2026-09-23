@@ -2,7 +2,7 @@ import { SetupStepError, advanceSetupDraft, createSetupDraft, previousSetupDraft
 
 const PATH = "/api/setup/draft";
 const ACTIONS = new Set(["save", "next", "back"]);
-const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior"]);
+const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "startWithWindows"]);
 
 // onFinish runs when the review step is confirmed, before the draft moves to
 // "complete"; if it throws, the wizard stays on review so the user can retry.
@@ -23,7 +23,7 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
     }
     if (method === "DELETE") {
       await store.clear();
-      return json(200, { draft: createSetupDraft(), resumed: false, discarded: false });
+      return json(200, { draft: (await store.load()).draft, resumed: false, discarded: false });
     }
     if (method !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "GET, POST, DELETE" });
 

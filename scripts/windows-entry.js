@@ -7,6 +7,7 @@ import { StartupError, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
+import { createWindowsStartup } from "../src/windows-startup.js";
 
 const command = process.argv[2] ?? "help";
 
@@ -58,7 +59,13 @@ if (command === "--version" || command === "version") {
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
   const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
-  const setup = await startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version });
+  // "Start with Windows" is offered only from the installed/portable bundle,
+  // where nowplaying.exe sits next to the app folder.
+  const launcher = resolve("nowplaying.exe");
+  const startup = process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
+    ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
+    : undefined;
+  const setup = await startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup });
   const close = async () => { await setup.close(); };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);

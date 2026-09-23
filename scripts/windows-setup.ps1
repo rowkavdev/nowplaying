@@ -174,6 +174,7 @@ function Get-Changes {
     if ($control -is [System.Windows.Forms.RadioButton] -and $control.Checked) { $changes.provider = [string]$control.Tag }
     if ($control.Name -eq 'discordEnabled') { $changes.discordEnabled = [bool]$control.Checked }
     if ($control.Name -eq 'discordIdleBehavior' -and $control.SelectedItem) { $changes.discordIdleBehavior = [string]$control.SelectedItem.Key }
+    if ($control.Name -eq 'startWithWindows') { $changes.startWithWindows = [bool]$control.Checked }
   }
   $changes
 }
@@ -263,6 +264,11 @@ function Show-Step {
       foreach ($entry in $Idle.GetEnumerator()) { [void]$idleBox.Items.Add([pscustomobject]@{ Key = $entry.Key; Value = $entry.Value }) }
       $idleBox.SelectedIndex = [math]::Max(0, @($Idle.Keys).IndexOf([string]$script:Draft.discordIdleBehavior))
       $panel.Controls.Add($idleBox)
+      if ($null -ne $script:Draft.startWithWindows) {
+        $startup = [System.Windows.Forms.CheckBox]::new()
+        $startup.Name = 'startWithWindows'; $startup.Text = 'Start NowPlaying when I sign in to Windows'; $startup.AutoSize = $true; $startup.Checked = [bool]$script:Draft.startWithWindows
+        $panel.Controls.Add($startup)
+      }
     }
     'review' {
       $title.Text = 'Check your choices'
@@ -271,6 +277,7 @@ function Show-Step {
       $who = if ($script:Draft.account) { " (signed in as $($script:Draft.account.displayName))" } else { '' }
       $panel.Controls.Add((New-Text "Media server: $provider$who"))
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
+      if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
     }
     default {
       $title.Text = 'All set'
@@ -324,9 +331,15 @@ if ($SelfTest) {
   & $onNext
   & $onBack
   $seen += $script:Draft.step
-  foreach ($i in 1..3) { & $onNext; $seen += $script:Draft.step }
+  & $onNext; $seen += $script:Draft.step
+  $startupBox = @($panel.Controls | Where-Object { $_.Name -eq 'startWithWindows' })[0]
+  if ($null -ne $script:Draft.startWithWindows) {
+    if (-not $startupBox) { throw 'discord step has no Start with Windows choice' }
+    $startupBox.Checked = $true
+  } elseif ($startupBox) { throw 'Start with Windows must be hidden when it is not offered' }
+  foreach ($i in 1..2) { & $onNext; $seen += $script:Draft.step }
   if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text) ($script:LastError)" }
-  [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName } | ConvertTo-Json -Compress))
+  [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName; startWithWindows = $script:Draft.startWithWindows } | ConvertTo-Json -Compress))
   $form.Dispose()
   exit 0
 }

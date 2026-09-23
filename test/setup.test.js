@@ -10,6 +10,7 @@ test("starts with privacy-first, testable defaults", () => {
     account: null,
     discordEnabled: true,
     discordIdleBehavior: "clear",
+    startWithWindows: null,
   });
 });
 
