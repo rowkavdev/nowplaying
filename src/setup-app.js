@@ -4,6 +4,7 @@ import { createHttpServer } from "./http-server.js";
 import { createSetupDraftHandler } from "./setup-draft-handler.js";
 import { createSetupDraftStore } from "./setup-draft-store.js";
 import { createSetupPageHandler } from "./setup-page-handler.js";
+import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
@@ -13,10 +14,11 @@ export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } =
 
 // Starts the first-run wizard on a loopback-only port and returns its URL.
 // Port 0 lets the OS pick a free port so a busy 3000 never blocks setup.
-export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0 } = {}) {
+export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, discover } = {}) {
   const page = createSetupPageHandler();
   const draft = createSetupDraftHandler({ store: createSetupDraftStore({ file: draftFile }) });
-  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await draft(request)) });
+  const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
+  const app = createHttpServer({ host, port, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, close: () => app.close() });
