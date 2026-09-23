@@ -11,6 +11,10 @@ export function windowsLogPath({ localAppData, appName = "nowplaying" } = {}) {
   return win32.join(win32.resolve(localAppData), appName, "logs", "nowplaying.log");
 }
 
+export function windowsLogFolder(options = {}) {
+  return win32.dirname(windowsLogPath(options));
+}
+
 export function serializeLogEvent({ time, level, component, status, code = null } = {}) {
   if (!(time instanceof Date) || !Number.isFinite(time.getTime())) throw new TypeError("log time is invalid");
   if (!LEVELS.has(level) || !COMPONENTS.has(component) || !STATUSES.has(status)) throw new TypeError("log event is invalid");
