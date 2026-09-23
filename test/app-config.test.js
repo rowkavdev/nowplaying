@@ -120,3 +120,32 @@ test("a busy port is reported plainly", async () => {
     await new Promise((resolve) => blocker.close(resolve));
   }
 });
+
+for (const provider of ["jellyfin", "emby"]) {
+  test(`${provider}: follows the signed-in user by stable ID, not display name`, async () => {
+    const item = (name) => ({ Type: "Audio", Name: name, Artists: ["A"], Album: "B", RunTimeTicks: 1_000_000_000 });
+    let sessions = [];
+    const fetchImpl = async () => Response.json(sessions);
+    const config = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, provider, identity: { id: "a1b2c3d4-0000-0000-0000-000000000001", displayName: "Rowan" } }));
+    const app = createProviderFromConfig(config, "token", { fetchImpl });
+
+    // Two people called Rowan on a shared server: only ours shows.
+    sessions = [
+      { UserId: "ffff0000000000000000000000000002", UserName: "Rowan", NowPlayingItem: item("Theirs"), PlayState: { IsPaused: false } },
+      { UserId: "A1B2C3D4000000000000000000000001", UserName: "Rowan", NowPlayingItem: item("Mine"), PlayState: { IsPaused: false } },
+    ];
+    assert.equal((await app.getPresence()).title, "Mine");
+
+    // Renamed on the server: still tracked.
+    sessions = [{ UserId: "a1b2c3d4000000000000000000000001", UserName: "Rowan K", NowPlayingItem: item("Renamed"), PlayState: { IsPaused: false } }];
+    assert.equal((await app.getPresence()).title, "Renamed");
+
+    // Someone else took the old name, or our user was deleted: idle, never theirs.
+    sessions = [{ UserId: "ffff0000000000000000000000000002", UserName: "Rowan", NowPlayingItem: item("Theirs"), PlayState: { IsPaused: false } }];
+    assert.equal((await app.getPresence()).state, "idle");
+
+    // Sessions without a UserId never match.
+    sessions = [{ UserName: "Rowan", NowPlayingItem: item("No id"), PlayState: { IsPaused: false } }];
+    assert.equal((await app.getPresence()).state, "idle");
+  });
+}
