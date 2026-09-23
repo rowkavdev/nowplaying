@@ -58,3 +58,5 @@ jobs:
           test -n "$BASE_URL"
           curl --fail --silent --show-error --retry 5 --retry-delay 3 "$BASE_URL/healthz" | grep -qx ok
           curl --fail --silent --show-error "$BASE_URL/api/card?id=AAAAAAAAAAAAAAAAAAAAAA" | grep -q 'NOT PLAYING'
+          curl --fail --silent --show-error "$BASE_URL/" | grep -q 'nowplaying hosted cards'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/lib/service.js")" = 404
