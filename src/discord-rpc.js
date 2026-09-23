@@ -3,7 +3,12 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
   if (typeof createClient !== "function") throw new TypeError("createClient: expected an RPC client factory");
   let client;
 
+  // An RPC client whose socket Discord closed (Discord quit or restarted) is
+  // dropped so the next connect logs in again.
+  function dead() { return Boolean(client) && client.connected === false; }
+
   async function connect() {
+    if (dead()) await close().catch(() => {});
     if (client) return;
     const next = await createClient();
     if (!next || typeof next.login !== "function" || typeof next.setActivity !== "function" || typeof next.clearActivity !== "function") {
@@ -29,7 +34,7 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
     if (current && typeof current.destroy === "function") await current.destroy();
   }
 
-  return Object.freeze({ connect, setActivity, clearActivity, close });
+  return Object.freeze({ connect, setActivity, clearActivity, close, get connected() { return Boolean(client) && !dead(); } });
 }
 
 export function toRpcActivity(activity) {

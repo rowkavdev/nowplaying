@@ -39,3 +39,13 @@ test("deduplicates identical activities and throttles changed updates", async ()
   time=5000; assert.equal(await client.publish({details:"Two"}),true);
   assert.deepEqual(t.calls,["connect",["set",{details:"One",state:"Playing"}],["set",{details:"Two"}]]);
 });
+
+test("republishes an unchanged activity when the transport reports it lost Discord", async () => {
+  let up = true; const t = transport(); Object.defineProperty(t, "connected", { get: () => up });
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 0 });
+  assert.equal(await client.publish({ details: "Film" }), true);
+  assert.equal(await client.publish({ details: "Film" }), true);
+  up = false;
+  assert.equal(await client.publish({ details: "Film" }), true);
+  assert.deepEqual(t.calls, ["connect", ["set", { details: "Film" }], "connect", ["set", { details: "Film" }]]);
+});

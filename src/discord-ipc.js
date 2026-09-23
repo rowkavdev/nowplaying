@@ -148,6 +148,8 @@ export function createDiscordIpcClient({ paths = discordIpcPaths(), connectImpl 
   }
 
   return Object.freeze({
+    // False once Discord closes the socket, so callers know to log in again.
+    get connected() { return Boolean(socket); },
     login,
     setActivity: (activity) => command("SET_ACTIVITY", { pid, activity: toIpcActivity(activity) }),
     clearActivity: () => command("SET_ACTIVITY", { pid }),

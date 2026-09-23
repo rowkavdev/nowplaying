@@ -26,3 +26,19 @@ test("validates the application ID and client contract", async () => {
   const transport=createDiscordRpcTransport({clientId:"123456789012345678",createClient:async()=>({})});
   await assert.rejects(()=>transport.connect(),/expected login/);
 });
+
+test("logs in again after the RPC client loses Discord", async () => {
+  const made = [];
+  const transport = createDiscordRpcTransport({ clientId: "123456789012345678", createClient: async () => {
+    const rpc = { up: true, logins: 0, get connected() { return this.up; }, login: async () => { rpc.logins += 1; }, setActivity: async () => {}, clearActivity: async () => {}, destroy: async () => {} };
+    made.push(rpc); return rpc;
+  } });
+  await transport.connect();
+  assert.equal(transport.connected, true);
+  made[0].up = false;
+  assert.equal(transport.connected, false);
+  await transport.connect();
+  assert.equal(made.length, 2);
+  assert.equal(made[1].logins, 1);
+  assert.equal(transport.connected, true);
+});
