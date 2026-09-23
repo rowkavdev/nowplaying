@@ -1,13 +1,17 @@
+import { readBoundedBytes, timeoutSignal } from "./bounded-response.js";
+
+const MAX_RELEASES_BYTES = 4 * 1024 * 1024;
+const CHECK_TIMEOUT_MS = 30 * 1000;
 const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
 
-export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", fetchImpl = globalThis.fetch } = {}) {
+export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", fetchImpl = globalThis.fetch, timeoutMs = CHECK_TIMEOUT_MS } = {}) {
   const current = parseVersion(currentVersion);
   if (!["stable", "beta"].includes(channel)) throw new TypeError("channel: expected stable or beta");
   if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new TypeError("repository: expected owner/name");
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl: expected a function");
-  const response = await fetchImpl(`https://api.github.com/repos/${repository}/releases`, { headers: { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+  const response = await fetchImpl(`https://api.github.com/repos/${repository}/releases`, { headers: { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...signalOption(timeoutMs) });
   if (!response.ok) throw new Error(`update check failed (${response.status})`);
-  const releases = await response.json();
+  const releases = await readReleases(response);
   if (!Array.isArray(releases)) throw new TypeError("update check returned invalid releases");
   const candidates = releases.filter((release) => release && !release.draft && typeof release.tag_name === "string" && Boolean(release.prerelease) === (channel === "beta"))
     .map((release) => ({ release, version: parseVersion(release.tag_name) }))
@@ -45,4 +49,15 @@ function compareVersion(a, b) {
     return left < right ? -1 : 1;
   }
   return 0;
+}
+
+function signalOption(ms) {
+  const signal = timeoutSignal(ms);
+  return signal ? { signal } : {};
+}
+
+async function readReleases(response) {
+  if (!response.body && typeof response.arrayBuffer !== "function" && typeof response.text !== "function") return response.json();
+  const bytes = await readBoundedBytes(response, MAX_RELEASES_BYTES, "update check response");
+  try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new TypeError("update check returned invalid releases"); }
 }

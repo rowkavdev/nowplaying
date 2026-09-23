@@ -45,3 +45,21 @@ test("rejects followed redirects even if fetch returns success", async () => {
     : { ok: true, url: checksumUrl, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
   await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl }), /redirect was rejected/);
 });
+
+test("rejects an oversized archive before hashing it", async () => {
+  const fetchImpl = async (url) => url === assetUrl
+    ? { ok: true, url: assetUrl, headers: new Headers({ "content-length": String(101 * 1024 * 1024) }), arrayBuffer: async () => { throw new Error("must not buffer"); } }
+    : { ok: true, url: checksumUrl, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
+  await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl }), /update archive is too large/);
+});
+
+test("rejects an oversized checksum manifest", async () => {
+  await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl: fetchPair("x".repeat(65 * 1024)) }), /checksum manifest is too large/);
+});
+
+test("passes an abort signal so a stalled download times out", async () => {
+  let seen;
+  const fetchImpl = async (url, options) => { seen = options.signal; return fetchPair()(url, options); };
+  await downloadVerifiedUpdate({ update, fetchImpl });
+  assert.ok(seen instanceof AbortSignal);
+});

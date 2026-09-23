@@ -48,3 +48,15 @@ test("rejects missing assets and sanitized API failures", async () => {
   await assert.rejects(checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", fetchImpl: fetchReleases([], 403) }), /update check failed \(403\)/);
   await assert.rejects(checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", fetchImpl: fetchReleases([{ tag_name: "v0.2.0", prerelease: false, draft: false, assets: [] }]) }), /missing verified assets/);
 });
+
+test("caps the release list response and passes a timeout signal", async () => {
+  let seen;
+  const huge = { ok: true, status: 200, headers: new Headers({ "content-length": String(5 * 1024 * 1024) }), text: async () => { throw new Error("must not read"); } };
+  await assert.rejects(checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", fetchImpl: async (_url, options) => { seen = options.signal; return huge; } }), /update check response is too large/);
+  assert.ok(seen instanceof AbortSignal);
+});
+
+test("reports malformed release JSON as invalid releases", async () => {
+  const response = { ok: true, status: 200, text: async () => "{not json" };
+  await assert.rejects(checkForUpdate({ currentVersion: "0.1.0", repository: "x/y", fetchImpl: async () => response }), /invalid releases/);
+});
