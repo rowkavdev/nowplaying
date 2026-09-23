@@ -7,6 +7,8 @@ on:
       - "scripts/build-windows.ps1"
       - ".github/workflows/windows.yml"
       - "package*.json"
+      - "src/windows-*"
+      - "test/windows-*"
   workflow_dispatch:
   release:
     types: [published]
@@ -33,6 +35,8 @@ jobs:
       - name: Build and smoke-test EXE bundle
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Credential Manager round-trip
+        run: node --test test/windows-credential-adapter.test.js
       - name: Attest published Windows bundles
         if: ${{ github.event_name == 'release' && github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
