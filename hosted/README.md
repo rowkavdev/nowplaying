@@ -36,7 +36,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 
 ## Storage and counters
 
-State lives in Upstash Redis (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The only counters are aggregate totals: `np:stats:cards_rendered` and `np:stats:registrations`.
+State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The only counters are aggregate totals: `np:stats:cards_rendered` and `np:stats:registrations`.
 
 ## Deploy
 

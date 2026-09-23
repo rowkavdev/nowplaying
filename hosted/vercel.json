@@ -1,16 +1,31 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "fra1"
+  ],
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/card/:id.svg", "destination": "/api/card?id=:id" },
-    { "source": "/healthz", "destination": "/api/health" }
+    {
+      "source": "/card/:id.svg",
+      "destination": "/api/card?id=:id"
+    },
+    {
+      "source": "/healthz",
+      "destination": "/api/health"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "no-referrer" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
       ]
     }
   ]
