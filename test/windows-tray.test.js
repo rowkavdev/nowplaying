@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -33,5 +33,7 @@ test("tray finds the icon in the bundle layout (app\\scripts next to assets)", w
   await copyFile(SCRIPT, script);
   await copyFile(ICON, join(bundle, "assets", "nowplaying.ico"));
   const result = selfTest(script);
-  assert.equal(result.icon.toLowerCase(), join(bundle, "assets", "nowplaying.ico").toLowerCase());
+  // Compare long paths: %TEMP% can be an 8.3 short path (RUNNER~1) on runners.
+  const expected = await realpath(join(bundle, "assets", "nowplaying.ico"));
+  assert.equal((await realpath(result.icon)).toLowerCase(), expected.toLowerCase());
 });
