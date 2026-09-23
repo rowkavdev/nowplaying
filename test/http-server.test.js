@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:http";
-import { createHttpServer } from "../src/http-server.js";
+import { createHttpServer, PAGE_CSP } from "../src/http-server.js";
 
 const SECURITY_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -169,4 +169,37 @@ test("GET requests carry no body and keep working without JSON headers", async (
     assert.equal(result.status, 200);
     assert.equal("body" in seen[0], false);
   });
+});
+
+
+test("returns a plain 404 when no handler claims the path", async () => {
+  const app = createHttpServer({ port: 0, handler: async () => null });
+  const address = await app.listen();
+  try {
+    const result = await get(address.port, "/nope");
+    assert.equal(result.status, 404);
+    assert.equal(result.body, "Not Found");
+    assertSecurityHeaders(result.headers);
+  } finally { await app.close(); }
+});
+
+test("uses the page policy only for opted-in HTML pages", async () => {
+  const pages = {
+    "/setup": { status: 200, page: true, headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "script-src *" }, body: "<!doctype html>" },
+    "/fake": { status: 200, page: true, headers: { "Content-Type": "application/json" }, body: "{}" },
+    "/err": { status: 500, page: true, headers: { "Content-Type": "text/html" }, body: "x" },
+    "/plain": { status: 200, headers: { "Content-Type": "text/html" }, body: "x" },
+  };
+  const app = createHttpServer({ port: 0, handler: async ({ url }) => pages[url] });
+  const address = await app.listen();
+  try {
+    const setup = await get(address.port, "/setup");
+    assert.equal(setup.headers["content-security-policy"], PAGE_CSP);
+    assert.doesNotMatch(PAGE_CSP, /unsafe|\*|https?:/);
+    assert.match(PAGE_CSP, /frame-ancestors 'none'/);
+    assert.equal(setup.headers["x-frame-options"], "DENY");
+    for (const path of ["/fake", "/err", "/plain"]) {
+      assert.equal((await get(address.port, path)).headers["content-security-policy"], SECURITY_HEADERS["content-security-policy"], path);
+    }
+  } finally { await app.close(); }
 });
