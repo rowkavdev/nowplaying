@@ -28,8 +28,13 @@ export function parseCardQuery(searchParams) {
   return Object.freeze(options);
 }
 
-export function createCardHandler({ resolveCard } = {}) {
+const SOURCES = new Set(["live", "last-good", "idle"]);
+const CACHE_STATES = new Set(["hit", "miss"]);
+const PROVIDER_STATES = new Set(["ok", "error", "timeout", "unauthorized", "unreachable"]);
+
+export function createCardHandler({ resolveCard, now = () => performance.now() } = {}) {
   if (typeof resolveCard !== "function") throw new TypeError("resolveCard: expected a function");
+  if (typeof now !== "function") throw new TypeError("now: expected a function");
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
@@ -42,29 +47,40 @@ export function createCardHandler({ resolveCard } = {}) {
     let options;
     try { options = parseCardQuery(url.searchParams); }
     catch { return response(400, "Invalid card query"); }
+    const startedAt = now();
     try {
       const result = await resolveCard(options);
       const svg = typeof result === "string" ? result : result?.svg;
       if (typeof svg !== "string" || !svg.includes("<svg")) throw new TypeError("invalid card output");
-      const diagnostics = cardDiagnostics(result);
+      const diagnostics = { ...cardDiagnostics(result), ...renderTiming(now() - startedAt) };
       const etag = `"${createHash("sha256").update(svg).digest("base64url")}"`;
       const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=30, stale-while-revalidate=60", ETag: etag, "X-Content-Type-Options": "nosniff", ...diagnostics };
       if (readHeader(request?.headers, "if-none-match") === etag) return response(304, "", headers);
       return response(200, method === "HEAD" ? "" : svg, headers);
     } catch {
-      return response(503, "Card unavailable", { "Cache-Control": "no-store" });
+      return response(503, "Card unavailable", { "Cache-Control": "no-store", "X-Nowplaying-Source": "unavailable", ...renderTiming(now() - startedAt) });
     }
   };
 }
 
 function cardDiagnostics(result) {
   if (!result || typeof result === "string") return {};
-  const source = ["live", "last-good", "idle"].includes(result.source) ? result.source : null;
+  const source = SOURCES.has(result.source) ? result.source : null;
   const ageMs = Number.isFinite(result.ageMs) ? Math.max(0, Math.floor(result.ageMs)) : null;
+  const cache = CACHE_STATES.has(result.cache) ? result.cache : null;
+  const provider = PROVIDER_STATES.has(result.provider) ? result.provider : null;
   return {
     ...(source ? { "X-Nowplaying-Source": source } : {}),
     ...(ageMs !== null ? { "X-Nowplaying-Age": String(Math.floor(ageMs / 1000)) } : {}),
+    ...(cache ? { "X-Nowplaying-Cache": cache } : {}),
+    ...(provider ? { "X-Nowplaying-Provider": provider } : {}),
   };
+}
+
+function renderTiming(elapsed) {
+  if (!Number.isFinite(elapsed)) return {};
+  const ms = Math.min(600_000, Math.max(0, Math.round(elapsed)));
+  return { "Server-Timing": `render;dur=${ms}`, "X-Nowplaying-Render-Ms": String(ms) };
 }
 
 function readHeader(headers, name) {
