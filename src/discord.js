@@ -1,15 +1,16 @@
 
 import { createTemplateValues, formatTemplate, validateTemplate } from "./template.js";
+import { FALLBACK_ARTWORK_URL, isDiscordImage } from "./discord-artwork.js";
 
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const IDLE_BEHAVIORS = new Set(["clear", "show"]);
-const ASSET_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+
 
 export const discordDefaults = Object.freeze({
   details: "{title}",
   state: "{subtitle}",
   largeText: "{stateLabel}",
-  largeImage: "media",
+  largeImage: FALLBACK_ARTWORK_URL,
   smallImage: "",
   timestamps: "both",
   idleBehavior: "clear",
@@ -34,8 +35,8 @@ export function validateDiscordSettings(input = {}) {
     }
   }
   for (const key of ["largeImage", "smallImage"]) {
-    if (input[key] !== undefined && input[key] !== "" && (typeof input[key] !== "string" || !ASSET_PATTERN.test(input[key]))) {
-      throw new TypeError(`discord.${key}: expected an asset key`);
+    if (input[key] !== undefined && input[key] !== "" && !isDiscordImage(input[key])) {
+      throw new TypeError(`discord.${key}: expected an asset key or a public HTTPS image URL`);
     }
   }
   if (input.timestamps !== undefined && !TIMESTAMP_MODES.has(input.timestamps)) {

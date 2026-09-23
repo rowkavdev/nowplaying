@@ -104,7 +104,7 @@ function defaultDiscordTransport(clientId) {
 // Discord runs only when setup turned it on and the build has an application
 // ID. Discord not running is fine: the client retries in the background.
 // Artwork: a public HTTPS image from the server is used as is; private or
-// local server images fall back to the app's "media" asset. No title or artist
+// local server images fall back to the NowPlaying icon image. No title or artist
 // leaves the machine unless the config has artworkLookup "musicbrainz" (the
 // default for new setups, off for configs written before it existed).
 export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, now } = {}) {

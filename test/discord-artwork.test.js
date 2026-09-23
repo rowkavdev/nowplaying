@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { artworkResolverOptions, classifyArtworkUrl, createDiscordArtworkResolver, isPrivateHost } from "../src/discord-artwork.js";
+import { FALLBACK_ARTWORK_URL, artworkResolverOptions, classifyArtworkUrl, createDiscordArtworkResolver, isPrivateHost } from "../src/discord-artwork.js";
 import { createSetupConfig } from "../src/setup-config.js";
 
 test("private IPv4, IPv6 and local names are never sent to Discord", () => {
@@ -43,7 +43,7 @@ test("fallback order: provider, proxy, opt-in lookup, fallback asset", async () 
 
   const failing = createDiscordArtworkResolver({ metadataLookup: true, lookup: async () => { throw new Error("secret-host.lan down"); } });
   const fell = await failing.resolve({ title: "Song" });
-  assert.deepEqual({ image: fell.image, strategy: fell.strategy, failure: fell.failure }, { image: "media", strategy: "fallback", failure: "lookup_error" });
+  assert.deepEqual({ image: fell.image, strategy: fell.strategy, failure: fell.failure }, { image: FALLBACK_ARTWORK_URL, strategy: "fallback", failure: "lookup_error" });
   assert.doesNotMatch(JSON.stringify(failing.status()), /secret-host/);
 });
 
@@ -78,9 +78,16 @@ test("a new setup config turns the Cover Art Archive lookup on: hit, miss and of
   const hit = createDiscordArtworkResolver(artworkResolverOptions(on, { createLookup: () => async () => cover }));
   assert.deepEqual(await hit.resolve(track).then((r) => [r.image, r.strategy]), [cover, "lookup"]);
   const miss = createDiscordArtworkResolver(artworkResolverOptions(on, { createLookup: () => async () => null }));
-  assert.deepEqual(await miss.resolve(track).then((r) => [r.image, r.strategy, r.failure]), ["media", "fallback", "not_https"]);
+  assert.deepEqual(await miss.resolve(track).then((r) => [r.image, r.strategy, r.failure]), [FALLBACK_ARTWORK_URL, "fallback", "not_https"]);
   let called = false;
   const off = createDiscordArtworkResolver(artworkResolverOptions(createSetupConfig({ ...base, discordArtworkLookup: "off" }).discord, { createLookup: () => async () => { called = true; return cover; } }));
-  assert.deepEqual(await off.resolve(track).then((r) => [r.image, r.strategy]), ["media", "fallback"]);
+  assert.deepEqual(await off.resolve(track).then((r) => [r.image, r.strategy]), [FALLBACK_ARTWORK_URL, "fallback"]);
   assert.equal(called, false);
+});
+
+test("the default fallback is a real public image, not a missing asset key", () => {
+  assert.equal(classifyArtworkUrl(FALLBACK_ARTWORK_URL).ok, true);
+  assert.equal(FALLBACK_ARTWORK_URL.length <= 256, true);
+  assert.throws(() => createDiscordArtworkResolver({ fallbackAsset: "http://192.168.1.20/x.png" }), TypeError);
+  assert.doesNotThrow(() => createDiscordArtworkResolver({ fallbackAsset: "media" }));
 });
