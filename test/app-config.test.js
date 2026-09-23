@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -179,4 +179,19 @@ test("plex: follows the signed-in user by plex.tv ID, and the owner's local id 1
   ownerToken = false;
   app = createProviderFromConfig(config, "plex-token", { fetchImpl });
   assert.equal((await app.getPresence()).state, "idle");
+});
+
+test("start-up migration leaves a current config alone and refuses a newer one (#120)", async () => {
+  const { migrateAppConfig } = await import("../src/app-config.js");
+  const dir = await mkdtemp(join(tmpdir(), "np-migrate-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig(JELLYFIN));
+  assert.equal((await migrateAppConfig(file)).status, "current");
+  assert.equal((await readdir(dir)).length, 1);
+  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 2 }));
+  await assert.rejects(loadAppConfig(file), code("CONFIG_TOO_NEW"));
+  assert.equal(JSON.parse(await readFile(file, "utf8")).version, 2);
+  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 0 }));
+  await assert.rejects(loadAppConfig(file), code("CONFIG_INVALID"));
+  assert.deepEqual((await readdir(dir)).sort(), ["config.json"]);
 });
