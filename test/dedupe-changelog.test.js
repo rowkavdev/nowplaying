@@ -54,3 +54,8 @@ test("the CLI rewrites a file only when needed", () => {
   assert.equal(readFileSync(file, "utf8"), dedupeChangelog(SAMPLE));
   assert.match(execFileSync(process.execPath, ["scripts/dedupe-changelog.js", file], { encoding: "utf8" }), /unchanged/);
 });
+
+test("matching is exact, so different capitalisation is kept", () => {
+  const text = "### Features\n\n* Fix Plex art ([1111111](u))\n* fix plex art ([2222222](u))\n";
+  assert.equal(dedupeChangelog(text), text);
+});

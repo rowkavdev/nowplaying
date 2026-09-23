@@ -15,7 +15,7 @@ export function dedupeChangelog(text) {
     if (/^#{1,3} /.test(line)) seen = new Set();
     const bullet = /^\* (.+)$/.exec(line);
     if (bullet) {
-      const key = bullet[1].replace(COMMIT_LINK, "").trim().toLowerCase();
+      const key = bullet[1].replace(COMMIT_LINK, "").trim();
       if (seen.has(key)) continue;
       seen.add(key);
     }
