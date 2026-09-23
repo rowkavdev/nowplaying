@@ -7,7 +7,7 @@
 1. Create one provider with a read-only token.
 2. Create an artwork cache and the default Sharp sanitizer.
 3. Pass those to `createCardPipeline` with the public privacy policy.
-4. Wrap the pipeline in `createResilientCardResolver`.
+4. Wrap the pipeline in `createResilientCardResolver({ resolveCard, diagnostics: true })`. With `diagnostics` on, the stale-card headers below are filled in: `live` or `last-good` source, data age, cache hit/miss and the provider failure class. Each theme/width/show variant keeps its own in-flight render and last-good card.
 5. Pass the resolver to `createCardHandler`, then pass the handler to `createHttpServer`.
 
 Bind to `127.0.0.1` behind a TLS reverse proxy unless the process is isolated by another trusted network boundary. Never put provider tokens in a card URL.
