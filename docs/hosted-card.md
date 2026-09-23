@@ -20,6 +20,31 @@ Bind to `127.0.0.1` behind a TLS reverse proxy unless the process is isolated by
 
 Successful cards carry a strong ETag and a short public cache lifetime. Resolver and adapter failures are generic and `no-store`.
 
+## Diagnosing a stale card
+
+Every card response carries privacy-safe diagnostic headers. They never contain titles, usernames, provider URLs, hosts, tokens or error text.
+
+| Header | Values | Meaning |
+| --- | --- | --- |
+| `X-Nowplaying-Source` | `live`, `last-good`, `idle`, `unavailable` | Fresh provider data, the last good card after a provider failure, nothing playing, or a 503 with no card to fall back on |
+| `X-Nowplaying-Age` | seconds | How old the playback data behind the card is |
+| `X-Nowplaying-Cache` | `hit`, `miss` | Whether the rendered card came from the process cache |
+| `X-Nowplaying-Provider` | `ok`, `error`, `timeout`, `unauthorized`, `unreachable` | Result of the most recent provider poll |
+| `X-Nowplaying-Render-Ms` / `Server-Timing` | milliseconds | Time spent producing this response |
+
+Inspect them directly against your card endpoint, bypassing GitHub:
+
+```sh
+curl -sI https://your-nowplaying.example/card.svg | grep -iE 'x-nowplaying|server-timing|etag|cache-control'
+```
+
+How to read the result:
+
+- **Fresh headers but the README still looks old** - GitHub's Camo cache is serving an older copy. The origin is fine; wait for the cache to expire.
+- **`last-good` with a growing age and a provider value other than `ok`** - the media server is failing and the card is showing the last good render. Check the provider connection.
+- **`live` but the age keeps growing** - the provider answers, but polling is not refreshing playback state.
+- **`unavailable`** - no card could be rendered and there was nothing to fall back on.
+
 ## Health checks
 
 Use `/healthz` for the process liveness check. Example container check:
