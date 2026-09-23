@@ -1,4 +1,4 @@
-import { appendFile, mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, open, rename, rm } from "node:fs/promises";
 import { dirname, win32 } from "node:path";
 
 const LEVELS = new Set(["info", "warn", "error"]);
@@ -31,9 +31,21 @@ export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } =
     const line = serializeLogEvent(event);
     if (Buffer.byteLength(line) > maxBytes) throw new Error("log entry exceeds maxBytes");
     await mkdir(dirname(file), { recursive: true });
-    const currentSize = await stat(file).then((value) => value.size, (error) => error.code === "ENOENT" ? 0 : Promise.reject(error));
-    if (currentSize > 0 && currentSize + Buffer.byteLength(line) > maxBytes) await rotate();
-    await appendFile(file, line, { encoding: "utf8", mode: 0o600 });
+    // Size check and write go through one open handle, so the file checked is
+    // the file written (no stat-then-append race on the path).
+    let handle = await open(file, "a", 0o600);
+    try {
+      const { size } = await handle.stat();
+      if (size > 0 && size + Buffer.byteLength(line) > maxBytes) {
+        await handle.close();
+        handle = null;
+        await rotate();
+        handle = await open(file, "a", 0o600);
+      }
+      await handle.appendFile(line, { encoding: "utf8" });
+    } finally {
+      await handle?.close();
+    }
   }
 
   async function rotate() {
