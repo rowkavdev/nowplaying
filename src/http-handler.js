@@ -32,6 +32,15 @@ const SOURCES = new Set(["live", "last-good", "idle"]);
 const CACHE_STATES = new Set(["hit", "miss"]);
 const PROVIDER_STATES = new Set(["ok", "error", "timeout", "unauthorized", "unreachable"]);
 
+const HOME_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>NowPlaying</title></head>
+<body><h1>NowPlaying is running</h1>
+<p>Your card: <a href="/card.svg">/card.svg</a></p>
+<p><img src="/card.svg" alt="Your now playing card"></p>
+<p>Status: <a href="/healthz">/healthz</a></p>
+</body></html>
+`;
+
 export function createCardHandler({ resolveCard, now = () => performance.now() } = {}) {
   if (typeof resolveCard !== "function") throw new TypeError("resolveCard: expected a function");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
@@ -41,6 +50,12 @@ export function createCardHandler({ resolveCard, now = () => performance.now() }
     if (url.pathname === "/healthz") {
       if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
       return response(200, method === "HEAD" ? "" : "ok\n", { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+    }
+    if (url.pathname === "/") {
+      if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
+      // Small status page so the tray's "open" link and the bare address work.
+      // The full settings/status/logs UI is #253.
+      return { ...response(200, method === "HEAD" ? "" : HOME_PAGE, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }), page: true };
     }
     if (url.pathname !== "/card.svg") return response(404, "Not Found");
     if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });

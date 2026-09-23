@@ -1,5 +1,5 @@
 param(
-  [string]$DashboardUrl = $(if ($env:NOWPLAYING_DASHBOARD_URL) { $env:NOWPLAYING_DASHBOARD_URL } else { 'http://127.0.0.1:3000/' }),
+  [string]$DashboardUrl = $(if ($env:NOWPLAYING_DASHBOARD_URL) { $env:NOWPLAYING_DASHBOARD_URL } else { 'http://127.0.0.1:47832/' }),
   [switch]$CanRunSetup,
   [switch]$SelfTest
 )
