@@ -44,8 +44,8 @@ The fetch layer validates transport, declared type, magic bytes, byte size and d
 Discord fetches the large image itself, so it can only show artwork from a public HTTPS URL. A private media server's image URL never works there and would leak the server's address, so nowplaying picks the Discord image in this order:
 
 1. **Provider image** - used only if it is a public HTTPS URL with no embedded credentials and no token-like query parameters (`X-Plex-Token`, `api_key`, Subsonic `t`/`s`/`u` and similar).
-2. **Public proxy** - if you run a public artwork proxy, its base URL plus an opaque hash of the artwork reference. The private host and item IDs are never part of the URL.
-3. **Metadata lookup** - off by default. When you turn it on, only the track title and artist are sent to the lookup service you configure. Nothing is sent while it is off.
+2. **Public proxy** - if you run a public artwork proxy, its base URL plus an opaque hash of the artwork reference. The private host and item IDs are never part of the URL. Set it with `discord.artworkProxy` (for example `"https://art.example.com/discord"`); it must be a public HTTPS URL with no credentials or query string. Empty (the default) turns this step off.
+3. **Metadata lookup** - off, and not yet exposed as a setting. When it is added it will be opt-in, and only the track title and artist will be sent to the lookup service. Nothing is sent today.
 4. **Fallback asset** - your configured Discord asset key (`media` by default).
 
 URLs are rejected for loopback, private, link-local and CGNAT IPv4 ranges, private, link-local and IPv4-mapped IPv6 addresses, `localhost`, single-label hostnames and local suffixes such as `.local`, `.lan` and `.home.arpa`.
