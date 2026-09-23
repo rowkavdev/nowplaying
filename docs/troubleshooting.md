@@ -4,7 +4,7 @@ Use this guide when the hosted card, Discord Rich Presence, Windows app or updat
 
 ## Start with a health check
 
-Open the server's `/health` endpoint first. A healthy response confirms the HTTP process is running, but it does not prove the media provider or Discord client is reachable.
+Open the server's `/healthz` endpoint first. A healthy response confirms the HTTP process is running, but it does not prove the media provider or Discord client is reachable.
 
 Then check, in order:
 
@@ -25,11 +25,19 @@ nowplaying's privacy-safe Windows log lives at `%LOCALAPPDATA%\nowplaying\logs\n
 
 ## Card is offline or stale
 
-- Confirm `/health` responds before testing `/card.svg`.
-- Reload the card URL directly to separate GitHub image caching from a server problem.
+- Confirm `/healthz` responds before testing `/card.svg`.
+- Open the card URL directly. A fresh card there means the origin is working, even if a README still shows an older image.
 - Check provider connectivity and credentials. The card can serve the last known good state during a short provider outage.
 - Confirm the process can write its local state directory.
-- If the card works directly but GitHub still shows an old image, wait for GitHub's image cache to refresh. Do not add credentials or private values as cache-busting query parameters.
+- Inspect the card response without saving private data:
+
+```sh
+curl --head 'https://cards.example/card.svg'
+```
+
+The current response includes `ETag` and `Cache-Control`. A `304 Not Modified` response means the client revalidated the same card. A `200 OK` with a new `ETag` means the origin changed. GitHub fetches README images through its Camo proxy, so an origin change may still take time to appear in a README.
+
+Do not add tokens, usernames, media titles, private URLs or random cache-busting values to a public card URL. Query strings are logged by browsers, proxies and hosting platforms. Keep the documented card URL stable and wait for GitHub's cache to revalidate. Planned privacy-safe cache-state and data-age headers are tracked in [#118](https://github.com/rowkav09/nowplaying/issues/118).
 
 ## No active session appears
 
@@ -74,7 +82,7 @@ Useful details to include in a private bug report:
 - operating system and package type (installer or portable ZIP);
 - provider type, without its URL or credential;
 - which output failed (card, Discord, updater or tray);
-- the `/health` result;
+- the `/healthz` result;
 - the exact error message with tokens, usernames, media titles, IP addresses and private URLs removed;
 - steps that reproduce the problem.
 
