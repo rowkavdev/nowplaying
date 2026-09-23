@@ -95,3 +95,78 @@ test("rejects hostile and malformed request authorities before the handler", asy
     assert.equal(calls, 0);
   } finally { await app.close(); }
 });
+
+
+function send(port, { method = "POST", path = "/api/setup/draft", headers = {}, body = "" } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = request({ host: "127.0.0.1", port, path, method, headers }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() }));
+    });
+    req.once("error", reject);
+    req.end(body);
+  });
+}
+
+async function withServer(options, run) {
+  const seen = [];
+  const app = createHttpServer({ port: 0, handler: async (req) => { seen.push(req); return { status: 200, headers: { "Content-Type": "application/json" }, body: "{}" }; }, ...options });
+  const { port } = await app.listen();
+  try { await run(port, seen); } finally { await app.close(); }
+}
+
+test("passes same-origin JSON bodies to the handler", async () => {
+  await withServer({}, async (port, seen) => {
+    const result = await send(port, { headers: { "Content-Type": "application/json; charset=utf-8", Origin: `http://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" }, body: '{"step":"provider"}' });
+    assert.equal(result.status, 200);
+    assertSecurityHeaders(result.headers);
+    assert.equal(seen[0].body, '{"step":"provider"}');
+    const noOrigin = await send(port, { headers: { "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(noOrigin.status, 200);
+  });
+});
+
+test("rejects cross-site, foreign-origin and non-JSON writes before reading the body", async () => {
+  await withServer({}, async (port, seen) => {
+    for (const headers of [
+      { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+      { "Content-Type": "application/json", "Sec-Fetch-Site": "same-site" },
+      { "Content-Type": "application/json", Origin: "https://evil.example" },
+      { "Content-Type": "application/json", Origin: `http://localhost:${port + 1}` },
+      { "Content-Type": "application/json", Origin: "null" },
+    ]) {
+      const result = await send(port, { headers, body: "{}" });
+      assert.equal(result.status, 403, JSON.stringify(headers));
+      assertSecurityHeaders(result.headers);
+    }
+    for (const type of ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", ""]) {
+      const result = await send(port, { headers: type ? { "Content-Type": type } : {}, body: "a=1" });
+      assert.equal(result.status, 415, type);
+    }
+    assert.equal(seen.length, 0);
+  });
+});
+
+test("caps request bodies by declared and streamed size", async () => {
+  await withServer({ maxBodyBytes: 32 }, async (port, seen) => {
+    const declared = await send(port, { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pad: "x".repeat(100) }) });
+    assert.equal(declared.status, 413);
+    const streamed = await new Promise((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port, path: "/", method: "POST", headers: { "Content-Type": "application/json", "Transfer-Encoding": "chunked" } }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+      req.once("error", reject);
+      req.write("x".repeat(20)); req.write("x".repeat(20)); req.end();
+    });
+    assert.equal(streamed, 413);
+    assert.equal(seen.length, 0);
+  });
+  assert.throws(() => createHttpServer({ handler: async () => ({}), maxBodyBytes: 0 }), /maxBodyBytes/);
+});
+
+test("GET requests carry no body and keep working without JSON headers", async () => {
+  await withServer({}, async (port, seen) => {
+    const result = await get(port, "/healthz");
+    assert.equal(result.status, 200);
+    assert.equal("body" in seen[0], false);
+  });
+});
