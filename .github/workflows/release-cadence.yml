@@ -19,7 +19,39 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+      - id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Some changes reached main twice (a branch commit plus its merge commit
+      # with the same message), so release-please lists them twice. Tidy the
+      # open release PR's CHANGELOG.md and body after every run.
+      - if: steps.release.outputs.pr
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: main
+          sparse-checkout: |
+            package.json
+            scripts/dedupe-changelog.js
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Dedupe release PR changelog
+        if: steps.release.outputs.pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          branch=$(jq -r '.headBranchName' <<<"$PR_JSON")
+          number=$(jq -r '.number' <<<"$PR_JSON")
+          [[ "$branch" =~ ^release-please--[A-Za-z0-9._/-]+$ ]] || { echo "unexpected release branch: $branch"; exit 1; }
+          [[ "$number" =~ ^[0-9]+$ ]] || { echo "unexpected PR number: $number"; exit 1; }
+          git clone --quiet --depth 1 --branch "$branch" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" release-pr
+          if [ "$(node main/scripts/dedupe-changelog.js release-pr/CHANGELOG.md)" = "deduped" ]; then
+            git -C release-pr -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit --quiet -am "chore: dedupe changelog entries"
+            git -C release-pr push --quiet origin "HEAD:${branch}"
+          fi
+          gh pr view "$number" -R "$GITHUB_REPOSITORY" --json body --jq .body > body.md
+          if [ "$(node main/scripts/dedupe-changelog.js body.md)" = "deduped" ]; then
+            gh pr edit "$number" -R "$GITHUB_REPOSITORY" --body-file body.md
+          fi
