@@ -93,8 +93,11 @@ export function createProviderFromConfig(config, secret, { fetchImpl = fetch } =
     }
   })();
   // Only show what the signed-in user is playing, not everyone on the server.
+  // Jellyfin and Emby match on the stable user ID so a rename or a duplicate
+  // display name can't pick up someone else's session.
   const username = config.provider === "navidrome" ? config.identity.id : config.identity.displayName;
-  return Object.freeze({ ...inner, getPresence: () => inner.getPresence({ username }) });
+  const filter = config.provider === "jellyfin" || config.provider === "emby" ? { userId: config.identity.id } : { username };
+  return Object.freeze({ ...inner, getPresence: () => inner.getPresence(filter) });
 }
 
 function defaultDiscordTransport(clientId) {

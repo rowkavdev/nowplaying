@@ -7,11 +7,11 @@ export function createJellyfinProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
   if (typeof apiKey !== "string" || !apiKey.trim()) throw new TypeError("Jellyfin apiKey is required");
   return defineProvider({
     id: "jellyfin",
-    async getPresence({ username } = {}) {
+    async getPresence({ username, userId } = {}) {
       const response = await fetchImpl(`${origin}/Sessions`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
       if (!response.ok) throw new Error(`Jellyfin sessions request failed: ${response.status} ${response.statusText}`);
       const sessions = await response.json();
-      const session = sessions.find((candidate) => matchesSession(candidate, username));
+      const session = sessions.find((candidate) => matchesSession(candidate, { username, userId }));
       return session ? mapSession(session) : { state: "idle" };
     },
     async whoami() {
@@ -28,10 +28,20 @@ function normalizeBaseUrl(value) {
   return new URL(value).toString().replace(/\/$/, "");
 }
 
-function matchesSession(session, username) {
+// The stable user ID wins when we have one: display names can be renamed or
+// shared by two people on the same server. The name is only a fallback for
+// configs that predate stable identities.
+function matchesSession(session, { username, userId } = {}) {
   if (!session?.NowPlayingItem) return false;
+  if (userId) return sameUserId(session.UserId, userId);
   if (!username) return true;
   return session.UserName?.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
+}
+
+function sameUserId(actual, expected) {
+  const normalize = (value) => typeof value === "string" ? value.replace(/-/g, "").toLowerCase() : "";
+  const left = normalize(actual);
+  return left !== "" && left === normalize(expected);
 }
 
 function mapSession(session) {
