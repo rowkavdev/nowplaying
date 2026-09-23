@@ -31,7 +31,7 @@ test("resumes non-secret progress after the wizard closes", async () => {
 test("never writes credentials into the draft file", async () => {
   const drafts = await store();
   await assert.rejects(drafts.save({ step: "provider", provider: "plex", token: "secret-token" }), /cannot contain credentials/);
-  await assert.rejects(stat(drafts.file), { code: "ENOENT" });
+  await assert.rejects(readFile(drafts.file), { code: "ENOENT" });
   await drafts.save({ step: "provider", provider: "plex" });
   assert.doesNotMatch(await readFile(drafts.file, "utf8"), /token|secret/i);
 });
@@ -43,7 +43,7 @@ test("discards corrupt, tampered or unsupported drafts instead of failing setup"
     await writeFile(drafts.file, body);
     const loaded = await drafts.load();
     assert.deepEqual(loaded, { draft: createSetupDraft(), resumed: false, discarded: true }, body.slice(0, 30));
-    await assert.rejects(stat(drafts.file), { code: "ENOENT" });
+    await assert.rejects(readFile(drafts.file), { code: "ENOENT" });
   }
 });
 
