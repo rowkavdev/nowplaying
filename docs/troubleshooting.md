@@ -103,3 +103,5 @@ Useful details to include in a private bug report:
 - steps that reproduce the problem.
 
 Never post provider tokens, API keys, GitHub tokens, webhook secrets, private server URLs, usernames, media titles or unredacted configuration.
+
+<!-- mira pause timing test, do not merge -->
