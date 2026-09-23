@@ -93,10 +93,9 @@ export function createProviderFromConfig(config, secret, { fetchImpl = fetch } =
     }
   })();
   // Only show what the signed-in user is playing, not everyone on the server.
-  // Jellyfin and Emby match on the stable user ID so a rename or a duplicate
-  // display name can't pick up someone else's session.
-  const username = config.provider === "navidrome" ? config.identity.id : config.identity.displayName;
-  const filter = config.provider === "jellyfin" || config.provider === "emby" ? { userId: config.identity.id } : { username };
+  // Plex, Jellyfin and Emby match on the stable user ID so a rename or a
+  // duplicate display name can't pick up someone else's session.
+  const filter = config.provider === "navidrome" ? { username: config.identity.id } : { userId: config.identity.id };
   return Object.freeze({ ...inner, getPresence: () => inner.getPresence(filter) });
 }
 

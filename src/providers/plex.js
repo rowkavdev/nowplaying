@@ -12,16 +12,31 @@ const CLIENT_ID = "nowplaying";
 export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   const origin = normalizeBaseUrl(baseUrl);
   if (typeof token !== "string" || !token.trim()) throw new TypeError("Plex token is required");
+  // The local server reports its owner as user "1" rather than the plex.tv
+  // account ID we store. Only the owner's token can list /accounts, so that
+  // answers "is this sign-in the owner?" once per run.
+  let owner;
+  async function isOwner() {
+    owner ??= fetchImpl(`${origin}/accounts`, { headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token } })
+      .then((reply) => reply.ok, () => { owner = undefined; return false; });
+    return owner;
+  }
+  async function ownerSession(sessions) {
+    const candidate = sessions.find((item) => String(item?.User?.id ?? "") === "1");
+    return candidate && await isOwner() ? candidate : null;
+  }
   return defineProvider({
     id: "plex",
-    async getPresence({ username } = {}) {
+    async getPresence({ username, userId } = {}) {
       const response = await fetchImpl(`${origin}/status/sessions`, {
         headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
       if (!response.ok) throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
       const payload = await response.json();
       const sessions = payload?.MediaContainer?.Metadata ?? [];
-      const session = sessions.find((item) => matchesUser(item, username)) ?? null;
+      const session = userId
+        ? sessions.find((item) => sameId(item?.User?.id, userId)) ?? await ownerSession(sessions)
+        : sessions.find((item) => matchesUser(item, username)) ?? null;
       return session ? mapSession(session) : { state: "idle" };
     },
   });
@@ -30,6 +45,10 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
 function normalizeBaseUrl(value) {
   if (typeof value !== "string" || !value.trim()) throw new TypeError("Plex baseUrl is required");
   return new URL(value).toString().replace(/\/$/, "");
+}
+
+function sameId(actual, expected) {
+  return actual !== undefined && actual !== null && String(actual) !== "" && String(actual) === String(expected);
 }
 
 function matchesUser(session, username) {
