@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
+import { openSetupUrl, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
 
 const command = process.argv[2] ?? "help";
 
@@ -31,8 +32,16 @@ if (command === "--version" || command === "version") {
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
+} else if (command === "setup") {
+  const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
+  const setup = await startSetupApp({ draftFile });
+  console.log(`NowPlaying setup is open at ${setup.url}`);
+  if (!process.argv.includes("--no-open")) openSetupUrl(setup.url);
+  const close = async () => { await setup.close(); };
+  process.once("SIGINT", close);
+  process.once("SIGTERM", close);
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start [config.mjs]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start [config.mjs]\n       nowplaying.exe setup [--no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;
