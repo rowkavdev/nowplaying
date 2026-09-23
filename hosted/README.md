@@ -1,6 +1,6 @@
 # Hosted card service
 
-The public card endpoint for people who can't expose their own server. The desktop app pushes privacy-filtered playback state here; this service renders it as an SVG for a GitHub README. See #140 for the design.
+The public card endpoint for people who can't expose their own server. The desktop app pushes privacy-filtered playback state here; this service renders it as an SVG for a GitHub README. See #140 for the design, and [what leaves your PC](../docs/hosted-upload.md) for the plain-language version.
 
 What it never does:
 

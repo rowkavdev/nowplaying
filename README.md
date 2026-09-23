@@ -91,6 +91,7 @@ The shared presentation layer is separate from provider polling. Shipped control
 Operational references:
 
 - [Hosted card deployment](docs/hosted-card.md)
+- [Hosted card: what leaves your PC](docs/hosted-upload.md)
 - [Updates](docs/updates.md)
 - [Aggregate analytics](docs/analytics.md)
 
