@@ -7,6 +7,9 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, minUpdate
 
   async function publish(activity) {
     if (closed) return false;
+    // Discord went away (quit or restart): forget what it was showing so the
+    // same activity is sent again once it's back.
+    if (connected && transport.connected === false) { connected = false; lastKey = undefined; }
     const key = stableKey(activity);
     if (key === lastKey) return true;
     if (now() - lastPublishAt < minUpdateIntervalMs) return false;

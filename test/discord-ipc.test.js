@@ -149,3 +149,28 @@ test("works over a real Windows named pipe", { skip: process.platform !== "win32
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("sends the same status again after Discord restarts", unix, async () => {
+  const { createDiscordClient } = await import("../src/discord-client.js");
+  const first = await fakeDiscord();
+  const second = await fakeDiscord();
+  const ipc = createDiscordIpcClient({ paths: [first.path, second.path], timeoutMs: 1000 });
+  const transport = createDiscordRpcTransport({ clientId: APP, createClient: async () => ipc });
+  const client = createDiscordClient({ transport, minUpdateIntervalMs: 0, retryDelayMs: 100 });
+  const sets = (d) => d.frames.filter((f) => f.op === OP.FRAME && f.payload.cmd === "SET_ACTIVITY" && f.payload.args.activity).length;
+  try {
+    assert.equal(await client.publish({ details: "Song" }), true);
+    assert.equal(sets(first), 1);
+    assert.equal(ipc.connected, true);
+    await first.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(ipc.connected, false);
+    assert.equal(transport.connected, false);
+    assert.equal(await client.publish({ details: "Song" }), true);
+    assert.equal(sets(second), 1);
+    assert.equal(client.connected, true);
+  } finally {
+    await client.close();
+    await second.close();
+  }
+});
