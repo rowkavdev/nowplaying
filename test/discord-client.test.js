@@ -49,3 +49,23 @@ test("republishes an unchanged activity when the transport reports it lost Disco
   assert.equal(await client.publish({ details: "Film" }), true);
   assert.deepEqual(t.calls, ["connect", ["set", { details: "Film" }], "connect", ["set", { details: "Film" }]]);
 });
+
+test("backs off exponentially up to the cap and resets once Discord answers", async () => {
+  let time = 0, up = false; const t = transport({ connect: async () => { if (!up) throw new Error("offline at C:\\Users\\rowan"); } });
+  const client = createDiscordClient({ transport: t, retryDelayMs: 100, maxRetryDelayMs: 400, minUpdateIntervalMs: 0, now: () => time });
+  assert.deepEqual(client.status(), { state: "disconnected", lastPublishedAt: null, lastError: null, nextRetryInMs: 0 });
+  await client.publish({}); assert.equal(client.status().nextRetryInMs, 100);
+  time = 100; await client.publish({}); assert.equal(client.status().nextRetryInMs, 200);
+  time = 300; await client.publish({}); assert.equal(client.status().nextRetryInMs, 400);
+  time = 700; await client.publish({}); assert.equal(client.status().nextRetryInMs, 400);
+  const degraded = client.status();
+  assert.equal(degraded.state, "degraded"); assert.equal(degraded.lastError, "DISCORD_NOT_RUNNING");
+  assert.doesNotMatch(JSON.stringify(degraded), /rowan|offline/);
+  up = true; time = 1100; assert.equal(await client.publish({ details: "Film" }), true);
+  assert.deepEqual(client.status(), { state: "ready", lastPublishedAt: new Date(1100).toISOString(), lastError: null, nextRetryInMs: 0 });
+  await client.close(); assert.equal(client.status().state, "closed");
+});
+
+test("rejects a retry cap below the first delay", () => {
+  assert.throws(() => createDiscordClient({ transport: transport(), retryDelayMs: 1000, maxRetryDelayMs: 500 }), RangeError);
+});

@@ -58,6 +58,7 @@ export function createDiscordPresenceLoop({
 
   return Object.freeze({
     tick,
+    status: () => (typeof client.status === "function" ? client.status() : Object.freeze({ state: stopped ? "stopped" : "unknown" })),
     start() {
       if (!stopped) return;
       stopped = false;
