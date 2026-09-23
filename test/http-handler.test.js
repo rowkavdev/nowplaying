@@ -23,6 +23,10 @@ test("serves health and rejects routes or methods", async () => {
 test("sanitizes resolver failures and malformed output", async () => {
   for (const resolveCard of [async () => { throw new Error("token=secret"); }, async () => "not svg"]) {
     const r = await createCardHandler({ resolveCard })({ url: "/card.svg" });
-    assert.deepEqual(r, { status: 503, headers: { "Cache-Control": "no-store" }, body: "Card unavailable" });
+    assert.equal(r.status, 503);
+    assert.equal(r.body, "Card unavailable");
+    assert.equal(r.headers["Cache-Control"], "no-store");
+    assert.equal(r.headers["X-Nowplaying-Source"], "unavailable");
+    assert.doesNotMatch(JSON.stringify(r), /secret|not svg/);
   }
 });
