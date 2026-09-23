@@ -19,6 +19,16 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       const entry = entries.find((item) => !playingUser || item.username?.localeCompare(playingUser, undefined, { sensitivity: "accent" }) === 0);
       return entry ? mapEntry(entry) : { state: "idle" };
     },
+    async whoami() {
+      const query = new URLSearchParams(auth);
+      query.set("username", username);
+      const response = await fetchImpl(`${origin}/rest/getUser.view?${query}`);
+      if (!response.ok) throw new Error(`Navidrome user request failed: ${response.status} ${response.statusText}`);
+      const root = (await response.json())["subsonic-response"];
+      if (root?.status === "failed") throw new Error(`Navidrome API error: ${root.error?.code === 40 ? "request failed: 401" : "user lookup failed"}`);
+      const name = typeof root?.user?.username === "string" ? root.user.username : null;
+      return { id: name, displayName: name };
+    },
   });
 }
 

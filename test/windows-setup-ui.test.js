@@ -17,11 +17,23 @@ test("native setup window walks every step, including sign-in, against the real 
       return { provider: "navidrome", identity: { id: "selftest", displayName: "Self Test" }, secret: "nd-secret" };
     },
   };
-  const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const credentialStore = {
+    save: async (key, secret) => { saved.push([key, secret]); },
+    // A real Navidrome sign-in is stored as token + salt JSON.
+    read: async (key) => (saved.some(([k]) => k.identityId === key.identityId) ? JSON.stringify({ token: "t", salt: "s" }) : undefined),
+  };
+  // Fake Navidrome for "Test connection": nothing playing, and the sign-in is the selftest user.
+  const fetchImpl = async (url) => {
+    const path = new URL(url).pathname;
+    const body = path.endsWith("/getUser.view")
+      ? { "subsonic-response": { status: "ok", user: { username: "selftest" } } }
+      : { "subsonic-response": { status: "ok", nowPlaying: {} } };
+    return { ok: true, status: 200, statusText: "OK", json: async () => body };
+  };
   const startupApplied = [];
   const startup = { isEnabled: async () => false, setEnabled: async (value) => { startupApplied.push(value); } };
   const app = await startSetupApp({
-    draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn, startup,
+    draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn, startup, fetchImpl,
     discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }],
   });
   try {
@@ -31,6 +43,7 @@ test("native setup window walks every step, including sign-in, against the real 
     const result = JSON.parse(output);
     assert.deepEqual(result.steps, ["welcome", "provider", "signin", "signin", "discord", "review", "complete"]);
     assert.deepEqual([result.provider, result.account, result.startWithWindows], ["navidrome", "Self Test", true]);
+    assert.equal(result.connectionTest, "Connected. NowPlaying can see what you're playing.");
     assert.deepEqual(startupApplied, [true]);
     assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "selftest" }, "nd-secret"]]);
     const draft = await (await fetch(new URL("/api/setup/draft", app.url))).json();
