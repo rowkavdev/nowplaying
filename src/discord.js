@@ -2,6 +2,8 @@
 import { createTemplateValues, formatTemplate, validateTemplate } from "./template.js";
 import { FALLBACK_ARTWORK_URL, isDiscordImage } from "./discord-artwork.js";
 
+// Films and TV show as "Watching"; music and anything unknown as "Listening" (#143).
+const VIDEO_KINDS = new Set(["episode", "movie", "show"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const IDLE_BEHAVIORS = new Set(["clear", "show"]);
 
@@ -78,7 +80,7 @@ export function formatDiscordActivity(presence, input = {}) {
   const state = trimDiscordText(formatTemplate(settings.state, values));
   const largeText = trimDiscordText(formatTemplate(settings.largeText, values));
   const activity = {
-    type: "listening",
+    type: VIDEO_KINDS.has(presence.kind) ? "watching" : "listening",
     details: details || (presence.state === "idle" ? "Nothing playing" : undefined),
     state: state || undefined,
     largeImage: settings.largeImage || undefined,
