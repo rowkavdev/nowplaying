@@ -111,7 +111,7 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   const artwork = createArtwork(config.discord);
   const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
   loop.start();
-  return Object.freeze({ status: "on", stop: () => loop.stop() });
+  return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop() });
 }
 
 export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = 3000, fetchImpl = fetch, discord: discordOptions = {} } = {}) {

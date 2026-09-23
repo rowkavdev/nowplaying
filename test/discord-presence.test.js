@@ -119,3 +119,16 @@ test("startDiscordFromConfig sends only public, token-free artwork to Discord", 
   assert.equal(await published("https://media.example.com/Items/1/Images/Primary?api_key=secret"), "media");
   assert.equal(await published(undefined), "media");
 });
+
+test("startDiscordFromConfig exposes a privacy-safe connection status", async () => {
+  const transport = { connect: async () => {}, setActivity: async () => {}, clearActivity: async () => {}, close: async () => {} };
+  const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, { getPresence: async () => playing }, {
+    env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport, intervalMs: 60_000,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const status = d.connection();
+  assert.equal(status.state, "ready");
+  assert.match(status.lastPublishedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.doesNotMatch(JSON.stringify(status), /Song|Artist/);
+  await d.stop();
+});
