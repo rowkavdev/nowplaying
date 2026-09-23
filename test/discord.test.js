@@ -22,7 +22,7 @@ test("formats activity from shared templates", () => {
     largeText: "{stateLabel} · {progressPercent}%",
   });
   assert.deepEqual(activity, {
-    type: "listening",
+    type: "watching",
     details: "Episode",
     state: "Watching Example Show",
     largeImage: FALLBACK_ARTWORK_URL,
@@ -41,7 +41,7 @@ test("supports elapsed, remaining, both and no timestamps", () => {
   assert.deepEqual(
     formatDiscordActivity(playing, { timestamps: "both" }),
     {
-      type: "listening",
+      type: "watching",
       details: "Episode",
       state: "Example Show",
       largeImage: FALLBACK_ARTWORK_URL,
@@ -94,11 +94,17 @@ test("truncates without splitting Unicode code points", () => {
 });
 
 test("defaults to Listening with a progress bar and no bar while paused", () => {
-  const activity = formatDiscordActivity(playing);
+  const activity = formatDiscordActivity({ ...playing, kind: "track" });
   assert.equal(activity.type, "listening");
   assert.equal(activity.startTimestamp, 1_789_905_600);
   assert.equal(activity.endTimestamp, 1_789_905_690);
   const paused = formatDiscordActivity({ ...playing, state: "paused" });
   assert.equal(paused.startTimestamp, undefined);
   assert.equal(paused.endTimestamp, undefined);
+});
+
+test("films and TV show as Watching, music and unknown media as Listening", () => {
+  const base = { state: "playing", title: "Pilot", subtitle: "Show", positionMs: 0, durationMs: 1000, updatedAt: new Date(0) };
+  for (const kind of ["episode", "movie", "show"]) assert.equal(formatDiscordActivity({ ...base, kind }).type, "watching");
+  for (const kind of ["track", "unknown", undefined]) assert.equal(formatDiscordActivity({ ...base, kind }).type, "listening");
 });
