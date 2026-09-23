@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 
 const SECURITY_HEADERS = Object.freeze({
   "Cache-Control": "no-store",
@@ -16,13 +17,17 @@ export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
+export const SESSION_COOKIE = "nowplaying_session";
+export const SESSION_HEADER = "x-nowplaying-session";
 
-export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024 } = {}) {
+export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024, sessionSecret } = {}) {
   if (typeof handler !== "function") throw new TypeError("handler: expected a function");
   if (!isLoopbackHost(host)) throw new TypeError("host: expected a loopback address");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("port must be an integer from 0 to 65535");
   if (!Number.isInteger(shutdownMs) || shutdownMs < 1 || shutdownMs > 30000) throw new RangeError("shutdownMs must be an integer from 1 to 30000");
   if (!Number.isInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 1024 * 1024) throw new RangeError("maxBodyBytes must be an integer from 1 to 1048576");
+  if (sessionSecret !== undefined && (typeof sessionSecret !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(sessionSecret))) throw new TypeError("sessionSecret: expected 32+ URL-safe characters");
+  const sessionCookie = sessionSecret ? `${SESSION_COOKIE}=${sessionSecret}; Path=/; HttpOnly; SameSite=Strict` : undefined;
   const server = createServer(async (request, response) => {
     if (!isLoopbackAuthority(request.headers.host)) {
       response.writeHead(421, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
@@ -31,7 +36,7 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
     }
     let body;
     if (BODY_METHODS.has(request.method)) {
-      const rejection = rejectUnsafeWrite(request.headers);
+      const rejection = rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
       if (rejection) {
         request.resume();
         response.writeHead(rejection.status, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8", Connection: "close" });
@@ -52,7 +57,8 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
         response.end("Not Found");
         return;
       }
-      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(isPage(result) ? { "Content-Security-Policy": PAGE_CSP } : {}) });
+      const page = isPage(result);
+      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(page ? { "Content-Security-Policy": PAGE_CSP } : {}), ...(page && sessionCookie ? { "Set-Cookie": sessionCookie } : {}) });
       response.end(result.body);
     } catch {
       response.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
@@ -74,6 +80,22 @@ function isPage(result) {
   if (result.page !== true || result.status !== 200) return false;
   const key = Object.keys(result.headers ?? {}).find((name) => name.toLowerCase() === "content-type");
   return key !== undefined && String(result.headers[key]).split(";")[0].trim().toLowerCase() === "text/html";
+}
+
+// A state-changing request must prove it came from this install's own UI: the
+// browser page carries the SameSite=Strict cookie set when the page loaded, and
+// the native window sends the same secret as a header.
+function hasSession(headers, secret) {
+  const header = headers[SESSION_HEADER];
+  if (typeof header === "string" && sameSecret(header, secret)) return true;
+  const cookies = String(headers.cookie ?? "").split(";").map((part) => part.trim());
+  return cookies.some((part) => part.startsWith(`${SESSION_COOKIE}=`) && sameSecret(part.slice(SESSION_COOKIE.length + 1), secret));
+}
+
+function sameSecret(value, secret) {
+  const left = Buffer.from(value);
+  const right = Buffer.from(secret);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 function rejectUnsafeWrite(headers) {

@@ -237,3 +237,46 @@ test("refuses websocket upgrades", async () => {
     assert.notEqual(outcome, "upgraded");
   } finally { await app.close(); }
 });
+
+const SECRET = "s".repeat(43);
+
+test("with a session secret, writes need the session cookie or header", async () => {
+  await withServer({ sessionSecret: SECRET }, async (port, seen) => {
+    const json = { "Content-Type": "application/json" };
+    assert.equal((await send(port, { headers: json, body: "{}" })).status, 403);
+    assert.equal((await send(port, { headers: { ...json, Cookie: "nowplaying_session=wrong" }, body: "{}" })).status, 403);
+    assert.equal((await send(port, { headers: { ...json, "X-Nowplaying-Session": `${SECRET}x` }, body: "{}" })).status, 403);
+    assert.equal(seen.length, 0);
+    assert.equal((await send(port, { headers: { ...json, Cookie: `other=1; nowplaying_session=${SECRET}` }, body: "{}" })).status, 200);
+    assert.equal((await send(port, { headers: { ...json, "X-Nowplaying-Session": SECRET }, body: "{}" })).status, 200);
+    assert.equal(seen.length, 2);
+  });
+});
+
+test("a session secret does not block reads, and pages set a strict HttpOnly cookie", async () => {
+  const app = createHttpServer({ port: 0, sessionSecret: SECRET, handler: async (req) => req.url === "/setup"
+    ? { status: 200, page: true, headers: { "Content-Type": "text/html; charset=utf-8" }, body: "<p>ok</p>" }
+    : { status: 200, headers: { "Content-Type": "application/json" }, body: "{}" } });
+  const { port } = await app.listen();
+  try {
+    const page = await get(port, "/setup");
+    assert.equal(page.status, 200);
+    assert.deepEqual(page.headers["set-cookie"], [`nowplaying_session=${SECRET}; Path=/; HttpOnly; SameSite=Strict`]);
+    const api = await get(port, "/api/status");
+    assert.equal(api.status, 200);
+    assert.equal(api.headers["set-cookie"], undefined);
+  } finally { await app.close(); }
+});
+
+test("without a session secret nothing changes and no cookie is set", async () => {
+  const app = createHttpServer({ port: 0, handler: async () => ({ status: 200, page: true, headers: { "Content-Type": "text/html" }, body: "" }) });
+  const { port } = await app.listen();
+  try { assert.equal((await get(port, "/setup")).headers["set-cookie"], undefined); } finally { await app.close(); }
+});
+
+test("rejects weak session secrets", () => {
+  const handler = async () => null;
+  for (const sessionSecret of ["short", "x".repeat(31), `${"x".repeat(40)};`, 42]) {
+    assert.throws(() => createHttpServer({ handler, sessionSecret }), /sessionSecret/);
+  }
+});
