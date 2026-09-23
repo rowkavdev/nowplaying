@@ -156,7 +156,10 @@ jobs:
           # source archives and binaries always describe the same commit.
           git tag -f dev "$GITHUB_SHA"
           git push --force "$remote" refs/tags/dev
-          gh release edit dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --title "$title" --notes-file development-release-notes.md
+          # Update the release by ID. `gh release edit dev` fails with "a release
+          # with the same tag name already exists" once the tag has moved, which
+          # left the page on an old build number.
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f name="$title" -F prerelease=true -f make_latest=false -F body=@development-release-notes.md --jq '.name'
       # Old scheme: one immutable vX.Y.Z-dev.N pre-release per merge. Remove those
       # (release and tag) only after the moving dev release is confirmed to carry
       # this commit's assets. Stable releases never match the pattern.
