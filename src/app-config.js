@@ -8,6 +8,11 @@ import { createEmbyProvider } from "./providers/emby.js";
 import { createJellyfinProvider } from "./providers/jellyfin.js";
 import { createNavidromeProvider } from "./providers/navidrome.js";
 import { createPlexProvider } from "./providers/plex.js";
+import { resolveDiscordClientId } from "./discord-app.js";
+import { createDiscordClient } from "./discord-client.js";
+import { createDiscordIpcClient } from "./discord-ipc.js";
+import { createDiscordPresenceLoop } from "./discord-presence.js";
+import { createDiscordRpcTransport } from "./discord-rpc.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
@@ -88,7 +93,23 @@ export function createProviderFromConfig(config, secret, { fetchImpl = fetch } =
   return Object.freeze({ ...inner, getPresence: () => inner.getPresence({ username }) });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = 3000, fetchImpl = fetch } = {}) {
+function defaultDiscordTransport(clientId) {
+  return createDiscordRpcTransport({ clientId, createClient: async () => createDiscordIpcClient() });
+}
+
+// Discord runs only when setup turned it on and the build has an application
+// ID. Discord not running is fine: the client retries in the background.
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, intervalMs, now } = {}) {
+  if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {} });
+  const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
+  if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {} });
+  const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
+  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, idleBehavior: config.discord.idleBehavior, ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
+  loop.start();
+  return Object.freeze({ status: "on", stop: () => loop.stop() });
+}
+
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = 3000, fetchImpl = fetch, discord: discordOptions = {} } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -115,7 +136,17 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
   }
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, close: () => server.close() });
+  let discord;
+  try {
+    discord = startDiscordFromConfig(config, provider, discordOptions);
+  } catch {
+    discord = Object.freeze({ status: "failed", stop: async () => {} });
+  }
+  const close = async () => {
+    await discord.stop().catch(() => {});
+    await server.close();
+  };
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, close });
 }
 
 function invalidConfig() {
