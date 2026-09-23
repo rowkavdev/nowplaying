@@ -89,7 +89,7 @@ test("status page, assets and api are served; other paths fall through", async (
     const page = await h({ method: "GET", url: path });
     assert.equal(page.status, 200); assert.equal(page.page, true);
     assert.match(page.body, /<script src="\/status.js"><\/script>/);
-    assert.doesNotMatch(page.body, /<script>|\sstyle=|\son[a-z]+=/);
+    assert.doesNotMatch(page.body, /<script\b[^>]*>[^<]|\sstyle=|\son[a-z]+=/i);
   }
   assert.match((await h({ method: "GET", url: "/status.js" })).headers["Content-Type"], /javascript/);
   assert.match((await h({ method: "GET", url: "/status.css" })).headers["Content-Type"], /css/);

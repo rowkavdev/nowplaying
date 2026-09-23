@@ -14,7 +14,7 @@ test("renders an accessible playing card and progress", () => {
 
 test("escapes untrusted media text", () => {
   const svg = renderCard({ state: "paused", kind: "movie", title: "<script>", subtitle: "A & B" });
-  assert.doesNotMatch(svg, /<script>/);
+  assert.doesNotMatch(svg, /<script\b/i);
   assert.match(svg, /&lt;script&gt;/);
   assert.match(svg, /A &amp; B/);
 });

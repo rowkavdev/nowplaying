@@ -20,8 +20,8 @@ test("serves the wizard page and its same-origin assets", async () => {
 
 test("the page contains no inline script, handlers, styles or external references", async () => {
   const { body } = await handle({ method: "GET", url: "/setup" });
-  for (const tag of body.match(/<script\b[^>]*>/g)) assert.match(tag, /src="\/setup\/app\.js"/);
-  assert.doesNotMatch(body, /<script>[^<]/);
+  for (const tag of body.match(/<script\b[^>]*>/gi)) assert.match(tag, /src="\/setup\/app\.js"/);
+  assert.doesNotMatch(body, /<script\b[^>]*>[^<]/i);
   assert.doesNotMatch(body, /\son[a-z]+=|\sstyle=|<style/i);
   assert.doesNotMatch(body, /https?:\/\//);
   const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
