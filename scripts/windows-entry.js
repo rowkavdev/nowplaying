@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
 import { StartupError, resolveAppPort, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
+import { createHostedCredentials } from "../src/hosted-credentials.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
@@ -134,13 +135,15 @@ async function openSetupWindow() {
 }
 
 async function startFromWizardConfig(configFile) {
-  const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
+  const adapter = createWindowsCredentialAdapter();
+  const credentialStore = createCredentialStore({ adapter });
+  const hostedCredentials = createHostedCredentials({ adapter });
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
   // build-info.json is written by build-windows.ps1; a source checkout has none.
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType });
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType });
   console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }

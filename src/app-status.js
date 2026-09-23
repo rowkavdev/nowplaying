@@ -13,6 +13,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   const startedAt = now();
   let provider = null;
   let discord = () => ({ enabled: false, state: "off" });
+  let hosted = () => ({ enabled: false, state: "off" });
   let lastPollAt = null;
   let lastOkAt = null;
   let failure = null;
@@ -43,6 +44,11 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     discord = read;
   }
 
+  function setHosted(read) {
+    if (typeof read !== "function") throw new TypeError("hosted: expected a function");
+    hosted = read;
+  }
+
   // Polls the server once when nothing else has recently (for example when
   // the card isn't embedded anywhere and Discord is off).
   async function refresh() {
@@ -54,6 +60,8 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   function snapshot() {
     let discordState;
     try { discordState = discord(); } catch { discordState = { enabled: true, state: "unknown" }; }
+    let hostedState;
+    try { hostedState = hosted(); } catch { hostedState = { enabled: true, state: "unknown" }; }
     return Object.freeze({
       version: typeof version === "string" ? version : null,
       build: buildLabel(build),
@@ -68,6 +76,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       }),
       playing: failure ? null : playing,
       discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError) }),
+      hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: word(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedState?.lastError ? word(hostedState.lastError) : null }),
     });
   }
 
@@ -92,7 +101,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     });
   }
 
-  return Object.freeze({ wrapProvider, setDiscord, refresh, snapshot, diagnostics });
+  return Object.freeze({ wrapProvider, setDiscord, setHosted, refresh, snapshot, diagnostics });
 }
 
 function buildLabel(value) {
