@@ -16,6 +16,9 @@ const PAGE = `<!doctype html>
 <section aria-labelledby="h-card"><h2 id="h-card">Your card</h2>
 <p>Card address: <a id="card-link" href="/card.svg">/card.svg</a></p>
 <p><img id="card" src="/card.svg" alt="Your now playing card" width="480"></p></section>
+<section aria-labelledby="h-help"><h2 id="h-help">Reporting a problem</h2>
+<p>Copies a short report with your version, server type and connection state. It leaves out your server address, user name, what you're playing and any sign-in details.</p>
+<p><button type="button" id="copy-diagnostics">Copy diagnostics</button> <a href="/api/diagnostics" download="nowplaying-diagnostics.json">Download</a> <span id="copy-result" role="status" aria-live="polite"></span></p></section>
 <footer><p>Version <span id="version">-</span></p></footer>
 </main><script src="/status.js"></script></body></html>
 `;
@@ -29,7 +32,8 @@ section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;mar
 dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:0}dt{color:#555}dd{margin:0;overflow-wrap:anywhere}
 img{max-width:100%;height:auto}.ok{color:#0b5cad}.bad{color:#b85c00;font-weight:600}.warn{color:#6b5a00}
 footer{color:#555;font-size:13px}
-@media (prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#333}dt,footer{color:#aaa}.ok{color:#7ab8ff}.bad{color:#ffa552;font-weight:600}.warn{color:#e0d070}}
+button{font:inherit;padding:6px 12px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit;cursor:pointer}
+@media (prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#333}button{background:#2c2c31;border-color:#555}dt,footer{color:#aaa}.ok{color:#7ab8ff}.bad{color:#ffa552;font-weight:600}.warn{color:#e0d070}}
 `;
 
 const SCRIPT = `"use strict";
@@ -68,6 +72,16 @@ async function load() {
     set("summary", "Can't reach NowPlaying. It may have been closed.", "bad");
   }
 }
+document.getElementById("copy-diagnostics").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/diagnostics", { cache: "no-store", headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(String(res.status));
+    await navigator.clipboard.writeText(JSON.stringify(await res.json(), null, 2));
+    set("copy-result", "Copied. Paste it into your bug report.", "ok");
+  } catch {
+    set("copy-result", "Couldn't copy. Use Download instead.", "bad");
+  }
+});
 load();
 setInterval(load, 5000);
 `;
@@ -87,7 +101,8 @@ export function createStatusPageHandler({ status, fallback } = {}) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
     const asset = assets[url.pathname];
-    if (!asset && url.pathname !== "/api/status") return fallback(request);
+    const api = url.pathname === "/api/status" || url.pathname === "/api/diagnostics";
+    if (!asset && !api) return fallback(request);
     if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
     if (asset) {
       const result = response(200, method === "HEAD" ? "" : asset.body, { "Content-Type": asset.type, "Cache-Control": "no-store" });
@@ -97,6 +112,10 @@ export function createStatusPageHandler({ status, fallback } = {}) {
     const site = header(request?.headers, "sec-fetch-site");
     if (site !== undefined && !SAFE_FETCH_SITES.has(site)) return response(403, "Forbidden");
     await status.refresh();
+    if (url.pathname === "/api/diagnostics") {
+      if (typeof status.diagnostics !== "function") return response(404, "Not Found");
+      return response(200, method === "HEAD" ? "" : `${JSON.stringify(status.diagnostics(), null, 2)}\n`, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="nowplaying-diagnostics.json"' });
+    }
     return response(200, method === "HEAD" ? "" : JSON.stringify(status.snapshot()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   };
 }

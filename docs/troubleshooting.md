@@ -76,6 +76,22 @@ The updater is notify-only unless install behavior has been explicitly enabled.
 
 ## Safe diagnostic information
 
+The status page (the app's local address in your browser, ending in `/status`) has a **Copy diagnostics** button and a **Download** link under "Reporting a problem". The report has exactly these fields and nothing else:
+
+| Field | What it holds |
+| --- | --- |
+| `schemaVersion` | Format version of the report (currently 1) |
+| `version` | nowplaying version, for example `0.1.1-dev+227abab` |
+| `platform` | Operating system, for example `win32` |
+| `packageType` | Installer or portable, when known |
+| `enabledOutputs` | `card`, plus `discord` when Discord is on |
+| `provider` | Server type (`jellyfin`, `plex`, ...) and connection state (`connected`, `unreachable`, `authentication_failed`, ...) |
+| `health` | `healthy`, `starting` or `degraded` |
+| `updater`, `tray` | Updater and tray state, or `null` when not reported |
+| `errors` | Short error codes only, with URLs, IP addresses, tokens, user names and track names removed |
+
+Your server address, user name, what you're playing and any sign-in details are never included. The report is safe to attach to a bug report.
+
 Useful details to include in a private bug report:
 
 - nowplaying version;

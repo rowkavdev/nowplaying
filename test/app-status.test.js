@@ -118,3 +118,40 @@ test("status colours avoid red/green pairs", async () => {
     assert.ok(!greenish && !reddish, hex);
   }
 });
+
+test("diagnostics export keeps only safe labels and scrubs private values (#115)", async () => {
+  const status = createAppStatus({ config, version: "0.1.1-dev", platform: "win32", packageType: "installer" });
+  status.setDiscord(() => ({ enabled: true, state: "ready", lastError: null }));
+  const provider = status.wrapProvider({ getPresence: async () => ({ state: "playing", title: "Secret Song", subtitle: "Private Artist" }) });
+  await provider.getPresence();
+  const record = status.diagnostics();
+  assert.deepEqual(record, {
+    schemaVersion: 1,
+    version: "0.1.1-dev",
+    platform: "win32",
+    packageType: "installer",
+    enabledOutputs: ["card", "discord"],
+    provider: { type: "jellyfin", status: "connected" },
+    health: "healthy",
+    updater: null,
+    tray: null,
+    errors: [],
+  });
+  const json = JSON.stringify(record);
+  for (const leak of ["Rowan", "192.168", "secret", "Secret Song", "Private Artist", "pw"]) assert.equal(json.includes(leak), false, leak);
+});
+
+test("diagnostics endpoint is same-origin only and downloads as a file", async () => {
+  const status = createAppStatus({ config, version: "0.1.1-dev", platform: "win32" });
+  const handle = createStatusPageHandler({ status, fallback: async () => ({ status: 404, headers: {}, body: "" }) });
+  const ok = await handle({ method: "GET", url: "/api/diagnostics", headers: { "Sec-Fetch-Site": "same-origin" } });
+  assert.equal(ok.status, 200);
+  assert.match(ok.headers["Content-Disposition"], /attachment/);
+  assert.equal(JSON.parse(ok.body).health, "starting");
+  const cross = await handle({ method: "GET", url: "/api/diagnostics", headers: { "Sec-Fetch-Site": "cross-site" } });
+  assert.equal(cross.status, 403);
+  const post = await handle({ method: "POST", url: "/api/diagnostics" });
+  assert.equal(post.status, 405);
+  const page = await handle({ method: "GET", url: "/status" });
+  assert.match(page.body, /Copy diagnostics/);
+});
