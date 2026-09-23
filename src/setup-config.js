@@ -1,5 +1,6 @@
 import { createProviderIdentity } from "./provider-identity.js";
 import { isServerUrl } from "./setup.js";
+import { normalizeHostedUrl } from "./hosted-uploader.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
@@ -17,6 +18,13 @@ export function createSetupConfig(input = {}) {
   if (input.discordArtworkLookup !== undefined && !ARTWORK_LOOKUPS.has(input.discordArtworkLookup)) {
     throw new TypeError("setup config.discordArtworkLookup must be off or musicbrainz");
   }
+  if (input.hostedEnabled !== undefined && typeof input.hostedEnabled !== "boolean") {
+    throw new TypeError("setup config.hostedEnabled must be a boolean");
+  }
+  let hostedUrl = null;
+  if (input.hostedUrl !== undefined && input.hostedUrl !== null) {
+    try { hostedUrl = normalizeHostedUrl(input.hostedUrl); } catch { throw new TypeError("setup config.hostedUrl is invalid"); }
+  }
   if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
   return Object.freeze({
     version: 1,
@@ -31,6 +39,10 @@ export function createSetupConfig(input = {}) {
       // sent until the user runs setup again or turns it on.
       artworkLookup: input.discordArtworkLookup ?? "off",
     }),
+    // Hosted card upload (#140) is off unless the user turns it on.
+    ...(input.hostedEnabled !== undefined || hostedUrl ? {
+      hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(hostedUrl ? { url: hostedUrl } : {}) }),
+    } : {}),
   });
 }
 

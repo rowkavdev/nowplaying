@@ -16,13 +16,16 @@ import { createDiscordClient } from "./discord-client.js";
 import { createDiscordIpcClient } from "./discord-ipc.js";
 import { createDiscordPresenceLoop } from "./discord-presence.js";
 import { createDiscordRpcTransport } from "./discord-rpc.js";
+import { createHostedLoop } from "./hosted-loop.js";
+import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
 // credentialRef at start-up.
 
 const MAX_CONFIG_BYTES = 16 * 1024;
-const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord"]);
+const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted"]);
+const HOSTED_KEYS = new Set(["enabled", "url"]);
 
 export class StartupError extends Error {
   constructor(startupCode, message) {
@@ -44,6 +47,7 @@ export function parseAppConfig(text) {
   // Only the fields the wizard writes; anything else (a pasted token, say) means
   // the file was edited by hand and is not trusted.
   if (Object.keys(parsed).some((key) => !CONFIG_KEYS.has(key))) throw invalidConfig();
+  if (parsed.hosted !== undefined && (!parsed.hosted || typeof parsed.hosted !== "object" || Array.isArray(parsed.hosted) || Object.keys(parsed.hosted).some((key) => !HOSTED_KEYS.has(key)))) throw invalidConfig();
   let config;
   try {
     config = createSetupConfig({
@@ -54,6 +58,7 @@ export function parseAppConfig(text) {
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
       discordArtworkLookup: parsed.discord?.artworkLookup,
+      ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
     });
   } catch {
     throw invalidConfig();
@@ -120,6 +125,18 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop() });
 }
 
+// Hosted card upload (#140) runs only when the config turns it on. It pushes
+// privacy-filtered state to the hosted service and is independent of Discord:
+// a host that's down or unreachable never affects presence.
+export function startHostedFromConfig(config, provider, { credentials, fetchImpl = fetch, settings = {}, intervalMs, createUploader = createHostedUploader } = {}) {
+  if (!config.hosted?.enabled) return Object.freeze({ status: "off", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  if (typeof credentials?.load !== "function") return Object.freeze({ status: "no_credentials", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  const uploader = createUploader({ baseUrl: config.hosted.url ?? DEFAULT_HOSTED_URL, credentials, fetchImpl, settings });
+  const loop = createHostedLoop({ getPresence: () => provider.getPresence(), uploader, ...(intervalMs ? { intervalMs } : {}) });
+  loop.start();
+  return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status() });
+}
+
 // 3000 clashes with most dev servers, so the local app uses a rarely used port.
 // Override with NOWPLAYING_PORT (see resolveAppPort).
 export const DEFAULT_APP_PORT = 47832;
@@ -134,7 +151,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {} } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -173,11 +190,21 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   status.setDiscord(() => discord.status === "on"
     ? { enabled: true, ...discord.connection() }
     : { enabled: discord.status !== "off", state: discord.status });
+  let hosted;
+  try {
+    hosted = startHostedFromConfig(config, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions });
+  } catch {
+    hosted = Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  }
+  status.setHosted(() => hosted.status === "on"
+    ? { enabled: true, ...hosted.connection() }
+    : { enabled: hosted.status !== "off", state: hosted.status });
   const close = async () => {
+    await hosted.stop().catch(() => {});
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, discord: discord.status, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), status, close });
 }
 
 function invalidConfig() {
