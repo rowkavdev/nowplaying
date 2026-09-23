@@ -14,6 +14,13 @@ $notify.Visible = $true
 $menu = [System.Windows.Forms.ContextMenuStrip]::new()
 $open = $menu.Items.Add('Open dashboard')
 $open.add_Click({ Start-Process $DashboardUrl })
+$logs = $menu.Items.Add('Open log folder')
+$logs.add_Click({
+  if (-not $env:LOCALAPPDATA) { return }
+  $logFolder = Join-Path $env:LOCALAPPDATA 'nowplaying\logs'
+  New-Item -ItemType Directory -Force -Path $logFolder | Out-Null
+  Start-Process -FilePath 'explorer.exe' -ArgumentList @("`"$logFolder`"")
+})
 $menu.Items.Add('-') | Out-Null
 $exit = $menu.Items.Add('Exit tray')
 $exit.add_Click({ $notify.Visible = $false; [System.Windows.Forms.Application]::Exit() })
