@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
-import { openSetupUrl, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
+import { openSetupUrl, runNativeSetup, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
 
 const command = process.argv[2] ?? "help";
 
@@ -35,13 +35,26 @@ if (command === "--version" || command === "version") {
 } else if (command === "setup") {
   const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
   const setup = await startSetupApp({ draftFile });
-  console.log(`NowPlaying setup is open at ${setup.url}`);
-  if (!process.argv.includes("--no-open")) openSetupUrl(setup.url);
   const close = async () => { await setup.close(); };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
+  const flags = new Set(process.argv.slice(3));
+  let native = process.platform === "win32" && !flags.has("--browser") && !flags.has("--no-open");
+  if (native) {
+    try {
+      const { code } = await runNativeSetup(setup.url, { scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
+      if (code === 0) await close();
+      else native = false; // the window failed to start or crashed: keep the server and use the browser page
+    } catch {
+      native = false; // PowerShell unavailable or blocked: use the browser page instead
+    }
+  }
+  if (!native) {
+    console.log(`NowPlaying setup is open at ${setup.url}`);
+    if (!flags.has("--no-open")) openSetupUrl(setup.url);
+  }
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start [config.mjs]\n       nowplaying.exe setup [--no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start [config.mjs]\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;

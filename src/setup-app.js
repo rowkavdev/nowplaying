@@ -26,11 +26,16 @@ export async function startSetupApp({ draftFile, host = "127.0.0.1", port = 0, d
 
 // Opens a loopback setup URL in the default browser without a shell, so the URL
 // can never be interpreted as a command.
-export function openSetupUrl(url, { platform = process.platform, spawnProcess = spawn } = {}) {
+function loopbackSetupUrl(url) {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" || !["127.0.0.1", "[::1]", "localhost"].includes(parsed.hostname) || parsed.pathname !== "/setup" || parsed.search || parsed.hash || parsed.username || parsed.password) {
     throw new TypeError("setup URL must be a loopback /setup URL");
   }
+  return parsed;
+}
+
+export function openSetupUrl(url, { platform = process.platform, spawnProcess = spawn } = {}) {
+  const parsed = loopbackSetupUrl(url);
   const [command, args] = platform === "win32" ? ["rundll32.exe", ["url.dll,FileProtocolHandler", parsed.href]]
     : platform === "darwin" ? ["open", [parsed.href]]
     : ["xdg-open", [parsed.href]];
@@ -38,4 +43,24 @@ export function openSetupUrl(url, { platform = process.platform, spawnProcess = 
   child.on?.("error", () => {});
   child.unref?.();
   return parsed.href;
+}
+
+// Runs the native Windows setup window (scripts/windows-setup.ps1) against the
+// local setup server and resolves with its exit code. Rejects if PowerShell
+// cannot be started, so the caller can fall back to the browser page.
+export function runNativeSetup(url, { scriptPath, selfTest = false, spawnProcess = spawn } = {}) {
+  const parsed = loopbackSetupUrl(url);
+  if (parsed.hostname !== "127.0.0.1") throw new TypeError("native setup needs a 127.0.0.1 URL");
+  if (typeof scriptPath !== "string" || !scriptPath.endsWith("windows-setup.ps1")) throw new TypeError("scriptPath must point at windows-setup.ps1");
+  const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-File", scriptPath, "-Url", parsed.href];
+  if (selfTest) args.push("-SelfTest");
+  return new Promise((resolve, reject) => {
+    const child = spawnProcess("powershell.exe", args, { shell: false, windowsHide: true, stdio: selfTest ? ["ignore", "pipe", "pipe"] : "ignore" });
+    let output = "";
+    let errors = "";
+    child.stdout?.on("data", (chunk) => { output += chunk; });
+    child.stderr?.on("data", (chunk) => { errors += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, output, errors }));
+  });
 }
