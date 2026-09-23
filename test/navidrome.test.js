@@ -46,3 +46,22 @@ test("surfaces Subsonic API errors", async () => {
   });
   await assert.rejects(() => provider.getPresence(), /Navidrome API error: bad auth/);
 });
+
+test("whoami asks Navidrome for the signed-in user", async () => {
+  let requestUrl;
+  const provider = createNavidromeProvider({
+    baseUrl: "https://music.test/", username: "rowan", token: "hash", salt: "salt",
+    fetchImpl: async (url) => { requestUrl = new URL(url); return { ok: true, json: async () => ({ "subsonic-response": { status: "ok", user: { username: "rowan" } } }) }; },
+  });
+  assert.deepEqual(await provider.whoami(), { id: "rowan", displayName: "rowan" });
+  assert.equal(requestUrl.pathname, "/rest/getUser.view");
+  assert.equal(requestUrl.searchParams.get("username"), "rowan");
+});
+
+test("whoami maps a Navidrome wrong-credentials error to a sign-in rejection", async () => {
+  const provider = createNavidromeProvider({
+    baseUrl: "https://music.test/", username: "rowan", token: "hash", salt: "salt",
+    fetchImpl: async () => ({ ok: true, json: async () => ({ "subsonic-response": { status: "failed", error: { code: 40, message: "Wrong username or password" } } }) }),
+  });
+  await assert.rejects(provider.whoami(), /request failed: 401/);
+});

@@ -40,3 +40,13 @@ test("surfaces Emby HTTP failures", async () => {
   });
   await assert.rejects(provider.getPresence(), /401 Unauthorized/);
 });
+
+test("whoami reads the signed-in Emby user from /Users/Me", async () => {
+  let seen;
+  const provider = createEmbyProvider({
+    baseUrl: "https://media.test/", apiKey: "token",
+    fetchImpl: async (url, options) => { seen = { url: String(url), token: options.headers["X-Emby-Token"] }; return { ok: true, json: async () => ({ Id: "abc", Name: "Rowan", Policy: { IsAdministrator: true } }) }; },
+  });
+  assert.deepEqual(await provider.whoami(), { id: "abc", displayName: "Rowan" });
+  assert.deepEqual(seen, { url: "https://media.test/Users/Me", token: "token" });
+});

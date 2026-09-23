@@ -39,3 +39,13 @@ test("surfaces Jellyfin HTTP failures", async () => {
   });
   await assert.rejects(provider.getPresence(), /403 Forbidden/);
 });
+
+test("whoami reads the signed-in Jellyfin user from /Users/Me", async () => {
+  let seen;
+  const provider = createJellyfinProvider({
+    baseUrl: "https://media.test/", apiKey: "token",
+    fetchImpl: async (url, options) => { seen = { url: String(url), token: options.headers["X-Emby-Token"] }; return { ok: true, json: async () => ({ Id: "abc", Name: "Rowan", Policy: { IsAdministrator: true } }) }; },
+  });
+  assert.deepEqual(await provider.whoami(), { id: "abc", displayName: "Rowan" });
+  assert.deepEqual(seen, { url: "https://media.test/Users/Me", token: "token" });
+});

@@ -14,6 +14,12 @@ export function createEmbyProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
       const session = sessions.find((candidate) => matchesSession(candidate, username));
       return session ? mapSession(session) : { state: "idle" };
     },
+    async whoami() {
+      const response = await fetchImpl(`${origin}/Users/Me`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
+      if (!response.ok) throw new Error(`Emby user request failed: ${response.status} ${response.statusText}`);
+      const user = await response.json();
+      return { id: typeof user?.Id === "string" ? user.Id : null, displayName: typeof user?.Name === "string" ? user.Name : null };
+    },
   });
 }
 

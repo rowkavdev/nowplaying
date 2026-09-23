@@ -32,6 +32,18 @@ $SignInErrors = @{
   expired = 'That sign-in expired. Start again.'
   too_many_signins = 'Too many sign-ins are open. Wait a minute and try again.'
 }
+$TestMessages = @{
+  connected = "Connected. NowPlaying can see what you're playing."
+  authentication_failed = 'Your server rejected the saved sign-in. Sign in again.'
+  unreachable = "Couldn't reach your server. Check the address and that the server is running."
+  connection_failed = "Your server answered, but not in a way NowPlaying understands. Check the address points at your media server."
+  missing_server = 'Add your server address, then sign in again.'
+  credential_unavailable = 'Your saved sign-in is missing from Windows Credential Manager. Sign in again.'
+  invalid_configuration = 'The saved details look wrong. Sign in again.'
+  not_signed_in = 'Sign in first, then test the connection.'
+  user_mismatch = 'Your server says this sign-in belongs to a different user. Sign in again with the account you play on.'
+}
+$script:TestResult = $null
 $script:SignIn = @{ FlowId = $null; Code = $null }
 $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; navidrome = 'Navidrome' }
 $Idle = [ordered]@{ clear = 'Clear my status'; grace = 'Keep it for a short grace period'; show = 'Show that nothing is playing'; recent = 'Show what I played last' }
@@ -155,6 +167,7 @@ function Start-SignIn($Body) {
 }
 
 $onSignIn = {
+  $script:TestResult = $null
   switch ([string]$script:Draft.provider) {
     'plex' { Start-SignIn @{ action = 'start'; provider = 'plex'; baseUrl = (Get-Field 'serverUrl') } }
     'jellyfin' { Start-SignIn @{ action = 'start'; provider = 'jellyfin'; baseUrl = (Get-Field 'serverUrl') } }
@@ -259,6 +272,17 @@ function Show-Step {
       }
       $button.add_Click($onSignIn)
       $panel.Controls.Add($button)
+      if ($script:Draft.account) {
+        $test = [System.Windows.Forms.Button]::new()
+        $test.Name = 'testConnection'; $test.AutoSize = $true; $test.Text = 'Test connection'
+        $test.add_Click($onTestConnection)
+        $panel.Controls.Add($test)
+        if ($script:TestResult) {
+          $resultLabel = New-Text $script:TestResult
+          $resultLabel.Name = 'connectionResult'
+          $panel.Controls.Add($resultLabel)
+        }
+      }
     }
     'discord' {
       $title.Text = 'Discord status'
@@ -299,10 +323,26 @@ function Show-Step {
 function Send-Step([string]$Method, $Body) {
   $errorLabel.Text = ''
   Stop-SignIn
+  $script:TestResult = $null
   $form.UseWaitCursor = $true
   try { $script:Draft = (Invoke-Setup $Method '/api/setup/draft' $Body).draft }
   catch { $script:LastError = $_.Exception.Message; $errorLabel.Text = "Couldn't save that step. Check NowPlaying is still running and try again." }
   finally { $form.UseWaitCursor = $false }
+  Show-Step
+}
+
+# Asks the app to check the saved sign-in against the server once. The reply
+# is only a status word; nothing sensitive comes back.
+$onTestConnection = {
+  $form.UseWaitCursor = $true
+  try {
+    $reply = try { Invoke-Setup 'POST' '/api/setup/test' $null } catch {
+      $text = $_.ErrorDetails.Message
+      if ($text) { try { $text | ConvertFrom-Json } catch { $null } } else { $null }
+    }
+    $status = [string]$reply.status
+    $script:TestResult = if ($TestMessages.ContainsKey($status)) { $TestMessages[$status] } else { "Couldn't run the test. Check NowPlaying is still running and try again." }
+  } finally { $form.UseWaitCursor = $false }
   Show-Step
 }
 
@@ -335,6 +375,10 @@ if ($SelfTest) {
   & $onSignIn
   if ($errorLabel.Text) { throw "self-test sign-in error: $($errorLabel.Text)" }
   if (-not $script:Draft.account -or -not $next.Enabled) { throw 'sign-in did not record the account' }
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'testConnection' })[0]) { throw 'sign-in step has no Test connection button after sign-in' }
+  & $onTestConnection
+  $resultText = [string]@($panel.Controls | Where-Object { $_.Name -eq 'connectionResult' })[0].Text
+  if (-not ($TestMessages.Values -contains $resultText)) { throw "Test connection showed no known result: $resultText" }
   & $onNext
   & $onBack
   $seen += $script:Draft.step

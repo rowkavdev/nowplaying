@@ -44,3 +44,35 @@ test("uses a bounded fallback for other provider failures", async () => {
     config: {},
   }), { ok: false, status: "connection_failed", activity: null });
 });
+
+function whoProvider(user, { fail } = {}) {
+  return () => ({
+    async getPresence() { return { state: "idle" }; },
+    async whoami() { if (fail) throw fail; return user; },
+  });
+}
+
+test("passes when the server says the sign-in is the setup identity", async () => {
+  const config = { identity: { id: "u1", displayName: "Rowan" } };
+  assert.equal((await checkProviderConnection({ createProvider: whoProvider({ id: "u1", displayName: "rowan" }), config })).status, "connected");
+  assert.equal((await checkProviderConnection({ createProvider: whoProvider({ id: null, displayName: "rowan" }), config })).status, "connected");
+});
+
+test("reports a user mismatch without echoing either user", async () => {
+  const config = { identity: { id: "u1", displayName: "Rowan" } };
+  const result = await checkProviderConnection({ createProvider: whoProvider({ id: "u2", displayName: "Guest" }), config });
+  assert.deepEqual(result, { ok: false, status: "user_mismatch", activity: null });
+  assert.equal(JSON.stringify(result).includes("Guest"), false);
+});
+
+test("user lookup: sign-in rejection fails, other lookup errors are ignored", async () => {
+  const config = { identity: { id: "u1", displayName: "Rowan" } };
+  const rejected = await checkProviderConnection({ createProvider: whoProvider(null, { fail: new Error("Jellyfin user request failed: 401 Unauthorized") }), config });
+  const unsupported = await checkProviderConnection({ createProvider: whoProvider(null, { fail: new Error("Jellyfin user request failed: 400 Bad Request") }), config });
+  assert.equal(rejected.status, "authentication_failed");
+  assert.equal(unsupported.status, "connected");
+});
+
+test("skips the user check when there is no identity or no whoami", async () => {
+  assert.equal((await checkProviderConnection({ createProvider: whoProvider({ id: "u2" }), config: {} })).status, "connected");
+});
