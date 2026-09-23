@@ -1,10 +1,10 @@
-import { advanceSetupDraft, createSetupDraft, previousSetupDraft } from "./setup.js";
+import { SetupStepError, advanceSetupDraft, createSetupDraft, previousSetupDraft } from "./setup.js";
 
 const PATH = "/api/setup/draft";
 const ACTIONS = new Set(["save", "next", "back"]);
 const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior"]);
 
-export function createSetupDraftHandler({ store } = {}) {
+export function createSetupDraftHandler({ store, signIn = true } = {}) {
   if (!store || typeof store.load !== "function" || typeof store.save !== "function" || typeof store.clear !== "function") {
     throw new TypeError("setup draft handler.store is invalid");
   }
@@ -40,8 +40,9 @@ export function createSetupDraftHandler({ store } = {}) {
     try {
       const { draft } = await store.load();
       const merged = createSetupDraft({ ...draft, ...changes });
-      next = input.action === "next" ? advanceSetupDraft(merged) : input.action === "back" ? previousSetupDraft(merged) : merged;
-    } catch {
+      next = input.action === "next" ? advanceSetupDraft(merged, {}, { signIn }) : input.action === "back" ? previousSetupDraft(merged, { signIn }) : merged;
+    } catch (error) {
+      if (error instanceof SetupStepError) return json(409, { error: error.code });
       return json(400, { error: "invalid_changes" });
     }
     const saved = await store.save(next);

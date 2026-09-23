@@ -26,7 +26,16 @@ test("the page contains no inline script, handlers, styles or external reference
   assert.doesNotMatch(body, /https?:\/\//);
   const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
   assert.doesNotMatch(js, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
-  assert.doesNotMatch(js, /token|password|apiKey/i);
+  assert.doesNotMatch(js, /token|apiKey|localStorage|sessionStorage|document\.cookie/i);
+  // The password box is only read to send one sign-in request, then cleared.
+  assert.match(js, /password\.value = ""/);
+});
+
+test("the sign-in step talks only to the local sign-in API and opens only Plex", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  assert.match(js, /"\/api\/setup\/signin"/);
+  assert.match(js, /indexOf\("https:\/\/app\.plex\.tv\/"\) === 0/);
+  assert.match(js, /needsSignIn = draft\.step === "signin" && !draft\.account/);
 });
 
 test("ignores other paths and refuses writes", async () => {

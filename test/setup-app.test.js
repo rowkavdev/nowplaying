@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openSetupUrl, startSetupApp, windowsSetupDraftPath } from "../src/setup-app.js";
@@ -25,6 +25,30 @@ test("serves the wizard page and draft API together on a free loopback port", as
     assert.equal((await fetch(new URL("/other", app.url))).status, 404);
     const found = await (await fetch(new URL("/api/setup/discover", app.url))).json();
     assert.equal(found.servers[0].provider, "navidrome");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a sign-in saves the secret to the credential store and only the account to the draft", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const saved = [];
+  const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "nd-secret" }) };
+  const draftFile = join(dir, "draft.json");
+  const app = await startSetupApp({ draftFile, credentialStore, deviceId: "device-0001", signIn });
+  try {
+    const api = (path, method, body) => fetch(new URL(path, app.url), { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+    await api("/api/setup/draft", "POST", { action: "next" });
+    assert.equal((await api("/api/setup/draft", "POST", { action: "next", changes: { provider: "navidrome" } }))[1].draft.step, "signin");
+    assert.deepEqual(await api("/api/setup/draft", "POST", { action: "next" }), [409, { error: "signin_required" }]);
+    const [status, body] = await api("/api/setup/signin", "POST", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "rowan", password: "pw-123" });
+    assert.deepEqual([status, body.status], [200, "signed_in"]);
+    assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "rowan" }, "nd-secret"]]);
+    const draft = (await api("/api/setup/draft", "GET"))[1].draft;
+    assert.deepEqual([draft.step, draft.account], ["signin", { provider: "navidrome", id: "rowan", displayName: "Rowan" }]);
+    assert.doesNotMatch(await readFile(draftFile, "utf8"), /nd-secret|pw-123/);
+    assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "discord");
   } finally {
     await app.close();
   }

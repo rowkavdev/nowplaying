@@ -19,7 +19,7 @@ export const DEFAULT_SIGNIN = Object.freeze({
 });
 
 export function createSetupSignInHandler({
-  credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, now = Date.now,
+  credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, now = Date.now, onSignedIn = async () => {},
   flowTtlMs = 10 * 60_000, maxFlows = 4, newFlowId = () => randomBytes(18).toString("base64url"),
 } = {}) {
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
@@ -36,6 +36,12 @@ export function createSetupSignInHandler({
       await credentialStore.save({ provider: result.provider, identityId: result.identity.id }, result.secret);
     } catch {
       return json(500, { error: "credential_store_failed" });
+    }
+    const identity = { id: result.identity.id, displayName: result.identity.displayName };
+    try {
+      await onSignedIn({ provider: result.provider, identity });
+    } catch {
+      return json(500, { error: "draft_update_failed" });
     }
     return json(200, { status: "signed_in", provider: result.provider, identity: { id: result.identity.id, displayName: result.identity.displayName } });
   }
