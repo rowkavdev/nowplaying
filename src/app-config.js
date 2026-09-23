@@ -81,6 +81,11 @@ const CONFIG_MIGRATIONS = Object.freeze([
   () => { throw new Error("unsupported"); },
 ]);
 
+/**
+ * Upgrades config.json to CONFIG_VERSION if needed (backup first).
+ * Throws CONFIG_TOO_NEW for a newer file; any other failure leaves the file
+ * alone and returns status "failed" so loadAppConfig reports it as usual.
+ */
 export async function migrateAppConfig(file, { clock } = {}) {
   const store = createConfigMigrationStore({
     file,
