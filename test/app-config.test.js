@@ -149,3 +149,34 @@ for (const provider of ["jellyfin", "emby"]) {
     assert.equal((await app.getPresence()).state, "idle");
   });
 }
+
+test("plex: follows the signed-in user by plex.tv ID, and the owner's local id 1 only for the owner's token", async () => {
+  let sessions = [];
+  let ownerToken = true;
+  const accountChecks = [];
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith("/accounts")) { accountChecks.push(url); return new Response("{}", { status: ownerToken ? 200 : 401 }); }
+    return Response.json({ MediaContainer: { Metadata: sessions } });
+  };
+  const track = (title, User) => ({ type: "track", title, grandparentTitle: "A", duration: 1000, viewOffset: 0, Player: { state: "playing" }, User });
+  const config = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "123456", displayName: "Rowan" } }));
+
+  // Shared user with a duplicate name: matched by ID, never by name.
+  let app = createProviderFromConfig(config, "plex-token", { fetchImpl });
+  sessions = [track("Theirs", { id: "999", title: "Rowan" }), track("Mine", { id: "123456", title: "Rowan K" })];
+  assert.equal((await app.getPresence()).title, "Mine");
+  sessions = [track("Theirs", { id: "999", title: "Rowan" })];
+  assert.equal((await app.getPresence()).state, "idle");
+  assert.equal(accountChecks.length, 0);
+
+  // Owner: the server calls them "1". Confirmed once via /accounts.
+  sessions = [track("Owner plays", { id: "1", title: "Someone else's name" })];
+  assert.equal((await app.getPresence()).title, "Owner plays");
+  assert.equal((await app.getPresence()).title, "Owner plays");
+  assert.equal(accountChecks.length, 1);
+
+  // A shared user's token can't list /accounts, so the owner's session is not theirs.
+  ownerToken = false;
+  app = createProviderFromConfig(config, "plex-token", { fetchImpl });
+  assert.equal((await app.getPresence()).state, "idle");
+});
