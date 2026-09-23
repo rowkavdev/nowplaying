@@ -10,6 +10,10 @@ const SECURITY_HEADERS = Object.freeze({
   "X-Frame-Options": "DENY",
 });
 
+// Opt-in policy for the local setup page: same-origin script, style, images and
+// fetch only. No inline script, no framing, no third-party origins.
+export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 
@@ -43,7 +47,12 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 3000, shu
     }
     try {
       const result = await handler({ method: request.method, url: request.url, headers: request.headers, ...(body !== undefined ? { body } : {}) });
-      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS });
+      if (!result) {
+        response.writeHead(404, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Not Found");
+        return;
+      }
+      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(isPage(result) ? { "Content-Security-Policy": PAGE_CSP } : {}) });
       response.end(result.body);
     } catch {
       response.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
@@ -59,6 +68,12 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 3000, shu
       finally { clearTimeout(timer); }
     },
   });
+}
+
+function isPage(result) {
+  if (result.page !== true || result.status !== 200) return false;
+  const key = Object.keys(result.headers ?? {}).find((name) => name.toLowerCase() === "content-type");
+  return key !== undefined && String(result.headers[key]).split(";")[0].trim().toLowerCase() === "text/html";
 }
 
 function rejectUnsafeWrite(headers) {
