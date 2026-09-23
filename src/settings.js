@@ -37,7 +37,7 @@ export const defaultSettings = Object.freeze({
     enabled: false,
     details: "{title}",
     state: "{subtitle}",
-    timestamps: "elapsed",
+    timestamps: "both",
     idleBehavior: "clear",
     artworkProxy: "",
     artworkLookup: "off",
