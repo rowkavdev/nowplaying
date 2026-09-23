@@ -50,9 +50,10 @@ Name: "{group}\NowPlaying install folder"; Filename: "{app}"
 Type: files; Name: "{userstartup}\nowplaying.lnk"
 
 [Run]
-; First install opens setup; an upgrade over a working setup launches the app.
-; Both go through the no-console launcher.
-Filename: "{app}\nowplayingw.exe"; Parameters: "setup"; WorkingDir: "{app}"; Description: "Set up NowPlaying now"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup
+; Both run `start`: on a first install it opens setup, then runs the app and
+; tray once setup is saved. (`setup` alone exits when the wizard closes, which
+; left first-time users with no tray and no Discord status.)
+Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Description: "Set up and start NowPlaying"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup
 Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Description: "Launch NowPlaying"; Flags: postinstall nowait skipifsilent; Check: not NeedsSetup
 Filename: "{app}"; Description: "Open the install folder"; Flags: postinstall shellexec nowait skipifsilent unchecked
 
