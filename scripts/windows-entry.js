@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createAppLogger } from "../src/app-log.js";
+import { StartupError, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
@@ -16,15 +18,31 @@ if (command === "--version" || command === "version") {
   await logger.event("startup", "starting");
   let app;
   try {
-    const configPath = resolve(process.argv[3] ?? "nowplaying.config.mjs");
-    let config;
-    try { config = (await import(pathToFileURL(configPath).href)).default; }
-    catch (error) { error.startupCode = "CONFIG_LOAD_FAILED"; throw error; }
-    if (!config || typeof config.start !== "function") throw Object.assign(new TypeError("config default export must provide start()"), { startupCode: "CONFIG_INVALID" });
-    app = await config.start();
-    if (!app || typeof app.close !== "function") throw Object.assign(new TypeError("config start() must return an app with close()"), { startupCode: "APP_INVALID" });
+    const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
+    // An explicit config module wins. With no argument, the wizard's config is
+    // used; installs from before the wizard keep their nowplaying.config.mjs.
+    const legacyModule = process.argv[3] ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
+    if (legacyModule) {
+      // Hand-written config module (advanced / pre-wizard setups).
+      const configPath = resolve(legacyModule);
+      let config;
+      try { config = (await import(pathToFileURL(configPath).href)).default; }
+      catch (error) { error.startupCode = "CONFIG_LOAD_FAILED"; throw error; }
+      if (!config || typeof config.start !== "function") throw Object.assign(new TypeError("config default export must provide start()"), { startupCode: "CONFIG_INVALID" });
+      app = await config.start();
+      if (!app || typeof app.close !== "function") throw Object.assign(new TypeError("config start() must return an app with close()"), { startupCode: "APP_INVALID" });
+    } else {
+      // The config written by `nowplaying.exe setup`; the sign-in comes from Credential Manager.
+      const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
+      app = await startAppFromConfig({ configFile, credentialStore });
+      console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
+    }
   } catch (error) {
     await logger.event("startup", "failed", { level: "error", code: error?.startupCode ?? "START_FAILED" });
+    if (error instanceof StartupError) {
+      console.error(error.message);
+      process.exit(1);
+    }
     throw error;
   }
   await logger.event("startup", "ok");
@@ -60,7 +78,7 @@ if (command === "--version" || command === "version") {
     if (!flags.has("--no-open")) openSetupUrl(setup.url);
   }
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start [config.mjs]\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start            (runs from the setup config)\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;
