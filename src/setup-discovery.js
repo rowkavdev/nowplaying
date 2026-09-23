@@ -1,11 +1,15 @@
 // Finds media servers so the setup wizard can offer them first: HTTP probes
-// on this PC plus Jellyfin/Emby UDP discovery on the local network.
-// Read-only, no credentials, short timeouts.
+// on this PC and the LAN gateway, plus Jellyfin/Emby UDP discovery on the
+// local network. Read-only, no credentials, short timeouts.
 
+import { networkInterfaces as osNetworkInterfaces } from "node:os";
 import { discoverLanServers } from "./setup-lan-discovery.js";
 
 const MAX_BODY = 64 * 1024;
 const HOST = "127.0.0.1";
+const MAX_CONCURRENT = 4;
+// Servers with no broadcast discovery are looked for on the LAN at these ports.
+const NETWORK_PORTS = Object.freeze([4533, 8096]);
 
 export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 4533, path: "/rest/ping.view?f=json&v=1.16.1&c=nowplaying-setup", classify: classifySubsonic }),
@@ -13,13 +17,46 @@ export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 32400, path: "/identity", classify: classifyPlex }),
 ]);
 
-export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers } = {}) {
+export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
+  const jobs = probes.map((probe) => ({ host: HOST, probe }));
+  for (const host of networkHosts) for (const probe of probes) if (NETWORK_PORTS.includes(probe.port)) jobs.push({ host, probe });
   const [results, lan] = await Promise.all([
-    Promise.all(probes.map((probe) => runProbe(probe, fetchImpl, timeoutMs))),
+    runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs)),
     typeof discoverLan === "function" ? discoverLan({ timeoutMs }).catch(() => []) : [],
   ]);
-  return mergeServers(results.filter(Boolean), lan);
+  const found = results.filter(Boolean);
+  return mergeServers(found.filter((s) => s.baseUrl.startsWith(`http://${HOST}:`)), [...found.filter((s) => !s.baseUrl.startsWith(`http://${HOST}:`)), ...(Array.isArray(lan) ? lan : [])]);
+}
+
+// Likely gateway addresses (x.y.z.1) of this PC's private IPv4 networks,
+// worked out from the interface list so no command window ever opens.
+export function gatewayCandidates(networkInterfaces = osNetworkInterfaces) {
+  const hosts = new Set();
+  let list = {};
+  try { list = networkInterfaces() ?? {}; } catch { return []; }
+  for (const addresses of Object.values(list)) {
+    for (const entry of addresses ?? []) {
+      if (!entry || entry.internal || (entry.family !== "IPv4" && entry.family !== 4)) continue;
+      const parts = String(entry.address).split(".").map(Number);
+      if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255) || !isPrivate(parts)) continue;
+      const gateway = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+      if (gateway !== entry.address) hosts.add(gateway);
+    }
+  }
+  return [...hosts].slice(0, 4);
+}
+
+function isPrivate([a, b]) { return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168); }
+
+async function runLimited(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) { const i = next++; results[i] = await worker(items[i]); }
+  });
+  await Promise.all(lanes);
+  return results;
 }
 
 // Loopback results win; a LAN reply for a server already found on this PC
@@ -38,8 +75,8 @@ export function mergeServers(local, lan) {
   return Object.freeze(merged);
 }
 
-async function runProbe(probe, fetchImpl, timeoutMs) {
-  const baseUrl = `http://${HOST}:${probe.port}`;
+async function runProbe(host, probe, fetchImpl, timeoutMs) {
+  const baseUrl = `http://${host}:${probe.port}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
