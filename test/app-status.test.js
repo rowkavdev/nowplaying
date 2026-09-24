@@ -218,3 +218,20 @@ test("discord artwork source and reason are short words only", () => {
   status.setDiscord(() => ({ enabled: true, state: "ready" }));
   assert.equal(status.snapshot().discord.artwork, undefined);
 });
+
+test("status lists every server with a safe per-server state (#252)", () => {
+  const multi = { ...config, servers: [{ serverUrl: config.serverUrl }, { serverUrl: "http://10.0.0.9:4533/" }] };
+  const status = createAppStatus({ config: multi, now: () => 5000 });
+  assert.deepEqual(status.snapshot().servers, []);
+  status.setServers(() => [
+    { provider: "jellyfin", displayName: "Rowan", state: "playing", checkedAt: 4000 },
+    { provider: "navidrome", displayName: "rowan", state: "unavailable", reason: "CREDENTIAL_MISSING", checkedAt: null },
+  ]);
+  const rows = status.snapshot().servers;
+  assert.deepEqual(rows.map((r) => [r.type, r.user, r.state, r.reason]), [["Jellyfin", "Rowan", "playing", null], ["Navidrome", "rowan", "unavailable", "credential_missing"]]);
+  assert.doesNotMatch(JSON.stringify(rows), /pw|api_key|secret/);
+  assert.equal(rows[1].address, "http://10.0.0.9:4533");
+  assert.throws(() => status.setServers("x"), /expected a function/);
+  status.setServers(() => { throw new Error("boom"); });
+  assert.deepEqual(status.snapshot().servers, []);
+});

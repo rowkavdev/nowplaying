@@ -11,7 +11,8 @@ const PAGE = `<!doctype html>
 <p id="summary" role="status" aria-live="polite">Loading status...</p>
 <section aria-labelledby="h-playing"><h2 id="h-playing">Now playing</h2><p id="playing">-</p></section>
 <section aria-labelledby="h-server"><h2 id="h-server">Media server</h2>
-<dl><dt>Server</dt><dd id="server-type">-</dd><dt>Address</dt><dd id="server-address">-</dd><dt>Signed in as</dt><dd id="server-user">-</dd><dt>Connection</dt><dd id="server-state">-</dd><dt>Last checked</dt><dd id="server-poll">-</dd></dl></section>
+<dl><dt>Server</dt><dd id="server-type">-</dd><dt>Address</dt><dd id="server-address">-</dd><dt>Signed in as</dt><dd id="server-user">-</dd><dt>Connection</dt><dd id="server-state">-</dd><dt>Last checked</dt><dd id="server-poll">-</dd></dl>
+<div id="servers-block" hidden><h3>All servers</h3><ul id="servers"></ul></div></section>
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <dl><dt>Status</dt><dd id="discord-state">-</dd><dt>Last update</dt><dd id="discord-last">-</dd></dl></section>
 <section aria-labelledby="h-card"><h2 id="h-card">Your card</h2>
@@ -51,6 +52,7 @@ function ago(iso) {
   return m < 90 ? m + " minutes ago" : Math.round(m / 60) + " hours ago";
 }
 let cardTick = 0;
+const SERVER_ROW_WORDS = { playing: "playing", paused: "paused", idle: "connected, nothing playing", waiting: "waiting for first check", error: "can't reach it", unavailable: "sign-in missing" };
 async function load() {
   try {
     const res = await fetch("/api/status", { cache: "no-store", headers: { Accept: "application/json" } });
@@ -66,6 +68,14 @@ async function load() {
     set("server-user", s.server.user);
     set("server-state", server[0], server[1]);
     set("server-poll", ago(s.server.lastPollAt));
+    // Several servers (#252): one line each. Which one Discord shows is still to be decided.
+    const rows = Array.isArray(s.servers) ? s.servers : [];
+    document.getElementById("servers-block").hidden = rows.length < 2;
+    document.getElementById("servers").replaceChildren(...(rows.length < 2 ? [] : rows.map((row) => {
+      const li = document.createElement("li");
+      li.textContent = [row.type, row.user ? "as " + row.user : null, "- " + (SERVER_ROW_WORDS[row.state] || row.state) + (row.reason ? " (" + row.reason + ")" : ""), row.lastPollAt ? "- checked " + ago(row.lastPollAt) : null].filter(Boolean).join(" ");
+      return li;
+    })));
     set("discord-state", discord[0] + (s.discord.error ? " (" + s.discord.error + ")" : ""), discord[1]);
     set("discord-last", s.discord.enabled ? ago(s.discord.lastPublishedAt) : "-");
     set("version", s.version);
