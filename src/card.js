@@ -7,6 +7,8 @@ export const cardThemes = Object.freeze({
 
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const DATA_IMAGE_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const DEFAULT_FIELD_ORDER = Object.freeze(["state", "title", "subtitle"]);
+const TEXT_ANCHORS = Object.freeze({ start: "start", middle: "middle", end: "end" });
 const SHOW_DEFAULTS = Object.freeze({ artwork: true, mediaType: true, progress: true, state: true, subtitle: true });
 const COMPACT_SHOW = Object.freeze({ artwork: false, progress: false, state: false, subtitle: false });
 
@@ -28,7 +30,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
@@ -39,6 +41,10 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
   const artworkWidth = bounded(layout.artworkWidth, 68, 48, 160, "layout.artworkWidth");
   const artworkHeight = bounded(layout.artworkHeight, 100, 48, 180, "layout.artworkHeight");
+  const fieldOrder = layout.fieldOrder ?? DEFAULT_FIELD_ORDER;
+  if (!Array.isArray(fieldOrder) || fieldOrder.length !== 3 || new Set(fieldOrder).size !== 3 || !fieldOrder.every((field) => DEFAULT_FIELD_ORDER.includes(field))) throw new TypeError("layout.fieldOrder: expected state, title and subtitle, each once");
+  const textAlign = layout.textAlign ?? "start";
+  if (!Object.hasOwn(TEXT_ANCHORS, textAlign)) throw new TypeError("layout.textAlign: expected start, middle or end");
   if (artworkDataUri !== null && (typeof artworkDataUri !== "string" || !DATA_IMAGE_PATTERN.test(artworkDataUri))) throw new TypeError("artworkDataUri must be a validated raster data URI");
   const presetShow = theme === "compact" ? COMPACT_SHOW : {};
   const visibility = { ...SHOW_DEFAULTS, ...presetShow, ...show };
@@ -55,9 +61,27 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const title = presence.title || "Nothing playing";
   const subtitle = presence.subtitle || (visibility.mediaType ? providerLabel(presence.kind) : "");
   const hasSubtitle = visibility.subtitle && subtitle;
-  const height = Math.max(hasArtwork ? padding * 2 + artworkHeight : 74, padding * 2 + titleSize + (visibility.state ? 22 : 0) + (hasSubtitle ? subtitleSize + 10 : 0) + (visibility.progress ? progressHeight + 16 : 0));
-  const titleY = padding + (visibility.state ? 40 : titleSize);
-  const subtitleY = titleY + subtitleSize + 10;
+  const baseHeight = Math.max(hasArtwork ? padding * 2 + artworkHeight : 74, padding * 2 + titleSize + (visibility.state ? 22 : 0) + (hasSubtitle ? subtitleSize + 10 : 0) + (visibility.progress ? progressHeight + 16 : 0));
+  // Text lines stack in fieldOrder. The default order gives the same
+  // positions and height as before fieldOrder existed.
+  const lines = fieldOrder.filter((field) => field === "title" || (field === "state" ? visibility.state : hasSubtitle));
+  const sizes = { state: 11, title: titleSize, subtitle: subtitleSize };
+  const baselines = {};
+  let cursor = null;
+  let previous = null;
+  for (const field of lines) {
+    cursor = cursor === null ? padding + (field === "state" ? 6 : sizes[field]) : cursor + (previous === "state" && field === "title" ? 34 : sizes[field] + (previous === "state" ? 14 : 10));
+    baselines[field] = cursor;
+    previous = field;
+  }
+  const customOrder = fieldOrder.some((field, index) => field !== DEFAULT_FIELD_ORDER[index]);
+  const height = Math.max(baseHeight, customOrder ? cursor + padding + 2 + (visibility.progress ? progressHeight + 16 : 0) : 0);
+  const titleY = baselines.title;
+  const subtitleY = baselines.subtitle;
+  const stateY = baselines.state;
+  const anchor = TEXT_ANCHORS[textAlign];
+  const textX = textAlign === "middle" ? contentX + Math.round(contentWidth / 2) : textAlign === "end" ? contentX + contentWidth : contentX;
+  const anchorAttr = anchor === "start" ? "" : ` text-anchor="${anchor}"`;
   const progressY = height - padding;
   const progress = progressWidth(presence, contentWidth);
   const description = subtitle || status;
@@ -68,9 +92,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title><desc id="desc">${escapeXml(description)}</desc>
   <rect width="100%" height="100%" rx="${radius}" fill="${palette.background}" stroke="${palette.border}"/>
   ${hasArtwork ? `<defs><clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(radius, 12)}"/></clipPath></defs><image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
-  ${visibility.state ? `<text x="${contentX}" y="${padding + 6}" fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
-  <text x="${contentX}" y="${titleY}" fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${titleSize}" font-weight="600">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
-  ${hasSubtitle ? `<text x="${contentX}" y="${subtitleY}" fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${subtitleSize}">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
+  ${visibility.state ? `<text x="${textX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
+  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${titleSize}" font-weight="600">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
+  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${subtitleSize}">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
   ${visibility.progress ? `<rect x="${contentX}" y="${progressY}" width="${contentWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${contentX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
