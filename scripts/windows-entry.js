@@ -23,7 +23,11 @@ let setupRequests = null;
 const command = process.argv[2] ?? "help";
 
 if (command === "--version" || command === "version") {
-  const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8"));
+  // A damaged or incomplete bundle (files moved, partial uninstall) has no
+  // manifest: say so plainly instead of dumping an ENOENT stack (#500).
+  let manifest;
+  try { manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8")); }
+  catch { console.error("nowplaying: cannot read app/package.json - the install looks incomplete. Reinstall NowPlaying."); process.exit(1); }
   console.log(manifest.version);
 } else if (command === "start") {
   const logger = createAppLogger();

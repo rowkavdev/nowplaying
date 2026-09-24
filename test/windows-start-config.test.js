@@ -92,3 +92,14 @@ test("start and setup without LOCALAPPDATA say so plainly, no stack trace (#500)
     assert.doesNotMatch(run.output().stderr, /TypeError|setup-app\.js/);
   }
 });
+
+test("--version from an incomplete bundle says so plainly, no stack trace (#500)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-version-"));
+  const child = spawn(process.execPath, [ENTRY, "--version"], { cwd: dir, stdio: ["ignore", "pipe", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const code = await new Promise((resolve) => child.on("close", resolve));
+  assert.equal(code, 1);
+  assert.match(stderr, /install looks incomplete/);
+  assert.doesNotMatch(stderr, /ENOENT|at async/);
+});
