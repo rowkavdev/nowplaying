@@ -155,14 +155,20 @@ function defaultDiscordTransport(clientId) {
 // leaves the machine unless the config has artworkLookup "musicbrainz" (the
 // default for new setups, off for configs written before it existed).
 export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, now } = {}) {
-  if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {} });
+  if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
-  if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {} });
+  if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
   const artwork = createArtwork(config.discord);
   const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
   loop.start();
-  return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop() });
+  // Refresh artwork: forget cached covers, then update Discord straight away.
+  async function refreshArtwork() {
+    const dropped = typeof artwork?.clear === "function" ? artwork.clear() : 0;
+    await loop.tick().catch(() => null);
+    return dropped;
+  }
+  return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop(), refreshArtwork });
 }
 
 // Hosted card upload (#140) runs only when the config turns it on. It pushes
@@ -207,7 +213,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // status page run. Discord and hosted uploads, which poll in the background,
   // stay off until the user retries a normal start, even if Discord settings
   // are changed from the settings page meanwhile.
-  const paused = Object.freeze({ status: "safe_mode", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  const paused = Object.freeze({ status: "safe_mode", stop: async () => {}, cardUrl: async () => null, connection: () => null, refreshArtwork: async () => 0 });
   const offHosted = Object.freeze({ status: "off", stop: async () => {}, cardUrl: async () => null, connection: () => null });
   let hosted = offHosted;
   const launchHosted = (settings) => {
@@ -218,7 +224,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
     try { return startDiscordFromConfig(settings, provider, discordOptions); }
-    catch { return Object.freeze({ status: "failed", stop: async () => {} }); }
+    catch { return Object.freeze({ status: "failed", stop: async () => {}, refreshArtwork: async () => 0 }); }
   };
   // Discord changes from the settings page are saved to config.json first,
   // then the Discord loop restarts with them; no app restart needed.
@@ -284,7 +290,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), safeMode, status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }
 
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
