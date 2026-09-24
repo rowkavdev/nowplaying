@@ -49,3 +49,33 @@ test("whoami reads the signed-in Jellyfin user from /Users/Me", async () => {
   assert.deepEqual(await provider.whoami(), { id: "abc", displayName: "Rowan" });
   assert.deepEqual(seen, { url: "https://media.test/Users/Me", token: "token" });
 });
+
+function oneJellyfinItem(item) {
+  return createJellyfinProvider({
+    baseUrl: "https://jellyfin.test", apiKey: "secret",
+    fetchImpl: async () => ({ ok: true, json: async () => [{ UserName: "Rowan", PlayState: {}, NowPlayingItem: { Id: "1", ...item } }] }),
+  });
+}
+
+test("maps Jellyfin episode series, season, episode and year", async () => {
+  const presence = await oneJellyfinItem({ Type: "Episode", Name: "The Constant", SeriesName: "Lost", SeasonName: "Season 4", ParentIndexNumber: 4, IndexNumber: 5, ProductionYear: 2008 }).getPresence();
+  assert.equal(presence.series, "Lost");
+  assert.equal(presence.season, 4);
+  assert.equal(presence.episode, 5);
+  assert.equal(presence.year, 2008);
+});
+
+test("maps Jellyfin movie year only", async () => {
+  const presence = await oneJellyfinItem({ Type: "Movie", Name: "Arrival", ProductionYear: 2016, IndexNumber: 2 }).getPresence();
+  assert.equal(presence.year, 2016);
+  assert.equal(presence.series, null);
+  assert.equal(presence.episode, null);
+});
+
+test("drops odd Jellyfin numbers instead of failing", async () => {
+  const presence = await oneJellyfinItem({ Type: "Episode", Name: "Special", SeriesName: "", ParentIndexNumber: -1, IndexNumber: 2.5, ProductionYear: 3000 }).getPresence();
+  assert.equal(presence.series, null);
+  assert.equal(presence.season, null);
+  assert.equal(presence.episode, null);
+  assert.equal(presence.year, null);
+});

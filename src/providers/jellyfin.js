@@ -1,4 +1,5 @@
 import { defineProvider } from "../provider.js";
+import { optionalCount, optionalText, optionalYear } from "./fields.js";
 
 const TICKS_PER_MILLISECOND = 10_000;
 
@@ -54,6 +55,12 @@ function mapSession(session) {
     artwork: imageTag ? { provider: "jellyfin", itemId: item.Id, imageTag, type: "primary" } : null,
     artworkUrl: null,
     positionMs: ticksToMilliseconds(session.PlayState?.PositionTicks), durationMs: ticksToMilliseconds(item.RunTimeTicks),
+    // Episode and movie details (#143): ParentIndexNumber is the season,
+    // IndexNumber the episode.
+    series: kind === "episode" ? optionalText(item.SeriesName) : null,
+    season: kind === "episode" ? optionalCount(item.ParentIndexNumber) : null,
+    episode: kind === "episode" ? optionalCount(item.IndexNumber) : null,
+    year: kind === "episode" || kind === "movie" ? optionalYear(item.ProductionYear) : null,
   };
 }
 
