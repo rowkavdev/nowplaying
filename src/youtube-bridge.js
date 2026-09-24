@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { defineProvider } from "./provider.js";
 
 // YouTube (#136), app side: the browser extension posts what the active
@@ -128,4 +128,34 @@ export function createYouTubeBridge({ token, ttlMs = 30_000, now = Date.now } = 
   });
 
   return Object.freeze({ receive, provider, tabCount: () => { prune(); return tabs.size; } });
+}
+
+export const YOUTUBE_BRIDGE_PATH = "/bridge/youtube";
+export const YOUTUBE_PAIRING = Object.freeze({ provider: "youtube", identityId: "extension" });
+
+// The pairing token lives in the credential store. The first start makes
+// one; the settings page shows it so the user can paste it into the
+// extension.
+export async function loadYouTubePairingToken(credentialStore) {
+  const saved = await credentialStore.read(YOUTUBE_PAIRING);
+  if (typeof saved === "string" && saved.length >= 32) return saved;
+  const token = randomBytes(32).toString("base64url");
+  await credentialStore.save(YOUTUBE_PAIRING, token);
+  return token;
+}
+
+// HTTP route for the bridge: POST /bridge/youtube with a JSON body. Every
+// other path goes to the fallback handler.
+export function createYouTubeBridgeHandler({ bridge, fallback }) {
+  if (typeof bridge?.receive !== "function" || typeof fallback !== "function") throw new TypeError("bridge and fallback are required");
+  return async function handle(request) {
+    const path = new URL(request?.url || "/", "http://localhost").pathname;
+    if (path !== YOUTUBE_BRIDGE_PATH) return fallback(request);
+    let body = null;
+    if (request.method === "POST") {
+      try { body = JSON.parse(request.body ?? ""); } catch { return { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" }, body: "" }; }
+    }
+    const { status } = bridge.receive({ method: request.method, headers: request.headers ?? {}, body });
+    return { status, headers: { "Cache-Control": "no-store", ...(status === 405 ? { Allow: "POST" } : {}) }, body: "" };
+  };
 }

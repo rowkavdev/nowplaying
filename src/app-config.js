@@ -29,6 +29,7 @@ import { withProviderBackoff } from "./provider-backoff.js";
 import { createMultiServerProvider } from "./multi-server.js";
 import { applyPrivacy } from "./privacy.js";
 import { combinePresence, createSpotifySource } from "./spotify-source.js";
+import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken } from "./youtube-bridge.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
@@ -276,7 +277,17 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   if (!safeMode && config.spotify) {
     try { spotify = createSpotifySource(config, credentialStore, { fetchImpl, backoff: providerBackoff }); } catch { spotify = null; }
   }
-  const cardProvider = spotify ? withPrivacy(combinePresence({ primary: tracked, secondary: spotify }), () => current) : provider;
+  // YouTube (#136): the browser extension posts to /bridge/youtube. Same
+  // rules as Spotify: card only, never Discord, most recent start wins, and
+  // a problem here never stops the start.
+  let youtube = null;
+  if (!safeMode) {
+    try { youtube = createYouTubeBridge({ token: await loadYouTubePairingToken(credentialStore) }); } catch { youtube = null; }
+  }
+  let cardSource = tracked;
+  if (spotify) cardSource = combinePresence({ primary: cardSource, secondary: spotify });
+  if (youtube) cardSource = combinePresence({ primary: cardSource, secondary: youtube.provider });
+  const cardProvider = cardSource === tracked ? provider : withPrivacy(cardSource, () => current);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
@@ -372,10 +383,13 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
   const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
-  const handler = createSettingsPageHandler({ settings, fallback: logsHandler });
+  const pageHandler = createSettingsPageHandler({ settings, fallback: logsHandler });
+  const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube, fallback: pageHandler }) : pageHandler;
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
-  const server = createHttpServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
+  // The bridge checks its own pairing token and extension origin, so it
+  // skips the session check the settings pages use.
+  const server = createHttpServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: youtube ? [YOUTUBE_BRIDGE_PATH] : [] });
   let address;
   try {
     address = await server.listen();
