@@ -56,3 +56,48 @@ test("rejects missing configuration", () => {
   assert.throws(() => createPlexProvider({ baseUrl: "http://plex.test", token: "" }), /Plex token is required/);
   assert.throws(() => createPlexProvider({ baseUrl: "", token: "secret" }), /Plex baseUrl is required/);
 });
+
+function sessionProvider(session) {
+  return createPlexProvider({
+    baseUrl: "http://plex.test/",
+    token: "secret",
+    fetchImpl: async () => ({ ok: true, async json() { return { MediaContainer: { Metadata: [session] } }; } }),
+  });
+}
+
+test("maps episode series, season, episode and year", async () => {
+  const presence = await sessionProvider({
+    title: "The Constant", type: "episode", grandparentTitle: "Lost", parentTitle: "Season 4",
+    parentIndex: 4, index: "5", year: 2008, viewOffset: 1, duration: 2,
+  }).getPresence();
+  assert.equal(presence.series, "Lost");
+  assert.equal(presence.season, 4);
+  assert.equal(presence.episode, 5);
+  assert.equal(presence.year, 2008);
+});
+
+test("maps movie year and leaves episode fields empty", async () => {
+  const presence = await sessionProvider({ title: "Arrival", type: "movie", year: "2016", viewOffset: 1, duration: 2 }).getPresence();
+  assert.equal(presence.year, 2016);
+  assert.equal(presence.series, null);
+  assert.equal(presence.season, null);
+  assert.equal(presence.episode, null);
+});
+
+test("drops odd episode numbers and years instead of failing", async () => {
+  const presence = await sessionProvider({
+    title: "Special", type: "episode", grandparentTitle: "  ", parentIndex: -1, index: 1.5, year: 42, viewOffset: 1, duration: 2,
+  }).getPresence();
+  assert.equal(presence.series, null);
+  assert.equal(presence.season, null);
+  assert.equal(presence.episode, null);
+  assert.equal(presence.year, null);
+});
+
+test("tracks carry no episode or year fields", async () => {
+  const presence = await sessionProvider({ title: "Song", type: "track", grandparentTitle: "Artist", parentIndex: 1, index: 3, year: 2001, viewOffset: 1, duration: 2 }).getPresence();
+  assert.equal(presence.series, null);
+  assert.equal(presence.season, null);
+  assert.equal(presence.episode, null);
+  assert.equal(presence.year, null);
+});
