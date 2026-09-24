@@ -34,6 +34,7 @@ test("native setup window walks every step, including sign-in, against the real 
   const startup = { isEnabled: async () => false, setEnabled: async (value) => { startupApplied.push(value); } };
   const app = await startSetupApp({
     draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "selftest-device", signIn, startup, fetchImpl,
+    discordTest: { clientId: "123456789012345678", showMs: 0, createClient: () => ({ login: async () => {}, setActivity: async () => {}, clearActivity: async () => {}, destroy: async () => {} }) },
     discover: async () => [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533", version: "0.53.3" }],
   });
   try {
