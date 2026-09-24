@@ -127,3 +127,15 @@ test("privacy section: six choices, loaded from and saved to /api/settings (#253
   assert.equal(saved.status, 200);
   assert.equal(JSON.parse(saved.body).privacy.hideMusic, true);
 });
+
+test("the page has a Servers section that opens setup through the settings API (#253)", async () => {
+  const h = handler();
+  const page = (await h({ url: "/settings" })).body;
+  assert.match(page, /<section id="servers-section" aria-labelledby="h-servers"><h2 id="h-servers">Servers<\/h2>/);
+  assert.match(page, /<button type="button" id="servers-setup">Add or remove servers<\/button>/);
+  assert.match(page, /id="servers-setup-row" class="row" hidden/);
+  const script = (await h({ url: "/settings.js" })).body;
+  assert.match(script, /\/api\/settings\/servers\/setup/);
+  assert.match(script, /all\.setup && all\.setup\.available/);
+  assert.match(script, /nowplaying\.exe setup/);
+});

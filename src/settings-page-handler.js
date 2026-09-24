@@ -12,6 +12,11 @@ const PAGE = `<!doctype html>
 <body><main>
 <nav><a href="/">Status</a> <span aria-current="page">Settings</span> <a href="/logs">Logs</a></nav>
 <h1>Settings</h1>
+<section id="servers-section" aria-labelledby="h-servers"><h2 id="h-servers">Servers</h2>
+<ul id="servers-list" class="plain"><li>Loading...</li></ul>
+<p id="servers-setup-row" class="row" hidden><button type="button" id="servers-setup">Add or remove servers</button> <span id="servers-result" role="status" aria-live="polite"></span></p>
+<p id="servers-setup-hint" class="hint">Adding or removing a server opens setup. NowPlaying restarts with the new servers when you finish.</p>
+</section>
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
@@ -134,7 +139,8 @@ const PAGE = `<!doctype html>
 </main><script src="/settings.js"></script></body></html>
 `;
 
-const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:184px;color:#555}
+const CSS = `ul.plain{list-style:none;padding:0;margin:0 0 12px}ul.plain li{margin:0 0 6px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:184px;color:#555}
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}.hint a{color:inherit}
 fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color:#555}
@@ -350,6 +356,57 @@ document.getElementById("youtube-reset").addEventListener("click", async (event)
   }
 });
 loadYouTube();
+// Servers (#253): the list comes from the status API; changes go through
+// setup, which the app's tray session opens and then restarts the app.
+const SERVER_WORDS = { playing: "playing", paused: "paused", idle: "connected", connected: "connected", waiting: "waiting for first check", error: "can't reach it", unavailable: "sign-in missing" };
+function serverItem(row) {
+  const li = document.createElement("li");
+  const name = document.createElement("strong");
+  name.textContent = row.type || "Server";
+  li.append(name, " " + [row.user ? "as " + row.user : null, row.address || null].filter(Boolean).join(" - "));
+  const state = document.createElement("span");
+  const word = SERVER_WORDS[row.state] || row.state || "";
+  state.textContent = word ? " - " + word + (row.reason ? " (" + row.reason + ")" : "") : "";
+  state.className = row.state === "error" || row.state === "unavailable" ? "bad" : "";
+  li.append(state);
+  return li;
+}
+async function loadServers() {
+  const list = document.getElementById("servers-list");
+  try {
+    const [statusRes, settingsRes] = await Promise.all([
+      fetch("/api/status", { cache: "no-store", headers: { Accept: "application/json" } }),
+      fetch("/api/settings", { cache: "no-store", headers: { Accept: "application/json" } }),
+    ]);
+    if (!statusRes.ok || !settingsRes.ok) throw new Error("load");
+    const status = await statusRes.json();
+    const all = await settingsRes.json();
+    const rows = Array.isArray(status.servers) && status.servers.length ? status.servers : status.server ? [status.server] : [];
+    list.replaceChildren(...(rows.length ? rows.map(serverItem) : [Object.assign(document.createElement("li"), { textContent: "No servers set up yet." })]));
+    const canOpen = Boolean(all.setup && all.setup.available);
+    document.getElementById("servers-setup-row").hidden = !canOpen;
+    document.getElementById("servers-setup-hint").textContent = canOpen
+      ? "Adding or removing a server opens setup. NowPlaying restarts with the new servers when you finish."
+      : "To add or remove a server, run nowplaying.exe setup.";
+  } catch {
+    list.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Can't load your servers. Reload the page to try again." }));
+  }
+}
+document.getElementById("servers-setup").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const say = (text, tone) => { const el = document.getElementById("servers-result"); el.textContent = text; el.className = tone || ""; };
+  button.disabled = true;
+  say("Opening setup...", "warn");
+  try {
+    const res = await fetch("/api/settings/servers/setup", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: "{}" });
+    if (!res.ok) throw new Error(String(res.status));
+    say("Setup is open in its own window. Reload this page when you have finished.", "ok");
+  } catch {
+    button.disabled = false;
+    say("Couldn't open setup. Try the tray menu's Run setup again.", "bad");
+  }
+});
+loadServers();
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
 function startupSay(text, tone) { const el = document.getElementById("startup-result"); el.textContent = text; el.className = tone || ""; }
 function showStartup(s) { startup.form.hidden = !s || !s.available; if (s) startup.enabled.checked = s.startWithWindows; }
