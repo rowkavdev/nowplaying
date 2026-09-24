@@ -35,4 +35,4 @@ nowplaying clears sessions that sit at the same position too long. If Discord it
 
 ## Still stuck
 
-Open an [issue](https://github.com/rowkavdev/nowplaying/issues) with the build number, your Windows version, the step that failed and what you saw. Attach log files if you can. Leave out server addresses, usernames and tokens.
+Open an [issue](https://github.com/rowkavdev/nowplaying/issues) with the build number, your Windows version, the step that failed and what you saw. The status page's **Reporting a problem** copies a short report - expand **See exactly what's in the report** to check it first. Attach log files if you can. Leave out server addresses, usernames and tokens.

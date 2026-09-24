@@ -59,6 +59,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Re-run setup and Finish without changing anything: your servers, Spotify sign-in and card, privacy and hosted settings all survive.
 - [ ] Settings shows a YouTube section with a pairing code and port. "Make a new code" warns the old code stops working.
 - [ ] With the YouTube extension paired, playing a YouTube video shows it on the card and in Discord. A Short shows nothing.
+- [ ] Status page > Reporting a problem: "See exactly what's in the report" shows the redacted report before it is copied.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
