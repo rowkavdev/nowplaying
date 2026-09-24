@@ -11,6 +11,7 @@ Two audiences, two homes:
 | --- | --- | --- |
 | [Provider configuration](providers.md) | Plex, Jellyfin, Navidrome and Emby adapter options and normalized output | Current |
 | [Customization](customization.md) | Templates, privacy controls, card themes and Discord settings | Current |
+| [Card examples](card-examples.md) | Renderer-generated gallery of every card state and theme | Current |
 | [Hosted card deployment](hosted-card.md) | Running the card endpoint: routes, headers, caching, health checks | Current |
 | [Hosted card: what leaves your PC](hosted-upload.md) | Exactly which fields the app pushes to the card service | Current |
 | [Updates](updates.md) | Update policy, channels, verification, atomic install and rollback | Current |

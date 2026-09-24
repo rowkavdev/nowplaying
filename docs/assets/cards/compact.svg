@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="74" role="img" aria-labelledby="title desc">
+  <title id="title">NOW PLAYING: Holocene</title><desc id="desc">Bon Iver</desc>
+  <rect width="100%" height="100%" rx="10" fill="#0d1117" stroke="#30363d"/>
+  
+  
+  <text x="24" y="44" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="600">Holocene</text>
+  
+  
+</svg>
