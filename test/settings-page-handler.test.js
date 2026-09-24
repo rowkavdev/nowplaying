@@ -58,3 +58,27 @@ test("needs a settings store and a fallback", () => {
   assert.throws(() => createSettingsPageHandler({ fallback: async () => null }), TypeError);
   assert.throws(() => createSettingsPageHandler({ settings: { read() {}, updateDiscord() {} } }), TypeError);
 });
+
+test("hosted: saves the section and disconnects by POST only", async () => {
+  let hosted = { enabled: false, state: "off" };
+  const calls = [];
+  const settings = {
+    read: async () => ({ discord: {}, hosted }),
+    updateDiscord: async () => {},
+    updateHosted: async (changes) => { calls.push("update"); hosted = { ...hosted, ...changes }; },
+    disconnectHosted: async () => { calls.push("disconnect"); hosted = { enabled: false, state: "off" }; },
+  };
+  const h = createSettingsPageHandler({ settings, fallback: async () => null });
+  assert.equal(JSON.parse((await h(put({ hosted: { enabled: true } }))).body).hosted.enabled, true);
+  assert.equal((await h({ url: "/api/settings/hosted/disconnect" })).status, 405);
+  assert.equal((await h({ method: "POST", url: "/api/settings/hosted/disconnect", headers: { "sec-fetch-site": "cross-site" }, body: "{}" })).status, 403);
+  const off = await h({ method: "POST", url: "/api/settings/hosted/disconnect", body: "{}" });
+  assert.equal(JSON.parse(off.body).hosted.enabled, false);
+  assert.deepEqual(calls, ["update", "disconnect"]);
+  const failing = createSettingsPageHandler({ settings: { ...settings, disconnectHosted: async () => { throw new Error("offline 10.0.0.2"); } }, fallback: async () => null });
+  const failed = await failing({ method: "POST", url: "/api/settings/hosted/disconnect", body: "{}" });
+  assert.deepEqual([failed.status, failed.body], [502, '{"error":"disconnect_failed"}']);
+  const old = createSettingsPageHandler({ settings: { read: () => ({ discord: {} }), updateDiscord: async () => {} }, fallback: async () => null });
+  assert.equal((await old({ method: "POST", url: "/api/settings/hosted/disconnect", body: "{}" })).status, 404);
+  assert.equal((await old(put({ hosted: { enabled: true } }))).status, 400);
+});

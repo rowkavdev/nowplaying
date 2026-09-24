@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { applyDiscordChanges, createAppSettingsStore, discordSettingsView } from "../src/app-settings.js";
+import { applyDiscordChanges, applyHostedChanges, createAppSettingsStore, discordSettingsView, hostedSettingsView } from "../src/app-settings.js";
 import { parseAppConfig, startAppFromConfig } from "../src/app-config.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 
@@ -67,7 +67,8 @@ test("the running app saves Discord settings from its own page only", async () =
     assert.equal((await put({ Cookie: cookie, Origin: "http://evil.example" })).status, 403);
     assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.enabled, true);
     assert.equal((await put({ Cookie: cookie }, { discord: { timestamps: "forever" } })).status, 400);
-    assert.equal((await put({ Cookie: cookie }, { hosted: { enabled: false } })).status, 400);
+    assert.equal((await put({ Cookie: cookie }, { privacy: { mode: "public" } })).status, 400);
+    assert.equal((await put({ Cookie: cookie }, { discord: { enabled: true }, hosted: { enabled: true } })).status, 400);
     const saved = await put({ Cookie: cookie });
     assert.equal(saved.status, 200);
     assert.deepEqual((await saved.json()).discord, { enabled: false, timestamps: "elapsed", artworkLookup: "musicbrainz" });
@@ -75,6 +76,62 @@ test("the running app saves Discord settings from its own page only", async () =
     // Applied without a restart: Discord is now off.
     assert.equal(app.discord, "off");
     assert.equal((await (await fetch(`${app.url}/api/status`)).json()).discord.enabled, false);
+  } finally {
+    await app.close();
+  }
+});
+
+test("turns the hosted card on and off without touching the rest", () => {
+  const before = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, hostedEnabled: undefined }));
+  assert.equal(before.hosted, undefined);
+  const on = applyHostedChanges(before, { enabled: true }).config;
+  assert.deepEqual({ ...on.hosted }, { enabled: true });
+  assert.deepEqual({ ...on.discord }, { ...before.discord });
+  const custom = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, hostedUrl: "https://card.example.com" }));
+  assert.deepEqual({ ...applyHostedChanges(custom, { enabled: false }).config.hosted }, { enabled: false, url: "https://card.example.com" });
+  assert.throws(() => applyHostedChanges(before, { url: "https://evil.example" }), TypeError);
+  assert.throws(() => applyHostedChanges(before, { enabled: "yes" }), TypeError);
+  assert.deepEqual({ ...hostedSettingsView(before) }, { enabled: false });
+});
+
+function fakeHostedService() {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push(`${init.method ?? "GET"} ${path}`);
+    if (path === "/api/register") return Response.json({ cardId: "c".repeat(22), deviceId: "d".repeat(22), token: "t".repeat(32) });
+    if (path === "/api/ingest") return Response.json({ ok: true });
+    if (path === "/api/revoke") return Response.json({ revoked: true });
+    return Response.json([]);
+  };
+  let stored = null;
+  const credentials = { load: async () => stored, save: async (value) => { stored = value; }, clear: async () => { stored = null; } };
+  return { calls, fetchImpl, credentials, stored: () => stored };
+}
+
+test("the settings page turns the hosted card on, shows its link and disconnects", async () => {
+  const file = await configFile({ ...JELLYFIN, hostedEnabled: false });
+  const service = fakeHostedService();
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: service.fetchImpl, hostedCredentials: service.credentials, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const call = (path, method, body) => fetch(`${app.url}${path}`, { method, headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).hosted, { enabled: false, state: "off", lastSuccessAt: null, error: null, cardUrl: null });
+    const on = await (await call("/api/settings", "PUT", { hosted: { enabled: true } })).json();
+    assert.equal(on.hosted.enabled, true);
+    assert.equal(on.hosted.cardUrl, `https://nowplaying-hosted.vercel.app/card/${"c".repeat(22)}.svg`);
+    assert.equal(app.hosted, "on");
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).hosted.enabled, true);
+    assert.ok(service.stored());
+    const off = await call("/api/settings/hosted/disconnect", "POST", {});
+    assert.equal(off.status, 200);
+    assert.deepEqual((await off.json()).hosted, { enabled: false, state: "off", lastSuccessAt: null, error: null, cardUrl: null });
+    assert.ok(service.calls.includes("DELETE /api/revoke"));
+    assert.equal(service.stored(), null);
+    assert.equal(app.hosted, "off");
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).hosted.enabled, false);
+    // Disconnect without the page's cookie is refused.
+    assert.equal((await fetch(`${app.url}/api/settings/hosted/disconnect`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 403);
   } finally {
     await app.close();
   }
