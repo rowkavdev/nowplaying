@@ -32,17 +32,15 @@ Built-in palettes use color combinations selected to remain distinguishable for 
 
 ## Discord
 
-Discord settings support:
+Discord settings (Settings > Discord, saved to `config.json`):
 
-- `details`, `state` and `largeText` templates;
-- bounded large/small asset keys;
-- elapsed, remaining, both or no timestamps;
-- clear/show idle behavior;
-- up to two safe HTTPS buttons;
-- update intervals from 5 seconds to 5 minutes;
-- lifecycle dedupe and throttling.
+- elapsed, remaining, both or no timestamps (`discord.timestamps`);
+- idle behaviour (`discord.idleBehavior`);
+- album art lookup (`discord.artworkLookup`, off by default).
 
-TV episodes with a known series use their own defaults: `details` shows `{series}` and `state` shows `{episodeCode} · {title}`, for example "Lost" and "S04E05 · The Constant". This only applies while `details` or `state` is still the plain default (`{title}` / `{subtitle}`), so a custom template always wins. Templates can also use `{series}`, `{season}`, `{episode}`, `{episodeCode}` and `{year}` directly.
+Wording templates, buttons, asset keys and the update interval can't be changed yet. Values for them in `config.json` are ignored, and a settings save removes them.
+
+TV episodes with a known series show the series and episode code, for example "Lost" and "S04E05 · The Constant".
 
 Discord Rich Presence runs locally and communicates with the user's Discord IPC socket. Analytics, when explicitly enabled, sends only one anonymous installation ping.
 

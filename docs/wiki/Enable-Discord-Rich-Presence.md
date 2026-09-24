@@ -19,7 +19,7 @@ Success looks like: play something, and your Discord profile shows it within a f
 
 - Music shows as **Listening**, films and TV episodes as **Watching**.
 - TV episodes show the series name and episode code by default, for example "Lost" and "S04E05 · The Constant".
-- Timestamps, buttons, wording and update speed are all adjustable in Settings > Discord.
+- Timestamps, idle behaviour and album art lookup can be changed in Settings > Discord. Buttons, wording and update speed can't be changed yet.
 
 ## Common problems
 
