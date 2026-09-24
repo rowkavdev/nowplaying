@@ -27,6 +27,8 @@ import { createHostedLoop } from "./hosted-loop.js";
 import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 import { withProviderBackoff } from "./provider-backoff.js";
 import { createMultiServerProvider } from "./multi-server.js";
+import { createArtworkCache } from "./artwork-cache.js";
+import { createArtworkService } from "./artwork-service.js";
 import { applyPrivacy } from "./privacy.js";
 import { combinePresence, createSpotifySource } from "./spotify-source.js";
 import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken, resetYouTubePairingToken } from "./youtube-bridge.js";
@@ -304,7 +306,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // video shows as "Watching"; YouTube Music stays "Listening". Shorts never
   // reach the bridge.
   const discordProvider = youtube ? withPrivacy(combinePresence({ primary: tracked, secondary: youtubeForDiscord(youtube.bridge.provider) }), () => current) : provider;
-  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
+  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, artworkService: multi?.artwork, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
   // status page run. Discord and hosted uploads, which poll in the background,
@@ -376,7 +378,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       try { presence = await cardProvider.getPresence(); } catch { presence = null; }
       if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
       // A plain grey square stands in for artwork so placement and size
-      // show in the preview; real art is only fetched for /card.svg.
+      // show in the preview; real art is fetched for /card.svg (#449).
       return renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
     },
     // Drops cached album art and updates Discord straight away (#154).
@@ -451,15 +453,58 @@ const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idl
 
 async function createServersProvider(config, credentialStore, fetchImpl, providerBackoff) {
   const entries = [];
+  // Album art for the local card (#449). Each server records the artwork refs
+  // it returns so the card can fetch them with that server's sign-in; nothing
+  // secret goes on the presence itself. Refs are matched by value because
+  // presence normalising copies them. Each server has its own cache, since two
+  // servers can use the same image path; if two report the very same ref, the
+  // one polled last is used.
+  const artworkSources = new Map();
   for (const [index, server] of config.servers.entries()) {
     try {
-      entries.push({ server, provider: withProviderBackoff(await createSignedInProvider(server, credentialStore, fetchImpl), providerBackoff) });
+      const signedIn = await createSignedInProvider(server, credentialStore, fetchImpl);
+      const artwork = createServerArtwork(server, signedIn.secret, fetchImpl);
+      const tagged = { ...signedIn.provider, getPresence: async () => { const presence = await signedIn.provider.getPresence(); if (artwork && presence?.artwork && typeof presence.artwork === "object") { if (artworkSources.size >= 256) artworkSources.clear(); artworkSources.set(artworkRefKey(presence.artwork), artwork); } return presence; } };
+      entries.push({ server, provider: withProviderBackoff(tagged, providerBackoff) });
     } catch (error) {
       if (index === 0) throw error;
       entries.push({ server, unavailable: error instanceof StartupError ? error.startupCode : "CONFIG_INVALID" });
     }
   }
-  return createMultiServerProvider(entries);
+  const multi = createMultiServerProvider(entries);
+  const artwork = Object.freeze({
+    // Artwork is a nice-to-have: any failure shows the card without it.
+    async resolve(ref) {
+      const source = ref && typeof ref === "object" ? artworkSources.get(artworkRefKey(ref)) : null;
+      if (!source) return null;
+      try { return await source.resolve(ref); } catch { return null; }
+    },
+  });
+  return Object.freeze({ ...multi, artwork });
+}
+
+function artworkRefKey(ref) {
+  return JSON.stringify([ref.provider ?? null, ref.type ?? null, ref.itemId ?? null, ref.imageId ?? null, ref.imageTag ?? null]);
+}
+
+function createServerArtwork(server, secret, fetchImpl) {
+  let providerConfig;
+  const baseUrl = server.serverUrl;
+  if (server.provider === "plex") providerConfig = { baseUrl, token: secret };
+  else if (server.provider === "jellyfin" || server.provider === "emby") providerConfig = { baseUrl, apiKey: secret };
+  else if (server.provider === "navidrome") {
+    try { const parts = JSON.parse(secret); providerConfig = { baseUrl, username: server.identity?.id, token: parts?.token, salt: parts?.salt }; } catch { return null; }
+  } else return null;
+  let service = null;
+  return Object.freeze({
+    async resolve(ref) {
+      service ??= (async () => {
+        const { createDefaultArtworkSanitizer } = await import("./artwork-sanitizer-runtime.js");
+        return createArtworkService({ cache: createArtworkCache(), sanitizer: createDefaultArtworkSanitizer(), fetchImpl, timeoutMs: 3000 });
+      })().catch((error) => { service = null; throw error; });
+      return (await service).resolve(ref, providerConfig);
+    },
+  });
 }
 
 async function createSignedInProvider(config, credentialStore, fetchImpl) {
@@ -471,7 +516,7 @@ async function createSignedInProvider(config, credentialStore, fetchImpl) {
   }
   if (typeof secret !== "string" || !secret) throw credentialMissing();
   try {
-    return createProviderFromConfig(config, secret, { fetchImpl });
+    return { provider: createProviderFromConfig(config, secret, { fetchImpl }), secret };
   } catch (error) {
     if (error instanceof StartupError) throw error;
     throw invalidConfig();
