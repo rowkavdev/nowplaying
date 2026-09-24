@@ -19,6 +19,7 @@ Add-Type -Namespace NowPlaying -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 '@
 
 $Steps = @('welcome', 'provider', 'signin', 'discord', 'review', 'complete')
@@ -131,9 +132,19 @@ function Get-Discovered {
 $script:Draft = (Invoke-Setup 'GET' '/api/setup/draft').draft
 $script:Discovered = Get-Discovered
 
+# Sharp text at 150% and 200% display scaling (#141): the window draws at the
+# real DPI and every size below goes through Px, so the layout grows with the
+# fonts instead of Windows stretching a 96-DPI bitmap.
+[void][NowPlaying.Win32]::SetProcessDPIAware()
+$screen = [System.Drawing.Graphics]::FromHwnd([System.IntPtr]::Zero)
+$script:Scale = [math]::Max(1.0, $screen.DpiX / 96.0)
+$screen.Dispose()
+function Px([int]$Value) { [int][math]::Round($Value * $script:Scale) }
+
 $form = [System.Windows.Forms.Form]::new()
+$form.AutoScaleMode = 'None'
 $form.Text = 'NowPlaying setup'
-$form.ClientSize = [System.Drawing.Size]::new(560, 400)
+$form.ClientSize = [System.Drawing.Size]::new((Px 560), (Px 400))
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $form.StartPosition = 'CenterScreen'
@@ -142,22 +153,23 @@ $iconPath = Join-Path $PSScriptRoot '..\assets\nowplaying.ico'
 if (Test-Path $iconPath) { $form.Icon = [System.Drawing.Icon]::new((Resolve-Path $iconPath)) }
 
 $stepsLabel = [System.Windows.Forms.Label]::new()
-$stepsLabel.SetBounds(24, 16, 512, 24)
+$stepsLabel.SetBounds((Px 24), (Px 16), (Px 512), (Px 24))
 $stepsLabel.ForeColor = [System.Drawing.Color]::DimGray
 $title = [System.Windows.Forms.Label]::new()
-$title.SetBounds(24, 44, 512, 32)
+$title.SetBounds((Px 24), (Px 44), (Px 512), (Px 32))
 $title.Font = [System.Drawing.Font]::new('Segoe UI Semibold', 14)
 $panel = [System.Windows.Forms.FlowLayoutPanel]::new()
-$panel.SetBounds(24, 84, 512, 230)
+$panel.SetBounds((Px 24), (Px 84), (Px 512), (Px 230))
 $panel.FlowDirection = 'TopDown'
 $panel.WrapContents = $false
 $panel.AutoScroll = $true
 $errorLabel = [System.Windows.Forms.Label]::new()
-$errorLabel.SetBounds(24, 318, 512, 24)
-$errorLabel.ForeColor = [System.Drawing.Color]::Firebrick
-$back = [System.Windows.Forms.Button]::new(); $back.Text = 'Back'; $back.SetBounds(24, 350, 90, 32)
-$next = [System.Windows.Forms.Button]::new(); $next.Text = 'Next'; $next.SetBounds(122, 350, 90, 32)
-$reset = [System.Windows.Forms.LinkLabel]::new(); $reset.Text = 'Start over'; $reset.SetBounds(446, 358, 90, 24); $reset.TextAlign = 'MiddleRight'
+$errorLabel.SetBounds((Px 24), (Px 318), (Px 512), (Px 24))
+# Orange, not red (deuteranopia-safe palette); the message text carries the meaning.
+$errorLabel.ForeColor = [System.Drawing.Color]::FromArgb(0xB8, 0x5C, 0x00)
+$back = [System.Windows.Forms.Button]::new(); $back.Text = 'Back'; $back.SetBounds((Px 24), (Px 350), (Px 90), (Px 32))
+$next = [System.Windows.Forms.Button]::new(); $next.Text = 'Next'; $next.SetBounds((Px 122), (Px 350), (Px 90), (Px 32))
+$reset = [System.Windows.Forms.LinkLabel]::new(); $reset.Text = 'Start over'; $reset.SetBounds((Px 446), (Px 358), (Px 90), (Px 24)); $reset.TextAlign = 'MiddleRight'
 $form.Controls.AddRange(@($stepsLabel, $title, $panel, $errorLabel, $back, $next, $reset))
 $form.AcceptButton = $next
 $pollTimer = [System.Windows.Forms.Timer]::new()
@@ -165,15 +177,15 @@ $pollTimer.Interval = 2000
 
 function New-Text([string]$Text) {
   $label = [System.Windows.Forms.Label]::new()
-  $label.Text = $Text; $label.AutoSize = $true; $label.MaximumSize = [System.Drawing.Size]::new(490, 0); $label.Margin = [System.Windows.Forms.Padding]::new(0, 0, 0, 10)
+  $label.Text = $Text; $label.AutoSize = $true; $label.MaximumSize = [System.Drawing.Size]::new((Px 490), (Px 0)); $label.Margin = [System.Windows.Forms.Padding]::new((Px 0), (Px 0), (Px 0), (Px 10))
   $label
 }
 
 function New-Field([string]$Name, [string]$Label, [string]$Value, [bool]$Secret = $false) {
   $panel.Controls.Add((New-Text $Label))
   $box = [System.Windows.Forms.TextBox]::new()
-  $box.Name = $Name; $box.Width = 360; $box.Text = $Value; $box.UseSystemPasswordChar = $Secret
-  $box.Margin = [System.Windows.Forms.Padding]::new(0, 0, 0, 8)
+  $box.Name = $Name; $box.Width = (Px 360); $box.Text = $Value; $box.UseSystemPasswordChar = $Secret
+  $box.Margin = [System.Windows.Forms.Padding]::new((Px 0), (Px 0), (Px 0), (Px 8))
   $panel.Controls.Add($box)
   $box
 }
@@ -395,7 +407,7 @@ function Show-Step {
       if ($script:Draft.account) {
         $spotifyTitle = New-Text 'Spotify on your card (optional)'
         $spotifyTitle.Font = [System.Drawing.Font]::new($spotifyTitle.Font, [System.Drawing.FontStyle]::Bold)
-        $spotifyTitle.Margin = [System.Windows.Forms.Padding]::new(0, 14, 0, 6)
+        $spotifyTitle.Margin = [System.Windows.Forms.Padding]::new((Px 0), (Px 14), (Px 0), (Px 6))
         $panel.Controls.Add($spotifyTitle)
         if ($script:Draft.spotify) {
           $connected = New-Text "Connected as $($script:Draft.spotify.identity.displayName). Spotify shows on your card only, not on Discord."
@@ -418,7 +430,7 @@ function Show-Step {
       $panel.Controls.Add($enabled)
       $panel.Controls.Add((New-Text 'When nothing is playing:'))
       $idleBox = [System.Windows.Forms.ComboBox]::new()
-      $idleBox.Name = 'discordIdleBehavior'; $idleBox.DropDownStyle = 'DropDownList'; $idleBox.Width = 320; $idleBox.DisplayMember = 'Value'
+      $idleBox.Name = 'discordIdleBehavior'; $idleBox.DropDownStyle = 'DropDownList'; $idleBox.Width = (Px 320); $idleBox.DisplayMember = 'Value'
       foreach ($entry in $Idle.GetEnumerator()) { [void]$idleBox.Items.Add([pscustomobject]@{ Key = $entry.Key; Value = $entry.Value }) }
       $idleBox.SelectedIndex = [math]::Max(0, @($Idle.Keys).IndexOf([string]$script:Draft.discordIdleBehavior))
       $panel.Controls.Add($idleBox)
