@@ -29,7 +29,7 @@ import { withProviderBackoff } from "./provider-backoff.js";
 import { createMultiServerProvider } from "./multi-server.js";
 import { applyPrivacy } from "./privacy.js";
 import { combinePresence, createSpotifySource } from "./spotify-source.js";
-import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken } from "./youtube-bridge.js";
+import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken, resetYouTubePairingToken } from "./youtube-bridge.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
@@ -282,11 +282,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // a problem here never stops the start.
   let youtube = null;
   if (!safeMode) {
-    try { youtube = createYouTubeBridge({ token: await loadYouTubePairingToken(credentialStore) }); } catch { youtube = null; }
+    try {
+      const token = await loadYouTubePairingToken(credentialStore);
+      youtube = { bridge: createYouTubeBridge({ token }), token };
+    } catch { youtube = null; }
   }
   let cardSource = tracked;
   if (spotify) cardSource = combinePresence({ primary: cardSource, secondary: spotify });
-  if (youtube) cardSource = combinePresence({ primary: cardSource, secondary: youtube.provider });
+  if (youtube) cardSource = combinePresence({ primary: cardSource, secondary: youtube.bridge.provider });
   const cardProvider = cardSource === tracked ? provider : withPrivacy(cardSource, () => current);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
@@ -365,6 +368,18 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),
+    // Pairing token for the YouTube extension (#136): shown on the settings
+    // page for pasting into the extension. Reset makes a new one and cuts
+    // off the old extension.
+    ...(youtube ? {
+      youtubePairing: async () => ({ token: youtube.token }),
+      async resetYouTubePairing() {
+        const token = await resetYouTubePairingToken(credentialStore);
+        youtube.bridge.setToken(token);
+        youtube.token = token;
+        return { token };
+      },
+    } : {}),
     async updateHosted(changes) {
       const next = await settingsStore.updateHosted(changes);
       current = next;
@@ -384,7 +399,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
   const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
   const pageHandler = createSettingsPageHandler({ settings, fallback: logsHandler });
-  const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube, fallback: pageHandler }) : pageHandler;
+  const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
   // The bridge checks its own pairing token and extension origin, so it

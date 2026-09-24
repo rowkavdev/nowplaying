@@ -407,6 +407,9 @@ function parsePreviewQuery(searchParams) {
   return normalizeCard(card);
 }
 
+export const YOUTUBE_PAIRING_PATH = "/api/settings/youtube/pairing";
+export const YOUTUBE_PAIRING_RESET_PATH = "/api/settings/youtube/pairing/reset";
+
 const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup", privacy: "updatePrivacy", card: "updateCard" };
 
 export function createSettingsPageHandler({ settings, fallback } = {}) {
@@ -433,6 +436,20 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     if (typeof svg !== "string" || !svg.includes("<svg")) return response(503, "Preview unavailable", { "Cache-Control": "no-store" });
     return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
   }
+  // YouTube extension pairing token (#136). POST even for reading, so the
+  // server's session check applies and only this app's own page gets the
+  // token. Reset makes a new one.
+  async function youtubePairing(request, method, reset) {
+    const fn = reset ? settings.resetYouTubePairing : settings.youtubePairing;
+    if (typeof fn !== "function") return response(404, "Not Found");
+    if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
+    const site = header(request?.headers, "sec-fetch-site");
+    if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
+    let result;
+    try { result = await fn(); } catch { return json(500, { error: reset ? "reset_failed" : "read_failed" }); }
+    if (typeof result?.token !== "string") return json(500, { error: "read_failed" });
+    return json(200, { token: result.token });
+  }
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
@@ -440,6 +457,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     const disconnect = url.pathname === "/api/settings/hosted/disconnect";
     const refresh = url.pathname === "/api/settings/discord/refresh-artwork";
     if (url.pathname === PREVIEW_PATH) return preview(request, method, url);
+    if (url.pathname === YOUTUBE_PAIRING_PATH || url.pathname === YOUTUBE_PAIRING_RESET_PATH) return youtubePairing(request, method, url.pathname === YOUTUBE_PAIRING_RESET_PATH);
     if (!asset && url.pathname !== "/api/settings" && !disconnect && !refresh) return fallback(request);
     if (asset) {
       if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
