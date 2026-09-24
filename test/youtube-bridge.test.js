@@ -100,3 +100,21 @@ test("bridge route parses JSON and passes other paths on (#136)", async () => {
   assert.equal((await handle({ method: "POST", url: "/bridge/youtube", headers, body: JSON.stringify(video()) })).status, 204);
   assert.equal((await bridge.provider.getPresence()).title, "A video");
 });
+
+test("Discord shows a YouTube video as Watching and YouTube Music as Listening (#136)", async () => {
+  const { youtubeForDiscord } = await import("../src/app-config.js");
+  const { formatDiscordActivity } = await import("../src/discord.js");
+  const { createPresence } = await import("../src/presence.js");
+  const bridge = createYouTubeBridge({ token });
+  const discord = youtubeForDiscord(bridge.provider);
+  assert.equal((await discord.getPresence()).state, "idle");
+  bridge.receive({ method: "POST", headers, body: video() });
+  const watching = createPresence(await discord.getPresence());
+  assert.equal(formatDiscordActivity(watching).type, "watching");
+  bridge.receive({ method: "POST", headers, body: video({ tabId: "tab2", music: true, title: "A song" }) });
+  const listening = createPresence(await discord.getPresence());
+  assert.equal(listening.title, "A song");
+  assert.equal(formatDiscordActivity(listening).type, "listening");
+  bridge.receive({ method: "POST", headers, body: { tabId: "tab3", videoId: "abcdefghijk", title: "Short", state: "playing", shorts: true } });
+  assert.equal((await discord.getPresence()).title, "A song");
+});

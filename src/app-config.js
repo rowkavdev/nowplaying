@@ -249,6 +249,15 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
+export function youtubeForDiscord(source) {
+  return Object.freeze({
+    async getPresence() {
+      const presence = await source.getPresence();
+      return presence?.kind === "unknown" && presence.state !== "idle" ? { ...presence, kind: "show" } : presence;
+    },
+  });
+}
+
 export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {} } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
@@ -291,6 +300,10 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   if (spotify) cardSource = combinePresence({ primary: cardSource, secondary: spotify });
   if (youtube) cardSource = combinePresence({ primary: cardSource, secondary: youtube.bridge.provider });
   const cardProvider = cardSource === tracked ? provider : withPrivacy(cardSource, () => current);
+  // Discord gets YouTube too (Rowan, #136), never Spotify. A plain YouTube
+  // video shows as "Watching"; YouTube Music stays "Listening". Shorts never
+  // reach the bridge.
+  const discordProvider = youtube ? withPrivacy(combinePresence({ primary: tracked, secondary: youtubeForDiscord(youtube.bridge.provider) }), () => current) : provider;
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
@@ -307,7 +320,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
-    try { return startDiscordFromConfig(settings, provider, discordOptions); }
+    try { return startDiscordFromConfig(settings, discordProvider, discordOptions); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, refreshArtwork: async () => 0 }); }
   };
   // Discord changes from the settings page are saved to config.json first,
