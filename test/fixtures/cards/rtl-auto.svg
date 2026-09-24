@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="440" height="148" role="img" aria-labelledby="title desc">
   <title id="title">NOW PLAYING: שיר לדוגמה</title><desc id="desc">אמן לדוגמה</desc>
-  <rect width="100%" height="100%" rx="10" fill="#0d1117" stroke="#30363d"/>
-  <defs><clipPath id="art"><rect x="348" y="24" width="68" height="100" rx="10"/></clipPath></defs><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC" x="348" y="24" width="68" height="100" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>
-  <text x="324" y="30" direction="rtl" fill="#58a6ff" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">NOW PLAYING</text>
-  <text x="324" y="64" direction="rtl" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="600">שיר לדוגמה</text>
-  <text x="324" y="88" direction="rtl" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">אמן לדוגמה</text>
-  <rect x="24" y="124" width="300" height="4" rx="2" fill="#30363d"/><rect x="234" y="124" width="90" height="4" rx="2" fill="#58a6ff"/>
+  <defs><clipPath id="art"><rect x="316" y="24" width="100" height="100" rx="8"/></clipPath></defs>
+  <rect x="0.5" y="0.5" width="439" height="147" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC" x="316" y="24" width="100" height="100" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/><rect x="316.5" y="24.5" width="99" height="99" rx="8" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+  <circle cx="288" cy="26" r="3.5" fill="#58a6ff"/>
+  <text x="278" y="30" direction="rtl" fill="#58a6ff" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-weight="700" letter-spacing="1.1">NOW PLAYING</text>
+  <text x="24" y="30" text-anchor="start" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-variant-numeric="tabular-nums">1:00 / 3:20</text>
+  <text x="292" y="64" direction="rtl" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.2">שיר לדוגמה</text>
+  <text x="292" y="88" direction="rtl" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500">אמן לדוגמה</text>
+  <rect x="24" y="124" width="268" height="4" rx="2" fill="#30363d"/><rect x="212" y="124" width="80" height="4" rx="2" fill="#58a6ff"/>
 </svg>
