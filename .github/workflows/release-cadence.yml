@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# Queue instead of cancelling: a run that just created a release still has to
+# rewrite its notes and start the Release workflow, and a merge landing a few
+# seconds later must not cancel that. Queued runs collapse to the newest one.
 concurrency:
   group: release-cadence
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   release-please:
