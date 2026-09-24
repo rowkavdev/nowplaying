@@ -1,7 +1,7 @@
-import { SetupStepError, addAnotherServer, advanceSetupDraft, createSetupDraft, previousSetupDraft, removeSetupServer } from "./setup.js";
+import { SetupStepError, addAnotherServer, advanceSetupDraft, cancelAddServer, createSetupDraft, previousSetupDraft, removeSetupServer } from "./setup.js";
 
 const PATH = "/api/setup/draft";
-const ACTIONS = new Set(["save", "next", "back", "add-server", "remove-server"]);
+const ACTIONS = new Set(["save", "next", "back", "add-server", "cancel-add-server", "remove-server"]);
 const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "discordArtworkLookup", "startWithWindows"]);
 
 // onFinish runs when the review step is confirmed, before the draft moves to
@@ -50,6 +50,7 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
       next = input.action === "next" ? advanceSetupDraft(merged, {}, { signIn })
         : input.action === "back" ? previousSetupDraft(merged, { signIn })
         : input.action === "add-server" ? (signIn ? addAnotherServer(merged) : null)
+        : input.action === "cancel-add-server" ? cancelAddServer(merged)
         : input.action === "remove-server" ? removeSetupServer(merged, input.server)
         : merged;
       if (!next) return json(409, { error: "signin_unavailable" });

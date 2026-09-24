@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addAnotherServer, advanceSetupDraft, createSetupDraft, previousSetupDraft, removeSetupServer, serializeSetupDraft, setupAccounts } from "../src/setup.js";
+import { addAnotherServer, advanceSetupDraft, cancelAddServer, createSetupDraft, previousSetupDraft, removeSetupServer, serializeSetupDraft, setupAccounts } from "../src/setup.js";
 
 test("starts with privacy-first, testable defaults", () => {
   assert.deepEqual(createSetupDraft(), {
@@ -103,4 +103,13 @@ test("setup server list is capped, deduped and accounts-only (#252)", () => {
   assert.throws(() => createSetupDraft({ servers: [account(1), account(1)] }), /servers is invalid/);
   assert.throws(() => createSetupDraft({ servers: [{ ...account(1), token: "x" }] }), /servers is invalid/);
   assert.throws(() => createSetupDraft({ servers: "plex" }), /servers is invalid/);
+});
+
+test("cancelling an added server puts the last one back as the signed-in account (#252)", () => {
+  const nav = { provider: "navidrome", id: "rowan", displayName: "Rowan" };
+  const adding = addAnotherServer(createSetupDraft({ step: "signin", provider: "navidrome", account: nav }));
+  const back = cancelAddServer(adding);
+  assert.deepEqual([back.step, back.provider, back.account, back.servers], ["signin", "navidrome", nav, []]);
+  assert.throws(() => cancelAddServer(back), /nothing_to_cancel/);
+  assert.throws(() => cancelAddServer(createSetupDraft({ step: "provider" })), /nothing_to_cancel/);
 });
