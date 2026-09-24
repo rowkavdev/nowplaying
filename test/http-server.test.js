@@ -280,3 +280,17 @@ test("rejects weak session secrets", () => {
     assert.throws(() => createHttpServer({ handler, sessionSecret }), /sessionSecret/);
   }
 });
+
+test("open write paths skip the origin and session checks but stay JSON-only (#136)", async () => {
+  await withServer({ sessionSecret: SECRET, openWritePaths: ["/bridge/youtube"] }, async (port, seen) => {
+    const ext = { "Content-Type": "application/json", Origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop", "Sec-Fetch-Site": "none" };
+    assert.equal((await send(port, { path: "/bridge/youtube", headers: ext, body: "{}" })).status, 200);
+    assert.equal((await send(port, { path: "/bridge/youtube?x=1", headers: { ...ext, "Sec-Fetch-Site": "cross-site" }, body: "{}" })).status, 200);
+    assert.equal((await send(port, { path: "/bridge/youtube", headers: { ...ext, "Content-Type": "text/plain" }, body: "{}" })).status, 415);
+    // Every other path keeps the usual checks.
+    assert.equal((await send(port, { path: "/api/settings", headers: ext, body: "{}" })).status, 403);
+    assert.equal((await send(port, { path: "/bridge/youtube/", headers: ext, body: "{}" })).status, 403);
+    assert.equal(seen.length, 2);
+  });
+  assert.throws(() => createHttpServer({ handler: async () => null, openWritePaths: ["bridge"] }), /openWritePaths/);
+});
