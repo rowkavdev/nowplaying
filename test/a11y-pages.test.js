@@ -74,7 +74,8 @@ test("a11y: form controls on the settings page have accessible names", async () 
   }
   assert.deepEqual(problems, [], "controls without a label or aria-label");
   for (const [, inner] of html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)) {
-    assert.ok(inner.replace(/<[^>]+>/g, "").trim() || /aria-label=/.test(inner), "a button has no text");
+    // Some visible text outside any tag, or an aria-label.
+    assert.ok(/(^|>)[^<]*\S/.test(inner) || /aria-label=/.test(inner), "a button has no text");
   }
 });
 
