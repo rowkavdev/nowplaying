@@ -10,12 +10,15 @@ import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, wind
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { ensureConfigured, parseStartArgs, runBrowserSetup } from "../src/first-run.js";
-import { runTraySession } from "../src/tray-session.js";
+import { createSetupRequests, runTraySession } from "../src/tray-session.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
 
 // Declared before any top-level await so the start path below can use it.
 let recovery;
+// Settings-page requests to open setup (#253); only set when the tray
+// session runs, since it owns the setup-and-restart path.
+let setupRequests = null;
 
 const command = process.argv[2] ?? "help";
 
@@ -35,6 +38,7 @@ if (command === "--version" || command === "version") {
     // An explicit config module wins. With no argument, the wizard's config is
     // used; installs from before the wizard keep their nowplaying.config.mjs.
     legacyModule = startArgs.module ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
+    if (process.platform === "win32" && !legacyModule && startArgs.tray && existsSync(resolve("nowplaying.exe"))) setupRequests = createSetupRequests();
     // First launch: no config yet, so open setup instead of failing. `start
     // --no-setup` (scripts, CI) keeps the plain "run setup" message.
     if (!legacyModule && startArgs.setup && process.platform === "win32" && !existsSync(configFile)) {
@@ -83,6 +87,7 @@ if (command === "--version" || command === "version") {
       // Running setup again is the way out of safe mode: the next start is normal.
       restartApp: async () => { await recovery?.retryNormal(); return guardedStart(configFile); },
       onRestart: (current) => { app = current; },
+      setupRequests,
     });
     await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
     if (session.outcome === "quit") { await logger.event("startup", "stopped"); process.exit(0); }
@@ -175,7 +180,7 @@ async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null, ...(setupRequests ? { requestSetup: () => setupRequests.request() } : {}) });
   console.log(safeMode
     ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run setup again from the tray to go back to normal. Card: ${app.url}/card.svg`
     : `NowPlaying is running. Card: ${app.url}/card.svg`);
