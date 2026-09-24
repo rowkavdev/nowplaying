@@ -13,6 +13,11 @@ const MUSIC = { state: "playing", kind: "track", title: "Blue Monday", subtitle:
 const EPISODE = { state: "paused", kind: "episode", title: "The Constant", subtitle: "Lost · S4 E5", positionMs: 1_200_000, durationMs: 2_580_000 };
 const HEBREW = { state: "playing", kind: "track", title: "שיר לדוגמה", subtitle: "אמן לדוגמה", positionMs: 60_000, durationMs: 200_000 };
 const IDLE = { state: "idle" };
+// TV and films with full metadata (#143), and an episode whose series is
+// hidden by the privacy settings (falls back to the plain text).
+const TV = { state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost", series: "Lost", season: 4, episode: 5, positionMs: 1_200_000, durationMs: 2_580_000 };
+const TV_HIDDEN = { ...TV, series: null, season: null, episode: null, subtitle: null };
+const FILM = { state: "playing", kind: "movie", title: "Dune: Part Two", subtitle: "2024", year: 2024, positionMs: 3_000_000, durationMs: 9_960_000 };
 
 export const PRESETS = [
   { file: "default.svg", presence: MUSIC, options: { artworkDataUri: ART } },
@@ -25,6 +30,11 @@ export const PRESETS = [
   { file: "progress-full-width.svg", presence: EPISODE, options: { artworkDataUri: ART, layout: { progressWidth: "full" } } },
   { file: "rtl-auto.svg", presence: HEBREW, options: { artworkDataUri: ART, layout: { direction: "auto" } } },
   { file: "idle.svg", presence: IDLE, options: { width: 500 } },
+  { file: "tv-episode.svg", presence: TV, options: { artworkDataUri: ART } },
+  { file: "tv-episode-paper-narrow.svg", presence: TV, options: { theme: "paper", width: 280 } },
+  { file: "tv-episode-series-hidden.svg", presence: TV_HIDDEN, options: {} },
+  { file: "film.svg", presence: FILM, options: { artworkDataUri: ART, layout: { artworkPosition: "right" } } },
+  { file: "film-compact.svg", presence: FILM, options: { theme: "compact", width: 320 } },
 ];
 
 const fixture = (file) => new URL(`./fixtures/cards/${file}`, import.meta.url);

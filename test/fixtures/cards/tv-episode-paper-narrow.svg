@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="134" role="img" aria-labelledby="title desc">
+  <title id="title">NOW PLAYING: Lost</title><desc id="desc">S04E05 · The Constant</desc>
+  <rect width="100%" height="100%" rx="10" fill="#ffffff" stroke="#c7d2df"/>
+  
+  <text x="24" y="30" fill="#0969da" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">NOW PLAYING</text>
+  <text x="24" y="64" fill="#172033" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="600">Lost</text>
+  <text x="24" y="88" fill="#526173" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14">S04E05 · The Constant</text>
+  <rect x="24" y="110" width="232" height="4" rx="2" fill="#d8e0e8"/><rect x="24" y="110" width="108" height="4" rx="2" fill="#0969da"/>
+</svg>
