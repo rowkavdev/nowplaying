@@ -7,6 +7,8 @@ import { createHttpServer } from "./http-server.js";
 import { createAppStatus } from "./app-status.js";
 import { createStatusPageHandler } from "./status-page-handler.js";
 import { createSettingsPageHandler } from "./settings-page-handler.js";
+import { createLogsPageHandler } from "./logs-page-handler.js";
+import { readLogTail } from "./log-tail.js";
 import { createResilientCardResolver } from "./resilient-card.js";
 import { createSetupConfig } from "./setup-config.js";
 import { createConfigMigrationStore } from "./config-migration-store.js";
@@ -189,7 +191,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   let secret;
@@ -234,7 +236,9 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     },
   });
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
-  const handler = createSettingsPageHandler({ settings, fallback: statusHandler });
+  // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
+  const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
+  const handler = createSettingsPageHandler({ settings, fallback: logsHandler });
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
   const server = createHttpServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });

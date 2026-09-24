@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createAppLogger } from "../src/app-log.js";
+import { createAppLogger, windowsLogPath } from "../src/app-log.js";
 import { StartupError, resolveAppPort, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
 import { createHostedCredentials } from "../src/hosted-credentials.js";
@@ -171,7 +171,7 @@ async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode });
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
   console.log(safeMode
     ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run setup again from the tray to go back to normal. Card: ${app.url}/card.svg`
     : `NowPlaying is running. Card: ${app.url}/card.svg`);
