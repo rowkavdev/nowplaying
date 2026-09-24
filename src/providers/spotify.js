@@ -1,4 +1,5 @@
 import { defineProvider } from "../provider.js";
+import { fetchWithTimeout } from "./request.js";
 
 // Spotify provider (#135), first slice: reads what the signed-in user is
 // playing from the Web API and maps it into the presence model. Sign-in
@@ -21,7 +22,7 @@ export function createSpotifyProvider({ getAccessToken, fetchImpl = fetch } = {}
     async getPresence() {
       const token = await getAccessToken();
       if (typeof token !== "string" || !token) throw new Error("Spotify request failed: 401 (not signed in)");
-      const response = await fetchImpl(ENDPOINT, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetchWithTimeout(fetchImpl, ENDPOINT, { headers: { Authorization: `Bearer ${token}` } });
       // 204: nothing is playing, or a private session.
       if (response.status === 204) return { state: "idle" };
       if (!response.ok) {

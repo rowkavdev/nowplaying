@@ -6,6 +6,7 @@
  */
 
 import { defineProvider } from "../provider.js";
+import { fetchWithTimeout } from "./request.js";
 import { optionalCount, optionalText, optionalYear } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
@@ -18,7 +19,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   // answers "is this sign-in the owner?" once per run.
   let owner;
   async function isOwner() {
-    owner ??= fetchImpl(`${origin}/accounts`, { headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token } })
+    owner ??= fetchWithTimeout(fetchImpl, `${origin}/accounts`, { headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token } })
       .then((reply) => reply.ok, () => { owner = undefined; return false; });
     return owner;
   }
@@ -29,7 +30,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   return defineProvider({
     id: "plex",
     async getPresence({ username, userId } = {}) {
-      const response = await fetchImpl(`${origin}/status/sessions`, {
+      const response = await fetchWithTimeout(fetchImpl, `${origin}/status/sessions`, {
         headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
       if (!response.ok) throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
