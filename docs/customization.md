@@ -40,6 +40,8 @@ Discord settings support:
 - update intervals from 5 seconds to 5 minutes;
 - lifecycle dedupe and throttling.
 
+TV episodes with a known series use their own defaults: `details` shows `{series}` and `state` shows `{episodeCode} · {title}`, for example "Lost" and "S04E05 · The Constant". This only applies while `details` or `state` is still the plain default (`{title}` / `{subtitle}`), so a custom template always wins. Templates can also use `{series}`, `{season}`, `{episode}`, `{episodeCode}` and `{year}` directly.
+
 Discord Rich Presence runs locally and communicates with the user's Discord IPC socket. Analytics, when explicitly enabled, sends only one anonymous installation ping.
 
 ## Privacy

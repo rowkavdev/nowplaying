@@ -108,3 +108,34 @@ test("films and TV show as Watching, music and unknown media as Listening", () =
   for (const kind of ["episode", "movie", "show"]) assert.equal(formatDiscordActivity({ ...base, kind }).type, "watching");
   for (const kind of ["track", "unknown", undefined]) assert.equal(formatDiscordActivity({ ...base, kind }).type, "listening");
 });
+
+const episode = { ...playing, title: "The Constant", subtitle: "Lost", series: "Lost", season: 4, episode: 5 };
+
+test("episodes default to series, then episode code and title", () => {
+  const activity = formatDiscordActivity(episode);
+  assert.equal(activity.details, "Lost");
+  assert.equal(activity.state, "S04E05 · The Constant");
+  const saved = formatDiscordActivity(episode, { details: "{title}", state: "{subtitle}" });
+  assert.equal(saved.details, "Lost");
+  assert.equal(saved.state, "S04E05 · The Constant");
+});
+
+test("episode defaults drop a missing episode code", () => {
+  assert.equal(formatDiscordActivity({ ...episode, season: null, episode: null }).state, "The Constant");
+});
+
+test("custom templates win over episode defaults, field by field", () => {
+  const activity = formatDiscordActivity(episode, { details: "{title} ({series})" });
+  assert.equal(activity.details, "The Constant (Lost)");
+  assert.equal(activity.state, "S04E05 · The Constant");
+  assert.equal(formatDiscordActivity(episode, { state: "{stateLabel}" }).state, "Playing");
+});
+
+test("episodes without a series name and other kinds keep the plain defaults", () => {
+  const bare = formatDiscordActivity({ ...episode, series: null });
+  assert.equal(bare.details, "The Constant");
+  assert.equal(bare.state, "Lost");
+  const movie = formatDiscordActivity({ ...playing, kind: "movie", title: "Arrival", subtitle: "2016", year: 2016 });
+  assert.equal(movie.details, "Arrival");
+  assert.equal(movie.state, "2016");
+});
