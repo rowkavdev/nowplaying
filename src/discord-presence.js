@@ -47,7 +47,17 @@ export function createDiscordPresenceLoop({
     return now() - stuck.since >= stuckAfterMs;
   }
 
-  async function tick() {
+  // Ticks run one at a time (a Refresh artwork tick can land during a
+  // scheduled one). Otherwise an older poll whose artwork lookup is slow
+  // publishes after a newer one and Discord shows the previous track.
+  let queue = Promise.resolve();
+  function tick() {
+    const next = queue.then(runTick);
+    queue = next.catch(() => {});
+    return next;
+  }
+
+  async function runTick() {
     let presence;
     try { presence = await getPresence(); } catch { presence = null; }
     // A server we can't reach counts as idle, so a stale status never lingers.

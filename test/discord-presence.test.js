@@ -224,3 +224,16 @@ test("app wiring: a stuck track cannot stay on Discord past the timeout (#153)",
     await d.stop();
   }
 });
+
+test("overlapping ticks publish in order, so an older poll never overwrites a newer one", async () => {
+  const client = fakeClient();
+  const first = { ...playing, title: "Old song" };
+  const second = { ...playing, title: "New song" };
+  const presences = [first, second];
+  let i = 0;
+  // The old song's artwork is slow (MusicBrainz miss); the new one is instant.
+  const artwork = { resolve: async (p) => { if (p.title === "Old song") await new Promise((r) => setTimeout(r, 20)); return { strategy: "fallback" }; } };
+  const l = createDiscordPresenceLoop({ client, artwork, getPresence: async () => presences[i++] });
+  await Promise.all([l.tick(), l.tick()]);
+  assert.deepEqual(client.calls.map((a) => a.details), ["Old song", "New song"]);
+});
