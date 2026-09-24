@@ -190,7 +190,11 @@ function mix(from, to, amount) { const a = channels(from); const b = channels(to
 function pad(value) { return String(value).padStart(2, "0"); }
 function providerLabel(kind) { return kind === "track" ? "Music" : kind === "movie" ? "Movie" : kind === "episode" ? "Episode" : "Media"; }
 function truncate(value, length) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }
-function escapeXml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
+// Control characters (ID3 tags often end in NUL), U+FFFE/U+FFFF and lone
+// surrogates are not allowed anywhere in XML 1.0, even escaped, and one of
+// them makes the whole SVG fail to load. Drop them before escaping.
+const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+function escapeXml(value) { return String(value).replace(XML_INVALID, "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
 // Hebrew, Arabic, Syriac, Thaana, NKo and related blocks, plus RTL
 // presentation forms. Latin, digits and punctuation are skipped over.
 function firstStrongIsRtl(text) {
