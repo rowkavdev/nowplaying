@@ -23,7 +23,9 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Turn on Discord and pick an idle behaviour.
 - [ ] Optional Spotify: paste a Client ID from your own app in the Spotify developer dashboard (redirect URI `http://127.0.0.1/spotify/callback`) and choose "Sign in with Spotify". After you approve, setup shows "Connected as" your account, and `config.json` holds no token.
 - [ ] Finish setup. `%LOCALAPPDATA%\nowplaying\config.json` now exists and holds no password or token.
-- [ ] The setup review step shows made-up example cards for Music, TV episode and Film, drawn in your card's look.
+- [ ] The setup review step shows made-up example cards for Music, TV episode and Film, drawn in your card's look. (The native setup window links to them instead of embedding.)
+- [ ] A made-up server name fails with "Couldn't find a server with that name", a self-signed https server with a certificate message, and a dead address with a timeout or unreachable message - never an offer to skip certificate checks.
+- [ ] "Test Discord" in setup flashes a test status; with Discord closed it says to open the desktop app.
 
 ## 4. Running
 
