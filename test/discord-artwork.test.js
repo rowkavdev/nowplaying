@@ -108,3 +108,12 @@ test("only music looks up covers, and media kinds never share a cache entry", as
   const film = await resolver.resolve({ ...base, kind: "movie" });
   assert.equal(film.image, FALLBACK_ARTWORK_URL);
 });
+
+test("video and motion artwork is never sent to Discord", async () => {
+  for (const url of ["https://cdn.example.com/cover.m3u8", "https://cdn.example.com/motion/cover.MP4", "https://cdn.example.com/a.webm", "https://cdn.example.com/b.m4v", "https://cdn.example.com/c.mov", "https://cdn.example.com/d.mkv"]) {
+    assert.deepEqual(classifyArtworkUrl(url), { ok: false, failure: "unsupported_format" });
+  }
+  assert.equal(classifyArtworkUrl("https://cdn.example.com/cover.gif").ok, true);
+  const result = await createDiscordArtworkResolver().resolve({ title: "Song", artworkUrl: "https://cdn.example.com/cover.m3u8" });
+  assert.deepEqual([result.image, result.strategy, result.failure], [FALLBACK_ARTWORK_URL, "fallback", "unsupported_format"]);
+});

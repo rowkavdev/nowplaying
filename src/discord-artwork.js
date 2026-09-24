@@ -16,7 +16,10 @@ export function isDiscordImage(value) {
   return typeof value === "string" && (ASSET_PATTERN.test(value) || classifyArtworkUrl(value).ok);
 }
 
-export const artworkFailures = Object.freeze(["invalid", "not_https", "credentials", "private_host", "secret_query", "too_long"]);
+export const artworkFailures = Object.freeze(["invalid", "not_https", "credentials", "private_host", "secret_query", "too_long", "unsupported_format"]);
+// Animated or video artwork (Apple Music style motion covers, .m3u8 HLS streams)
+// shows as a blank image in Discord, so it falls through to the next source.
+const VIDEO_EXTENSION = /\.(m3u8|mp4|m4v|webm|mov|mkv)$/i;
 
 function ipv4Private(host) {
   const parts = host.split(".").map(Number);
@@ -55,6 +58,7 @@ export function classifyArtworkUrl(value) {
   for (const name of url.searchParams.keys()) {
     if (SECRET_PARAM.test(name)) return { ok: false, failure: "secret_query" };
   }
+  if (VIDEO_EXTENSION.test(url.pathname)) return { ok: false, failure: "unsupported_format" };
   url.hash = "";
   return { ok: true, url: url.href };
 }
