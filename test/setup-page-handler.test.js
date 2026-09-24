@@ -98,3 +98,21 @@ test("the card hosting step uses the hosted setup API and leaves room for GitHub
   assert.match(js, /id: "hostedSignIn"/);
   for (const choice of ["Not now", "NowPlaying's hosted service", "My own card service (self-hosted)"]) assert.ok(js.includes(choice), choice);
 });
+
+test("GitHub sign-in on the hosting step uses the signin API and explains every answer the same way in both windows (#140)", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  const { readFile } = await import("node:fs/promises");
+  const ps1 = await readFile(new URL("../scripts/windows-setup.ps1", import.meta.url), "utf8");
+  assert.match(js, /HOSTED_API \+ "signin"/);
+  assert.match(js, /id: "hostedSignInStart"/);
+  assert.match(js, /indexOf\("https:\/\/github\.com\/"\) === 0/);
+  assert.match(ps1, /'\/api\/setup\/hosted\/signin'/);
+  const block = js.slice(js.indexOf("var HOSTED_SIGNIN"), js.indexOf("var hostedPoll"));
+  const entries = [...block.matchAll(/^\s+(\w+): "([^"]+)",$/gm)];
+  assert.ok(entries.length >= 10);
+  for (const status of ["not_configured", "expired", "denied", "no_credential_store", "rate_limited"]) assert.ok(entries.some(([, key]) => key === status), status);
+  for (const [, key, text] of entries) {
+    const quoted = text.includes("'") ? `${key} = "${text}"` : `${key} = '${text}'`;
+    assert.ok(ps1.includes(quoted), `${key} wording matches the native window`);
+  }
+});

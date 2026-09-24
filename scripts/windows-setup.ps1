@@ -88,6 +88,21 @@ $HostedCheck = @{
   timeout = 'That address took too long to answer.'
   unreachable = "Couldn't reach that address. Check it and that the service is running."
 }
+# Sign in with GitHub for the hosted card (#140), same wording as the browser page.
+$HostedSignIn = @{
+  not_configured = "Signing in with GitHub isn't switched on in this version yet. Your card still works without it, on a link for this PC only."
+  expired = 'The code ran out before it was approved. Get a new one.'
+  not_started = 'The code ran out before it was approved. Get a new one.'
+  denied = 'Sign-in was cancelled on GitHub.'
+  unreachable = "Couldn't reach GitHub. Check your internet connection and try again."
+  github_error = "GitHub didn't answer as expected. Try again in a minute."
+  hosted_unreachable = "Couldn't reach the card service. Check the address and try again."
+  hosted_error = "The card service didn't accept the sign-in. Try again in a minute."
+  rate_limited = 'Too many sign-in attempts. Wait a minute and try again.'
+  invalid_url = 'Enter the service address, starting with https://.'
+  no_credential_store = "This PC has no safe place to keep the sign-in, so it can't sign in here."
+}
+$script:HostedAuth = @{ Code = $null; Uri = $null; Login = $null; CardUrl = $null; Message = '' }
 $Idle = [ordered]@{ clear = 'Clear my status'; grace = 'Keep it for a short grace period'; show = 'Show that nothing is playing'; recent = 'Show what I played last' }
 
 # The setup server only accepts changes that carry this run's session secret.
@@ -107,6 +122,23 @@ function Invoke-Setup([string]$Method, [string]$Path, $Body = $null) {
 
 # Sign-in replies carry an error code in the body on 4xx/5xx; Invoke-RestMethod
 # throws on those, so read the body back out of the exception.
+# Hosted sign-in replies carry { status } on 4xx too (invalid_url, no_credential_store).
+function Invoke-HostedSignIn($Body) {
+  try { return Invoke-Setup 'POST' '/api/setup/hosted/signin' $Body }
+  catch {
+    $status = $null
+    try { $status = ($_.ErrorDetails.Message | ConvertFrom-Json).status } catch { }
+    if (-not $status) {
+      try {
+        $reader = [System.IO.StreamReader]::new($_.Exception.Response.GetResponseStream())
+        $status = ($reader.ReadToEnd() | ConvertFrom-Json).status
+      } catch { }
+    }
+    if ($status) { return [pscustomobject]@{ status = [string]$status } }
+    return [pscustomobject]@{ status = 'nowplaying_unreachable' }
+  }
+}
+
 function Invoke-SignIn($Body) {
   try { return Invoke-Setup 'POST' '/api/setup/signin' $Body }
   catch {
@@ -256,6 +288,8 @@ $onSignIn = {
   }
 }
 
+$hostedTimer = [System.Windows.Forms.Timer]::new()
+$hostedTimer.Interval = 5000
 $spotifyTimer = [System.Windows.Forms.Timer]::new()
 $spotifyTimer.Interval = 2000
 
@@ -328,6 +362,8 @@ function Update-Buttons {
   $picked = @($panel.Controls | Where-Object { $_ -is [System.Windows.Forms.RadioButton] -and $_.Checked }).Count -gt 0
   $selfHosted = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' -and $_.Checked -and [string]$_.Tag -eq 'self' }).Count -gt 0
   foreach ($control in @($panel.Controls | Where-Object { $_.Name -eq 'hostedUrl' -or $_.Name -eq 'hostedCheck' })) { $control.Enabled = $selfHosted }
+  $hostingOn = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' -and $_.Checked -and [string]$_.Tag -ne 'off' }).Count -gt 0
+  foreach ($control in @($panel.Controls | Where-Object { $_.Name -eq 'hostedSignIn' })) { $control.Enabled = $hostingOn -and -not $script:HostedAuth.Login }
   $needsUrl = $script:Draft.step -eq 'hosting' -and $selfHosted -and -not (Get-Field 'hostedUrl')
   $next.Enabled = (($script:Draft.step -ne 'provider') -or $picked) -and (($script:Draft.step -ne 'signin') -or [bool]$script:Draft.account) -and -not $needsUrl
   $next.Text = switch ($script:Draft.step) { 'review' { 'Finish' } 'complete' { 'Close' } default { 'Next' } }
@@ -492,7 +528,16 @@ function Show-Step {
       $checkResult = New-Text ''
       $checkResult.Name = 'hostedCheckResult'
       $panel.Controls.Add($checkResult)
-      # Signing this PC in to the hosted service (GitHub sign-in) goes here once it lands.
+      # Sign in with GitHub (optional): one card link any of the user's PCs can update.
+      $panel.Controls.Add((New-Text 'Sign in with GitHub (optional): one card link that any of your PCs can update. GitHub only tells NowPlaying your username.'))
+      $codeText = New-Text ''
+      $codeText.Name = 'hostedSignInCode'
+      $panel.Controls.Add($codeText)
+      $panel.Controls.Add((New-ActionButton 'hostedSignIn' 'Sign in with GitHub' $onHostedSignIn))
+      $signInResult = New-Text ''
+      $signInResult.Name = 'hostedSignInResult'
+      $panel.Controls.Add($signInResult)
+      Update-HostedSignIn
       try {
         $preview = Invoke-Setup 'GET' '/api/setup/hosted/preview'
         $sent = @($preview.sent | ForEach-Object { "- $($_.label)" }) + @($preview.alwaysSent | ForEach-Object { "- $_" })
@@ -587,6 +632,58 @@ $onDiscordTest = {
   } finally { $form.UseWaitCursor = $false }
 }
 
+# Updates the sign-in controls in place, so the hosting choice on screen is kept.
+function Update-HostedSignIn {
+  $a = $script:HostedAuth
+  $code = @($panel.Controls | Where-Object { $_.Name -eq 'hostedSignInCode' })[0]
+  $button = @($panel.Controls | Where-Object { $_.Name -eq 'hostedSignIn' })[0]
+  $out = @($panel.Controls | Where-Object { $_.Name -eq 'hostedSignInResult' })[0]
+  if (-not $button) { return }
+  $code.Text = if ($a.Code) { "Open $(([string]$a.Uri).Replace('https://', '')) and enter this code: $($a.Code)" } else { '' }
+  $code.Visible = [bool]$a.Code
+  $button.Text = if ($a.Code) { 'Get a new code' } else { 'Sign in with GitHub' }
+  $out.Text = if ($a.Login) { "Signed in as $($a.Login). Your card link: $($a.CardUrl)" } else { [string]$a.Message }
+  Update-Buttons
+}
+
+function Complete-HostedSignIn($Result) {
+  $hostedTimer.Stop()
+  $status = [string]$Result.status
+  if ($status -eq 'started' -and ([string]$Result.verificationUri).StartsWith('https://github.com/')) {
+    $script:HostedAuth.Code = [string]$Result.userCode; $script:HostedAuth.Uri = [string]$Result.verificationUri
+    $script:HostedAuth.Message = 'Waiting for you to approve it on GitHub...'
+    $hostedTimer.Interval = [Math]::Max(5, [int]$Result.interval) * 1000
+    if (-not $SelfTest) { Start-Process $script:HostedAuth.Uri }
+    $hostedTimer.Start()
+  } elseif ($status -eq 'pending' -and $script:HostedAuth.Code) {
+    $hostedTimer.Start()
+    return
+  } elseif ($status -eq 'signed_in') {
+    $script:HostedAuth = @{ Code = $null; Uri = $null; Login = [string]$Result.login; CardUrl = [string]$Result.cardUrl; Message = '' }
+  } else {
+    $script:HostedAuth.Code = $null
+    $script:HostedAuth.Message = if ($status -eq 'nowplaying_unreachable') { "Couldn't reach NowPlaying. Make sure it is running." } elseif ($HostedSignIn.ContainsKey($status)) { $HostedSignIn[$status] } else { $HostedSignIn['github_error'] }
+  }
+  if ($script:Draft.step -eq 'hosting') { Update-HostedSignIn }
+}
+
+$onHostedSignIn = {
+  $hostedTimer.Stop()
+  $script:HostedAuth = @{ Code = $null; Uri = $null; Login = $null; CardUrl = $null; Message = '' }
+  $body = @{ action = 'start' }
+  $self = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' -and $_.Checked -and [string]$_.Tag -eq 'self' }).Count -gt 0
+  if ($self) { $body.url = Get-Field 'hostedUrl' }
+  $form.UseWaitCursor = $true
+  try { $result = Invoke-HostedSignIn $body } finally { $form.UseWaitCursor = $false }
+  Complete-HostedSignIn $result
+}
+
+$hostedTimer.add_Tick({
+  $hostedTimer.Stop()
+  if (-not $script:HostedAuth.Code -or $script:Draft.step -ne 'hosting') { return }
+  Complete-HostedSignIn (Invoke-HostedSignIn @{ action = 'poll' })
+})
+
 $onHostedCheck = {
   $out = @($panel.Controls | Where-Object { $_.Name -eq 'hostedCheckResult' })[0]
   $out.Text = 'Checking...'
@@ -667,6 +764,15 @@ if ($SelfTest) {
   $hostRadios = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' })
   if ($hostRadios.Count -ne 3 -or -not ($hostRadios | Where-Object { $_.Checked -and $_.Tag -eq 'off' })) { throw 'hosting step must offer three choices with Not now picked' }
   if (-not @($panel.Controls | Where-Object { $_.Name -eq 'hostedPreview' })[0]) { throw 'hosting step has no upload preview' }
+  if (@($panel.Controls | Where-Object { $_.Name -eq 'hostedSignIn' -and $_.Enabled }).Count -ne 0) { throw 'GitHub sign-in must wait until hosting is on' }
+  ($hostRadios | Where-Object { $_.Tag -eq 'hosted' }).Checked = $true
+  $signInButton = @($panel.Controls | Where-Object { $_.Name -eq 'hostedSignIn' })[0]
+  if (-not $signInButton -or -not $signInButton.Enabled) { throw 'hosting step has no GitHub sign-in button' }
+  & $onHostedSignIn
+  # No OAuth App client ID yet, so sign-in must say so plainly instead of failing.
+  $signInText = [string](@($panel.Controls | Where-Object { $_.Name -eq 'hostedSignInResult' })[0]).Text
+  if (-not $signInText -or $signInText -like 'Waiting*') { throw "GitHub sign-in gave no clear answer: '$signInText'" }
+  $hostRadios = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' })
   ($hostRadios | Where-Object { $_.Tag -eq 'self' }).Checked = $true
   if ($next.Enabled) { throw 'Next must wait for a self-hosted address' }
   ($hostRadios | Where-Object { $_.Tag -eq 'off' }).Checked = $true

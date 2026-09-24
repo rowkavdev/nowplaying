@@ -40,6 +40,7 @@ nav{display:flex;gap:.5rem;margin-top:2rem}
 button{font:inherit;padding:.5rem 1rem;border-radius:.4rem;border:1px solid #555;background:#222;color:#eee;cursor:pointer}
 button#next{background:#0b5cad;border-color:#0b5cad;color:#fff}
 :focus-visible{outline:3px solid #7ab8ff;outline-offset:2px}
+a{color:#7ab8ff}
 fieldset{border:0;margin:0;padding:0}
 button.link{margin-left:auto;background:none;border:none;text-decoration:underline}
 button:disabled{opacity:.5;cursor:default}
@@ -127,7 +128,24 @@ const JS = `"use strict";
     timeout: "That address took too long to answer.",
     unreachable: "Couldn't reach that address. Check it and that the service is running."
   };
-  var hosting = { choice: null, url: null, check: "", preview: null, previewFailed: false, loading: false };
+  var hosting = { choice: null, url: null, check: "", preview: null, previewFailed: false, loading: false, signin: { code: null, uri: null, login: null, cardUrl: null, message: "" } };
+  // Sign in with GitHub (#140): GitHub's device flow through /api/setup/hosted/signin.
+  // The device key goes to the OS credential store; the page only ever sees the
+  // short code, the github.com link and, at the end, the login and card link.
+  var HOSTED_SIGNIN = {
+    not_configured: "Signing in with GitHub isn't switched on in this version yet. Your card still works without it, on a link for this PC only.",
+    expired: "The code ran out before it was approved. Get a new one.",
+    not_started: "The code ran out before it was approved. Get a new one.",
+    denied: "Sign-in was cancelled on GitHub.",
+    unreachable: "Couldn't reach GitHub. Check your internet connection and try again.",
+    github_error: "GitHub didn't answer as expected. Try again in a minute.",
+    hosted_unreachable: "Couldn't reach the card service. Check the address and try again.",
+    hosted_error: "The card service didn't accept the sign-in. Try again in a minute.",
+    rate_limited: "Too many sign-in attempts. Wait a minute and try again.",
+    invalid_url: "Enter the service address, starting with https://.",
+    no_credential_store: "This PC has no safe place to keep the sign-in, so it can't sign in here.",
+  };
+  var hostedPoll = null;
 
   function el(tag, props, children) {
     var node = document.createElement(tag);
@@ -472,8 +490,7 @@ const JS = `"use strict";
       parts.push(el("p", { id: "hostedCheckResult", role: "status", textContent: hosting.check }));
     }
     if (choice === "off") return parts;
-    // Signing this PC in to the hosted service (GitHub sign-in) goes here once it lands.
-    parts.push(el("div", { id: "hostedSignIn" }));
+    parts.push(el("div", { id: "hostedSignIn" }, hostedSignInParts()));
     parts.push(el("h3", { textContent: "What leaves your PC" }));
     if (!hosting.preview) {
       parts.push(el("p", { textContent: hosting.previewFailed ? "Couldn't load the list. Check NowPlaying is still running." : "Loading..." }));
@@ -518,6 +535,72 @@ const JS = `"use strict";
       .then(function () { out.textContent = hosting.check; button.disabled = false; });
   }
 
+  function hostedSignInParts() {
+    var s = hosting.signin;
+    var parts = [el("h3", { textContent: "Sign in with GitHub" })];
+    if (s.login) {
+      parts.push(el("p", { id: "hostedSignInResult", role: "status", textContent: "Signed in as " + s.login + ". Your card link: " + s.cardUrl }));
+      return parts;
+    }
+    parts.push(el("p", { textContent: "Optional. Signing in gives you one card link that any of your PCs can update. GitHub only tells NowPlaying your username." }));
+    if (s.code) {
+      parts.push(el("p", {}, ["Open ", el("a", { href: s.uri, target: "_blank", rel: "noopener", textContent: s.uri.replace("https://", "") }), " and enter this code: ", el("strong", { id: "hostedSignInCode", textContent: s.code })]));
+    }
+    parts.push(el("button", { type: "button", id: "hostedSignInStart", textContent: s.code ? "Get a new code" : "Sign in with GitHub" }));
+    parts.push(el("p", { id: "hostedSignInResult", role: "status", textContent: s.message }));
+    return parts;
+  }
+
+  function stopHostedPoll() {
+    if (hostedPoll) clearTimeout(hostedPoll);
+    hostedPoll = null;
+  }
+
+  function resetHostedSignIn() {
+    stopHostedPoll();
+    hosting.signin = { code: null, uri: null, login: null, cardUrl: null, message: "" };
+  }
+
+  function hostedSignIn(body) {
+    return fetch(HOSTED_API + "signin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (response) { return response.json().catch(function () { return {}; }); });
+  }
+
+  function onHostedSignInResult(result) {
+    var s = hosting.signin;
+    stopHostedPoll();
+    if (result.status === "started" && typeof result.verificationUri === "string" && result.verificationUri.indexOf("https://github.com/") === 0) {
+      s.code = result.userCode; s.uri = result.verificationUri; s.message = "Waiting for you to approve it on GitHub...";
+      hostedPoll = setTimeout(pollHostedSignIn, Math.max(5, Number(result.interval) || 5) * 1000);
+    } else if (result.status === "pending" && s.code) {
+      hostedPoll = setTimeout(pollHostedSignIn, 5000);
+      return;
+    } else if (result.status === "signed_in") {
+      s.code = null; s.login = result.login; s.cardUrl = result.cardUrl; s.message = "";
+    } else {
+      s.code = null; s.message = HOSTED_SIGNIN[result.status] || HOSTED_SIGNIN.github_error;
+    }
+    if (draft && draft.step === "hosting") render();
+  }
+
+  function pollHostedSignIn() {
+    hostedPoll = null;
+    if (!draft || draft.step !== "hosting" || hostingChoice() === "off" || !hosting.signin.code) return;
+    hostedSignIn({ action: "poll" }).then(onHostedSignInResult)
+      .catch(function () { hosting.signin.code = null; hosting.signin.message = "Couldn't reach NowPlaying. Make sure it is running."; render(); });
+  }
+
+  function startHostedSignIn() {
+    var button = document.getElementById("hostedSignInStart");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    resetHostedSignIn();
+    var body = { action: "start" };
+    if (hostingChoice() === "self") body.url = document.getElementById("hostedUrl") ? value("hostedUrl") : (hosting.url || draft.hostedUrl || "");
+    hostedSignIn(body).then(onHostedSignInResult)
+      .catch(function () { hosting.signin.message = "Couldn't reach NowPlaying. Make sure it is running."; render(); });
+  }
+
   function needsHostedUrl() {
     return draft.step === "hosting" && hostingChoice() === "self" && !value("hostedUrl");
   }
@@ -554,6 +637,7 @@ const JS = `"use strict";
         if (document.getElementById("hostedUrl")) hosting.url = value("hostedUrl");
         hosting.choice = host.value;
         hosting.check = "";
+        resetHostedSignIn();
         render();
       }
     });
@@ -568,6 +652,7 @@ const JS = `"use strict";
       if (event.target && event.target.id === "connectionTest") runConnectionTest();
       if (event.target && event.target.id === "discordTest") runDiscordTest();
       if (event.target && event.target.id === "hostedCheck") runHostedCheck();
+      if (event.target && event.target.id === "hostedSignInStart") startHostedSignIn();
       if (event.target && event.target.id === "spotifyStart") startSpotify();
       if (event.target && event.target.id === "spotifyClear") send("POST", { action: "clear-spotify" });
       if (event.target && event.target.id === "addServer") send("POST", { action: "add-server" });
