@@ -316,3 +316,29 @@ test("several servers load, and the app runs from the first one for now", async 
   assert.equal(config.provider, "jellyfin");
   assert.equal(JSON.parse(JSON.stringify(config)).provider, undefined);
 });
+
+test("polls every signed-in server; a second server's missing sign-in doesn't stop the start (#252)", async () => {
+  const servers = [
+    { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } },
+    { provider: "emby", serverUrl: "http://127.0.0.1:8920", identity: { id: "e1", displayName: "RowanE" } },
+    { provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "p1", displayName: "RowanP" } },
+  ];
+  const store = fakeStore({ "jellyfin:u1": "jf-token", "emby:e1": "emby-token" });
+  const hosts = [];
+  const fetchImpl = async (url) => { hosts.push(new URL(url).port); return Response.json([]); };
+  const app = await startAppFromConfig({ configFile: await configFile({ servers, credentialStored: true }), credentialStore: store, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    assert.deepEqual(store.reads.map((ref) => ref.provider), ["jellyfin", "emby", "plex"]);
+    const status = await (await fetch(`${app.url}/api/status`)).json();
+    assert.equal(status.server.type, "Jellyfin");
+    assert.ok(hosts.includes("8096") && hosts.includes("8920"), "both signed-in servers are polled");
+    assert.ok(!hosts.includes("32400"), "a server without a saved sign-in is not polled");
+    assert.deepEqual(app.servers().map((s) => [s.provider, s.state, s.reason ?? null]), [
+      ["jellyfin", "idle", null],
+      ["emby", "idle", null],
+      ["plex", "unavailable", "CREDENTIAL_MISSING"],
+    ]);
+  } finally {
+    await app.close();
+  }
+});
