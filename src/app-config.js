@@ -24,6 +24,7 @@ import { createDiscordPresenceLoop } from "./discord-presence.js";
 import { createDiscordRpcTransport } from "./discord-rpc.js";
 import { createHostedLoop } from "./hosted-loop.js";
 import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
+import { withProviderBackoff } from "./provider-backoff.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
@@ -200,13 +201,15 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {} } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
   // broken sign-in or an unreachable server can't keep the start crashing. The
   // card shows idle; the status, settings and logs pages still work.
-  const provider0 = safeMode ? OFFLINE_PROVIDER : await createSignedInProvider(config, credentialStore, fetchImpl);
+  // A failing server is retried with backoff (#153), shared by the card,
+  // Discord, hosted uploads and the status page.
+  const provider0 = safeMode ? OFFLINE_PROVIDER : withProviderBackoff(await createSignedInProvider(config, credentialStore, fetchImpl), providerBackoff);
   const status = createAppStatus({ config, version, build, packageType, safeMode });
   const provider = safeMode ? provider0 : status.wrapProvider(provider0);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });

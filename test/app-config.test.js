@@ -228,3 +228,34 @@ test("safe mode is offline: it starts without the sign-in and never polls the se
     await app.close();
   }
 });
+
+test("a down server is retried with backoff, not on every request, and recovers (#153)", async () => {
+  let time = 0, calls = 0, up = false;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (!up) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+    return Response.json([]);
+  };
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl,
+    discord: { env: {}, builtInClientId: "" }, providerBackoff: { now: () => time, random: () => 0 } });
+  try {
+    for (let i = 0; i < 5; i += 1) await fetch(`${app.url}/card.svg`);
+    assert.equal(calls, 1);
+    const down = await (await fetch(`${app.url}/api/status`)).json();
+    assert.equal(down.server.state, "unreachable");
+    time = 5_000;
+    await fetch(`${app.url}/card.svg`);
+    assert.equal(calls, 2);
+    time = 14_999;
+    await fetch(`${app.url}/card.svg`);
+    assert.equal(calls, 2);
+    up = true;
+    time = 15_000;
+    await fetch(`${app.url}/card.svg`);
+    assert.equal(calls, 3);
+    const back = await (await fetch(`${app.url}/api/status`)).json();
+    assert.equal(back.server.state, "connected");
+  } finally {
+    await app.close();
+  }
+});
