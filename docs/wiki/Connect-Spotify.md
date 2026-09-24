@@ -2,8 +2,6 @@
 
 nowplaying can show what you're playing on Spotify (music and podcasts) alongside or instead of a self-hosted server. Sign-in uses Spotify's own page; nowplaying never sees your Spotify password.
 
-> Spotify is a **planned** provider rolling out in the next development builds. This page is ready ahead of the setup option landing.
-
 ## Before you start
 
 Spotify asks each nowplaying user to register their own "app" (free, takes two minutes). You need:
@@ -26,12 +24,13 @@ Spotify asks each nowplaying user to register their own "app" (free, takes two m
 
 ## 2. Sign in from setup
 
-1. In setup, choose **Spotify**.
+1. Open setup - it opens in your browser on first launch, or choose **Run setup again** from the tray icon - and find the **Spotify** section.
 2. Paste your **Client ID** and choose **Sign in with Spotify**.
-3. Spotify opens in your browser. Approve the access request.
-4. You're returned to setup automatically. Run the connection test.
+3. Spotify opens in your browser. Approve the access request. The setup page updates itself when sign-in completes.
 
-Success looks like: the test passes and setup shows your Spotify account. Play music or a podcast in any Spotify app and it shows up.
+Success looks like: setup shows **Connected as** your Spotify account, and the summary at the end reads **Spotify on your card: On**. Play music or a podcast in any Spotify app and it shows up.
+
+To unlink later, use **Disconnect Spotify** in the same section.
 
 ## What nowplaying can see
 
@@ -42,7 +41,7 @@ Success looks like: the test passes and setup shows your Spotify account. Play m
 ## Common problems
 
 - **Sign-in loops or fails after approving:** check the redirect URI in your Spotify app is exactly `http://127.0.0.1/spotify/callback`.
-- **"Client ID should be the 32-character ID":** copy the Client ID again from the app's settings page; it's the ID, not the secret.
+- **"That doesn't look like a Spotify Client ID":** copy the 32-character Client ID again from your app's page in the Spotify developer dashboard; it's the ID, not the secret.
 - **Nothing shows:** make sure the Spotify account playing the music is the same one that approved the app, and the session isn't private.
 
 > Your Spotify sign-in is stored in Windows Credential Manager, not in the settings file. Revoking access in your Spotify account settings stops nowplaying immediately.
