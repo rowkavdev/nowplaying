@@ -200,7 +200,7 @@ export function resolveAppPort(env = process.env) {
   return port;
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
@@ -242,8 +242,20 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     try { cardUrl = await hosted.cardUrl(); } catch { cardUrl = null; }
     return { ...view, state: connection.state ?? "idle", lastSuccessAt: connection.lastSuccessAt ? new Date(connection.lastSuccessAt).toISOString() : null, error: connection.lastError ?? null, cardUrl };
   };
+  const startupView = async () => {
+    if (typeof startup?.isEnabled !== "function") return { available: false, startWithWindows: false };
+    try { return { available: true, startWithWindows: await startup.isEnabled() }; }
+    catch { return { available: false, startWithWindows: false }; }
+  };
   const settings = Object.freeze({
-    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView() }),
+    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView() }),
+    // Start with Windows is the Startup-folder shortcut, not config.json:
+    // setup and this page change the same shortcut.
+    async updateStartup(changes) {
+      if (!changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).length !== 1 || typeof changes.startWithWindows !== "boolean") throw new TypeError("startup settings: expected startWithWindows");
+      if (!startup) throw new TypeError("startup settings: not available");
+      await startup.setEnabled(changes.startWithWindows);
+    },
     async updateDiscord(changes) {
       const next = await settingsStore.updateDiscord(changes);
       current = next;

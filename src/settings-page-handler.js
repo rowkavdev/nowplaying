@@ -30,6 +30,12 @@ const PAGE = `<!doctype html>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
 </form>
+<form id="startup-form" hidden>
+<section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
+<p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
+<p><button type="submit" id="startup-save">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
+</section>
+</form>
 <form id="hosted-form">
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card</h2>
 <p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in, artwork or Discord details. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
@@ -64,6 +70,7 @@ async function load() {
     const all = await res.json();
     show(all.discord);
     showHosted(all.hosted);
+    showStartup(all.startup);
   } catch {
     say("Can't load settings. NowPlaying may have been closed.", "bad");
     save.disabled = true;
@@ -101,6 +108,24 @@ document.getElementById("refresh-art").addEventListener("click", async (event) =
     result.className = "bad";
   } finally {
     button.disabled = false;
+  }
+});
+const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
+function startupSay(text, tone) { const el = document.getElementById("startup-result"); el.textContent = text; el.className = tone || ""; }
+function showStartup(s) { startup.form.hidden = !s || !s.available; if (s) startup.enabled.checked = s.startWithWindows; }
+startup.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  startup.save.disabled = true;
+  startupSay("Saving...", "warn");
+  try {
+    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: startup.enabled.checked } }) });
+    if (!res.ok) throw new Error(String(res.status));
+    showStartup((await res.json()).startup);
+    startupSay("Saved.", "ok");
+  } catch {
+    startupSay("Couldn't save. Nothing was changed.", "bad");
+  } finally {
+    startup.save.disabled = false;
   }
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], off: ["Off", ""] };
@@ -162,7 +187,7 @@ load();
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 const MAX_BODY = 4096;
 
-const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted" };
+const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup" };
 
 export function createSettingsPageHandler({ settings, fallback } = {}) {
   if (!settings || typeof settings.read !== "function" || typeof settings.updateDiscord !== "function") throw new TypeError("settings: expected read() and updateDiscord()");
@@ -174,7 +199,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   };
   const read = async () => {
     const value = await settings.read();
-    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}) };
+    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}) };
   };
   return async function handle(request) {
     const method = request?.method || "GET";
