@@ -8,9 +8,10 @@ import { normalizeHostedUrl } from "./hosted-uploader.js";
 // /api/auth/github, and is then dropped: it is never saved or logged. Only
 // the hosted device key is kept, in the OS credential store.
 
-// Public OAuth App client ID (not a secret). Set once Rowan's OAuth App with
-// device flow exists; until then sign-in reports "not_configured".
-export const GITHUB_CLIENT_ID = null;
+// Public OAuth App client ID (not a secret): the "nowplaying" OAuth App,
+// device flow on, no client secret. NOWPLAYING_GITHUB_CLIENT_ID overrides it
+// for testing against another app.
+export const GITHUB_CLIENT_ID = "Ov23liXyVPrXEWizAwIV";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
 const TIMEOUT_MS = 10_000;
