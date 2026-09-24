@@ -23,6 +23,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Turn on Discord and pick an idle behaviour.
 - [ ] Optional Spotify: paste a Client ID from your own app in the Spotify developer dashboard (redirect URI `http://127.0.0.1/spotify/callback`) and choose "Sign in with Spotify". After you approve, setup shows "Connected as" your account, and `config.json` holds no token.
 - [ ] Finish setup. `%LOCALAPPDATA%\nowplaying\config.json` now exists and holds no password or token.
+- [ ] The setup review step shows made-up example cards for Music, TV episode and Film, drawn in your card's look.
 
 ## 4. Running
 
@@ -52,7 +53,8 @@ Write down the build number and version from the release title, for example `dev
 - [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
 - [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
 - [ ] The status page lists every connected server, each with its own connection state.
-- [ ] Remove a server in Settings. It stops feeding the card and Discord; the other servers keep working.
+- [ ] Settings > Servers lists every server. "Add or remove servers" opens setup; remove one there, Finish, and nowplaying restarts with it gone - the other servers keep feeding the card and Discord.
+- [ ] Re-run setup and Finish without changing anything: your servers, Spotify sign-in and card, privacy and hosted settings all survive.
 - [ ] Settings shows a YouTube section with a pairing code and port. "Make a new code" warns the old code stops working.
 - [ ] With the YouTube extension paired, playing a YouTube video shows it on the card and in Discord. A Short shows nothing.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
