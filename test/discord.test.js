@@ -93,6 +93,15 @@ test("truncates without splitting Unicode code points", () => {
   assert.equal(activity.details.endsWith("😀"), true);
 });
 
+test("pads one-character text so Discord accepts the activity", () => {
+  const activity = formatDiscordActivity({ ...playing, kind: "track", title: "i", subtitle: "?" }, { largeText: "{title}" });
+  assert.equal(activity.details, "i\u2800");
+  assert.equal(activity.state, "?\u2800");
+  assert.equal(activity.largeText, "i\u2800");
+  for (const field of ["details", "state", "largeText"]) assert.ok([...activity[field]].length >= 2);
+  assert.equal(formatDiscordActivity({ ...playing, kind: "track", title: "😀" }).details, "😀\u2800");
+});
+
 test("defaults to Listening with a progress bar and no bar while paused", () => {
   const activity = formatDiscordActivity({ ...playing, kind: "track" });
   assert.equal(activity.type, "listening");
