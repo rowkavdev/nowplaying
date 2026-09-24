@@ -78,8 +78,14 @@ function timestampFields(presence, mode) {
   return { startTimestamp };
 }
 
+// Discord rejects the whole activity when a text field is 1 character long
+// ("details length must be at least 2 characters long"), so a track called
+// "i" or an album called "?" would never show. Pad with a blank Braille
+// character, which Discord shows as empty space.
 function trimDiscordText(value) {
-  return [...value].slice(0, 128).join("");
+  const chars = [...value].slice(0, 128);
+  if (chars.length === 1) chars.push("\u2800");
+  return chars.join("");
 }
 
 export function formatDiscordActivity(presence, input = {}) {
