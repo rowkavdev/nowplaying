@@ -55,7 +55,7 @@ const PAGE = `<!doctype html>
 </form>
 <form id="card-form" hidden>
 <section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
-<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save.</p>
+<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save. The hosted card link below uses your style, width and progress bar choice.</p>
 <p class="row"><label for="card-theme">Style</label>
 <select id="card-theme">
 <option value="midnight-blue">Dark</option>
@@ -118,7 +118,9 @@ async function load() {
     showHosted(all.hosted);
     showStartup(all.startup);
     showPrivacy(all.privacy);
+    savedCard = all.card || null;
     showCard(all.card);
+    if (hostedCard) showHosted(hostedCard);
   } catch {
     say("Can't load settings. NowPlaying may have been closed.", "bad");
     save.disabled = true;
@@ -229,7 +231,10 @@ card.form.addEventListener("submit", async (event) => {
   card.save.disabled = true;
   cardSay("Saving...", "warn");
   try {
-    showCard((await send("/api/settings", "PUT", { card: values })).card);
+    const saved = (await send("/api/settings", "PUT", { card: values })).card;
+    savedCard = saved;
+    showCard(saved);
+    if (hostedCard) showHosted(hostedCard);
     cardSay("Saved. Your card uses these settings now.", "ok");
   } catch {
     cardSay("Couldn't save. Nothing was changed.", "bad");
@@ -256,6 +261,19 @@ startup.form.addEventListener("submit", async (event) => {
   }
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], off: ["Off", ""] };
+// The hosted card takes style, width and the progress bar from its link
+// (#94). Padding, corners and bar thickness are local only for now.
+let hostedCard = null;
+let savedCard = null;
+function hostedLink(base) {
+  if (!base || !savedCard) return base || "";
+  const query = new URLSearchParams();
+  if (savedCard.theme !== "midnight-blue") query.set("theme", savedCard.theme);
+  if (savedCard.width !== 440) query.set("width", String(savedCard.width));
+  if (savedCard.theme !== "compact" && !savedCard.showProgress) query.set("show", "mediaType,state,subtitle");
+  const text = query.toString().replace(/%2C/g, ",");
+  return text ? base + (base.includes("?") ? "&" : "?") + text : base;
+}
 const hosted = { form: document.getElementById("hosted-form"), enabled: document.getElementById("hosted-enabled"), save: document.getElementById("hosted-save"), disconnect: document.getElementById("hosted-disconnect") };
 function hostedSay(text, tone) { const el = document.getElementById("hosted-result"); el.textContent = text; el.className = tone || ""; }
 function showHosted(h) {
@@ -264,10 +282,12 @@ function showHosted(h) {
   const words = HOSTED_WORDS[h.state] || HOSTED_WORDS.failed;
   const state = document.getElementById("hosted-state");
   state.textContent = words[0]; state.className = words[1];
+  hostedCard = h;
   const link = document.getElementById("hosted-url");
-  link.textContent = h.cardUrl || "Appears after the first upload";
-  link.href = h.cardUrl || "#";
-  document.getElementById("hosted-markdown").textContent = h.cardUrl ? "![Now playing](" + h.cardUrl + ")" : "-";
+  const url = hostedLink(h.cardUrl);
+  link.textContent = url || "Appears after the first upload";
+  link.href = url || "#";
+  document.getElementById("hosted-markdown").textContent = url ? "![Now playing](" + url + ")" : "-";
   document.getElementById("copy-url").disabled = document.getElementById("copy-markdown").disabled = !h.cardUrl;
   document.getElementById("hosted-details").hidden = !h.enabled;
 }
