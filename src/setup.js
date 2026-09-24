@@ -18,6 +18,7 @@ export function createSetupDraft(input = {}) {
   const provider = input.provider ?? null;
   const account = createAccount(input.account);
   const servers = createServerList(input.servers);
+  const spotify = createSpotify(input.spotify);
   return Object.freeze({
     version: 1,
     step,
@@ -28,6 +29,9 @@ export function createSetupDraft(input = {}) {
     // Servers already signed in with "Add another server" (#252), oldest
     // first. Accounts only; their secrets are in the credential store.
     servers,
+    // Optional Spotify sign-in for the card (#135): Client ID and who signed
+    // in. The refresh token is in the credential store.
+    spotify,
     discordEnabled: input.discordEnabled ?? true,
     discordIdleBehavior: input.discordIdleBehavior ?? "clear",
     // Album art lookup (title + artist to MusicBrainz / Cover Art Archive).
@@ -36,6 +40,18 @@ export function createSetupDraft(input = {}) {
     // null means "not offered / leave as it is" (no Windows startup support).
     startWithWindows: input.startWithWindows ?? null,
   });
+}
+
+const SPOTIFY_CLIENT_ID = /^[0-9a-f]{32}$/i;
+
+function createSpotify(input) {
+  if (input === undefined || input === null) return null;
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => key !== "clientId" && key !== "identity")) throw new TypeError("setup.spotify is invalid");
+  const identity = input.identity;
+  if (typeof input.clientId !== "string" || !SPOTIFY_CLIENT_ID.test(input.clientId)) throw new TypeError("setup.spotify is invalid");
+  if (!identity || typeof identity !== "object" || Array.isArray(identity) || Object.keys(identity).some((key) => key !== "id" && key !== "displayName")
+    || !accountText(identity.id) || !accountText(identity.displayName)) throw new TypeError("setup.spotify is invalid");
+  return Object.freeze({ clientId: input.clientId, identity: Object.freeze({ id: identity.id, displayName: identity.displayName }) });
 }
 
 function createServerList(input) {

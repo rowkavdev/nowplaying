@@ -9,6 +9,7 @@ test("starts with privacy-first, testable defaults", () => {
     provider: null,
     account: null,
     servers: [],
+    spotify: null,
     discordEnabled: true,
     discordIdleBehavior: "clear",
     discordArtworkLookup: true,
@@ -112,4 +113,12 @@ test("cancelling an added server puts the last one back as the signed-in account
   assert.deepEqual([back.step, back.provider, back.account, back.servers], ["signin", "navidrome", nav, []]);
   assert.throws(() => cancelAddServer(back), /nothing_to_cancel/);
   assert.throws(() => cancelAddServer(createSetupDraft({ step: "provider" })), /nothing_to_cancel/);
+});
+
+test("the draft keeps an optional Spotify sign-in, identity only (#135)", () => {
+  const spotify = { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "rowan", displayName: "Rowan" } };
+  assert.deepEqual(createSetupDraft({ spotify }).spotify, spotify);
+  assert.throws(() => createSetupDraft({ spotify: { ...spotify, refreshToken: "x" } }), /spotify is invalid/);
+  assert.throws(() => createSetupDraft({ spotify: { ...spotify, clientId: "short" } }), /spotify is invalid/);
+  assert.throws(() => createSetupDraft({ spotify: { clientId: spotify.clientId, identity: { id: "" , displayName: "x" } } }), /spotify is invalid/);
 });

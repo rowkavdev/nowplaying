@@ -235,3 +235,14 @@ test("the wizard writes every server signed in during setup, oldest first (#252)
   ]);
   assert.equal(parseAppConfig(text).servers.length, 2);
 });
+
+test("the wizard writes the optional Spotify block from the draft (#135)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  const account = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
+  await writeSetupConfig(file, { provider: "jellyfin", account, spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "rowan", displayName: "Rowan" } } });
+  const saved = JSON.parse(await readFile(file, "utf8"));
+  assert.deepEqual(saved.spotify, { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "rowan", displayName: "Rowan" }, credentialRef: { provider: "spotify", identityId: "rowan" } });
+  await writeSetupConfig(file, { provider: "jellyfin", account });
+  assert.equal(JSON.parse(await readFile(file, "utf8")).spotify, undefined);
+});
