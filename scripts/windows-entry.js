@@ -72,6 +72,8 @@ if (command === "--version" || command === "version") {
   }
   await logger.event("startup", "ok");
   const close = async () => {
+    // A deliberate stop after a successful start is not a crash (#497).
+    await recovery?.cleanShutdown?.();
     await app.close();
     await logger.event("startup", "stopped");
   };
@@ -90,7 +92,7 @@ if (command === "--version" || command === "version") {
       setupRequests,
     });
     await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
-    if (session.outcome === "quit") { await logger.event("startup", "stopped"); process.exit(0); }
+    if (session.outcome === "quit") { await recovery?.cleanShutdown?.(); await logger.event("startup", "stopped"); process.exit(0); }
     if (session.outcome === "restart-failed") { console.error(session.error?.message ?? "NowPlaying couldn't restart."); process.exit(1); }
   }
 } else if (command === "setup") {

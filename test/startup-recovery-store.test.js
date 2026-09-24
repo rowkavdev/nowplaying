@@ -79,3 +79,40 @@ test("safe mode stays on until the user retries a normal start", async () => {
   const next = await guardStartup({ store, start: async () => ({}), ...manualTimers() });
   assert.equal(next.safeMode, false);
 });
+
+test("cleanShutdown clears the counter so quick start/quit cycles never trip safe mode (#497)", async () => {
+  const file = await storeFile();
+  const store = createStartupRecoveryStore({ file });
+  const seen = [];
+  // Three deliberate quits inside the healthy window, then a fourth start.
+  for (let run = 0; run < 3; run += 1) {
+    const guarded = await guardStartup({ store, start: async ({ safeMode }) => { seen.push(safeMode); return {}; }, ...manualTimers() });
+    await guarded.cleanShutdown();
+  }
+  const fourth = await guardStartup({ store, start: async ({ safeMode }) => { seen.push(safeMode); return {}; }, ...manualTimers() });
+  assert.deepEqual(seen, [false, false, false, false]);
+  assert.equal((await store.load()).failures, 1, "the in-flight start is unconfirmed, not a backlog");
+  await fourth.cleanShutdown();
+  assert.equal((await store.load()).failures, 0);
+});
+
+test("cleanShutdown during safe mode keeps the counter (#497)", async () => {
+  const file = await storeFile();
+  const store = createStartupRecoveryStore({ file });
+  for (let run = 0; run < 3; run += 1) await guardStartup({ store, start: async () => ({}), ...manualTimers() });
+  const safe = await guardStartup({ store, start: async () => ({}), ...manualTimers() });
+  assert.equal(safe.safeMode, true);
+  await safe.cleanShutdown();
+  const next = await guardStartup({ store, start: async ({ safeMode }) => ({ safeMode }), ...manualTimers() });
+  assert.equal(next.safeMode, true, "quitting a safe-mode run proves nothing about the parts it turned off");
+  next.cancel();
+});
+
+test("cleanShutdown stops the pending healthy timer (#497)", async () => {
+  const file = await storeFile();
+  const store = createStartupRecoveryStore({ file });
+  const timers = manualTimers();
+  const guarded = await guardStartup({ store, start: async () => ({}), ...timers });
+  await guarded.cleanShutdown();
+  assert.equal(timers.pending.length, 0);
+});
