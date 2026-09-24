@@ -19,6 +19,7 @@ Write down the build number and version from the release title, for example `dev
 
 - [ ] Starting nowplaying with no saved config opens the setup page in your default browser, with no console window. After you finish setup, nowplaying starts. Later launches do not open the browser.
 - [ ] Connect your media server and sign in.
+- [ ] If you run more than one: "Add another server" signs in to a second server (up to eight). Both stay connected after you finish setup.
 - [ ] Turn on Discord and pick an idle behaviour.
 - [ ] Finish setup. `%LOCALAPPDATA%\nowplaying\config.json` now exists and holds no password or token.
 
