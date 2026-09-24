@@ -211,3 +211,20 @@ test("safe mode runs the card and status page but keeps Discord and hosted uploa
     await app.close();
   }
 });
+
+test("safe mode is offline: it starts without the sign-in and never polls the server (#122)", async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls += 1; return Response.json([]); };
+  const brokenStore = { read: async () => { throw new Error("vault s3cret"); } };
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: brokenStore, port: 0, fetchImpl, safeMode: true, discord: { env: {}, builtInClientId: "" } });
+  try {
+    assert.equal((await fetch(`${app.url}/card.svg`)).status, 200);
+    const status = await (await fetch(`${app.url}/api/status`)).json();
+    assert.equal(status.server.state, "safe_mode");
+    assert.deepEqual(app.status.tray(), { status: "degraded", action: "open_troubleshooting", text: "NowPlaying: safe mode - run setup again" });
+    assert.equal((await fetch(`${app.url}/api/diagnostics`)).status, 200);
+    assert.equal(calls, 0);
+  } finally {
+    await app.close();
+  }
+});

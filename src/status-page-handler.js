@@ -39,7 +39,7 @@ button{font:inherit;padding:6px 12px;border:1px solid #888;border-radius:6px;bac
 `;
 
 const SCRIPT = `"use strict";
-const SERVER_WORDS = { connected: ["Connected", "ok"], starting: ["Checking...", "warn"], unreachable: ["Can't reach the server", "bad"], authentication_failed: ["Sign-in rejected - run setup again", "bad"], error: ["Server returned an error", "bad"] };
+const SERVER_WORDS = { connected: ["Connected", "ok"], starting: ["Checking...", "warn"], unreachable: ["Can't reach the server", "bad"], authentication_failed: ["Sign-in rejected - run setup again", "bad"], error: ["Server returned an error", "bad"], safe_mode: ["Safe mode - server checks are off. Run setup again from the tray", "warn"] };
 const DISCORD_WORDS = { ready: ["Connected", "ok"], disconnected: ["Waiting for Discord to open", "warn"], degraded: ["Having trouble reaching Discord", "warn"], closed: ["Stopped", "warn"], off: ["Turned off", ""], no_app_id: ["Not set up", "warn"], failed: ["Couldn't start", "bad"], unknown: ["Unknown", "warn"] };
 function set(id, value, tone) { const el = document.getElementById(id); el.textContent = value ?? "-"; el.className = tone || ""; }
 function ago(iso) {

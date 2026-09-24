@@ -67,7 +67,7 @@ Discord Rich Presence is local. A server process running without a desktop sessi
 
 ## Safe mode after repeated failed starts
 
-If nowplaying fails to start three times in a row (or crashes within a minute of starting), the next start is in safe mode. The local card and status page still run, but Discord presence and hosted card uploads stay off. The log records `SAFE_MODE_<PART>`, where the part is whatever failed last, for example `SAFE_MODE_CONFIGURATION`.
+If nowplaying fails to start three times in a row (or crashes within a minute of starting), the next start is in safe mode. Safe mode is offline: it doesn't read your saved sign-in or contact your media server, and Discord presence, hosted card uploads and update checks stay off. The card shows nothing playing. The status page still opens from the tray, with Settings, Logs and **Download** diagnostics. The log records `SAFE_MODE_<PART>`, where the part is whatever failed last, for example `SAFE_MODE_CONFIGURATION`.
 
 To leave safe mode, right-click the tray icon and choose **Run setup again**. The next start is a normal one. If it keeps failing, export diagnostics from the status page and include them when you report the problem.
 

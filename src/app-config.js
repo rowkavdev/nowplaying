@@ -194,22 +194,12 @@ export function resolveAppPort(env = process.env) {
 export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
-  let secret;
-  try {
-    secret = await credentialStore.read(config.credentialRef);
-  } catch {
-    throw new StartupError("CREDENTIAL_READ_FAILED", "Couldn't read your saved sign-in from Windows Credential Manager. Run `nowplaying.exe setup` to sign in again.");
-  }
-  if (typeof secret !== "string" || !secret) throw credentialMissing();
-  let provider;
-  try {
-    provider = createProviderFromConfig(config, secret, { fetchImpl });
-  } catch (error) {
-    if (error instanceof StartupError) throw error;
-    throw invalidConfig();
-  }
-  const status = createAppStatus({ config, version, build, packageType });
-  provider = status.wrapProvider(provider);
+  // Safe mode (#122) is offline: no sign-in read and no server polling, so a
+  // broken sign-in or an unreachable server can't keep the start crashing. The
+  // card shows idle; the status, settings and logs pages still work.
+  const provider0 = safeMode ? OFFLINE_PROVIDER : await createSignedInProvider(config, credentialStore, fetchImpl);
+  const status = createAppStatus({ config, version, build, packageType, safeMode });
+  const provider = safeMode ? provider0 : status.wrapProvider(provider0);
   const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
   let current = config;
   let discord;
@@ -269,6 +259,24 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await server.close();
   };
   return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), safeMode, status, close });
+}
+
+const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
+
+async function createSignedInProvider(config, credentialStore, fetchImpl) {
+  let secret;
+  try {
+    secret = await credentialStore.read(config.credentialRef);
+  } catch {
+    throw new StartupError("CREDENTIAL_READ_FAILED", "Couldn't read your saved sign-in from Windows Credential Manager. Run `nowplaying.exe setup` to sign in again.");
+  }
+  if (typeof secret !== "string" || !secret) throw credentialMissing();
+  try {
+    return createProviderFromConfig(config, secret, { fetchImpl });
+  } catch (error) {
+    if (error instanceof StartupError) throw error;
+    throw invalidConfig();
+  }
 }
 
 function invalidConfig() {
