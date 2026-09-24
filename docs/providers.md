@@ -114,6 +114,29 @@ const presence = await emby.getPresence({ userId: process.env.EMBY_USER_ID });
 
 The adapter requests `/Sessions` with `X-Emby-Token`, ignores sessions without a current item and converts ticks to milliseconds. It supports movie, episode and audio item types.
 
+## Spotify
+
+```js
+import { createSpotifyProvider } from "nowplaying/providers/spotify";
+
+const spotify = createSpotifyProvider({
+  getAccessToken: async () => process.env.SPOTIFY_ACCESS_TOKEN,
+});
+
+const presence = await spotify.getPresence();
+```
+
+### Options
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `getAccessToken` | Yes | Async function returning a current access token; the provider never sees the refresh token or client secret |
+| `fetchImpl` | No | Fetch-compatible function |
+
+Sign-in uses Authorization Code with PKCE (`src/spotify-auth.js`): each user registers their own Spotify app and supplies its Client ID, and the redirect must be a `127.0.0.1` loopback address, never `localhost`. The only scope requested is `user-read-currently-playing`.
+
+The adapter calls `/v1/me/player/currently-playing`. It reports music and podcast episodes as `track`; anything else, a private session or an ad reads as idle. A `429` response carries `retryAfterMs` from the `Retry-After` header.
+
 ## Normalized result
 
 All adapters return an immutable presence object with these output-facing fields:

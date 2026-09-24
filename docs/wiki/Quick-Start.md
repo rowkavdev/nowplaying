@@ -18,7 +18,7 @@ Goal: see what's playing on one media server in Discord, in about ten minutes. Y
 
 The first time nowplaying starts with no saved settings, it opens a setup page in your web browser. There is no console window and nothing to type in a terminal.
 
-1. **Connect your media server.** Paste your server's address and sign in. The provider pages show exactly where to find each sign-in: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby). Use the connection test on the page; success means nowplaying can see your sessions. Running more than one server? Use **Add another server** to sign in to each of them (up to eight).
+1. **Connect your media server.** Paste your server's address and sign in. The provider pages show exactly where to find each sign-in: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify) (planned). Use the connection test on the page; success means nowplaying can see your sessions. Running more than one server? Use **Add another server** to sign in to each of them (up to eight).
 2. **Turn on Discord.** Keep the Discord desktop app open, enable Discord in setup, and use the preview to check how your status will look.
 3. Finish setup. Your settings are saved on your PC and hold no password or token; sign-ins live in Windows Credential Manager.
 
