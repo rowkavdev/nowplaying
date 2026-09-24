@@ -20,6 +20,35 @@ export function createHandlers({ getService }) {
         sendJson(res, 202, await getService().ingest({ token, payload }));
       } catch (error) { sendError(res, error); }
     },
+    // GitHub sign-in (#140): the body carries a GitHub user token that the
+    // service checks once with GitHub and never stores.
+    async signInGitHub(req, res) {
+      if (!requireMethod(req, res, ["POST"])) return;
+      try {
+        const clientKey = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
+        const body = await readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((k) => !["githubToken", "deviceName", "legacyToken"].includes(k))) {
+          return sendJson(res, 400, { error: "invalid_request" });
+        }
+        sendJson(res, 201, await getService().signInWithGitHub({ ...body, clientKey }));
+      } catch (error) { sendError(res, error); }
+    },
+    // GET lists this user's PCs; POST { action: "rename" | "remove" | "remove-all", deviceId?, name? }.
+    async devices(req, res) {
+      if (!requireMethod(req, res, ["GET", "POST"])) return;
+      try {
+        const token = bearerToken(req);
+        if (req.method === "GET") return sendJson(res, 200, await getService().listDevices({ token }));
+        const body = await readJsonBody(req);
+        const service = getService();
+        switch (body?.action) {
+          case "rename": return sendJson(res, 200, await service.renameDevice({ token, deviceId: body.deviceId, name: body.name }));
+          case "remove": return sendJson(res, 200, await service.removeDevice({ token, deviceId: body.deviceId }));
+          case "remove-all": return sendJson(res, 200, await service.signOutEverywhere({ token }));
+          default: return sendJson(res, 400, { error: "invalid_request" });
+        }
+      } catch (error) { sendError(res, error); }
+    },
     async revoke(req, res) {
       if (!requireMethod(req, res, ["POST", "DELETE"])) return;
       try { sendJson(res, 200, await getService().revoke({ token: bearerToken(req) })); }
@@ -30,8 +59,9 @@ export function createHandlers({ getService }) {
       try {
         const url = new URL(req.url, "http://localhost");
         const options = parseCardOptions(url.searchParams);
+        const login = url.searchParams.get("user") ?? /^\/u\/([^/]+)\.svg$/.exec(url.pathname)?.[1] ?? null;
         const id = url.searchParams.get("id") ?? /^\/card\/([^/]+)\.svg$/.exec(url.pathname)?.[1] ?? null;
-        const presence = await getService().readCardState(id);
+        const presence = login !== null ? await getService().readUserCardState(login) : await getService().readCardState(id);
         sendCard(req, res, presence, options);
       } catch (error) { sendError(res, error); }
     },
