@@ -134,6 +134,7 @@ const PAGE = `<!doctype html>
 <p class="row"><label><input type="checkbox" id="hosted-enabled" name="enabled"> Upload my card to the hosted service</label></p>
 <dl id="hosted-details" hidden><dt>Upload</dt><dd id="hosted-state">-</dd><dt>Card link</dt><dd><a id="hosted-url" href="#">-</a> <button type="button" id="copy-url">Copy</button></dd>
 <dt>README</dt><dd><code id="hosted-markdown">-</code> <button type="button" id="copy-markdown">Copy</button></dd></dl>
+<p class="hint" id="hosted-signin-hint">One card for all your PCs: choose Add or remove servers above and sign in with GitHub on the Card hosting step.</p>
 <p><button type="submit" id="hosted-save">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>

@@ -44,7 +44,7 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 ### Without signing in
 
 - Your card link uses a random ID. It can't be traced to your email, server or username. Each PC gets its own card.
-- If you sign in with GitHub later, the old random link keeps working and shows your new card.
+- To sign in with GitHub later, open Settings, choose **Add or remove servers**, and use **Sign in with GitHub** on the Card hosting step. The old random link keeps working and shows your new card.
 
 In both cases, each PC gets its own device key. It's kept in the system's credential store (Windows Credential Manager on Windows), not in `config.json`, and the service only stores a hash of it.
 
