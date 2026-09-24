@@ -12,6 +12,7 @@ import { createSetupTestHandler } from "./setup-test-handler.js";
 import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
 import { serializeSetupConfig } from "./setup-config.js";
 import { setupAccounts } from "./setup.js";
+import { migrateAppConfig, parseAppConfig } from "./app-config.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
@@ -23,8 +24,24 @@ export function windowsConfigPath({ localAppData, appName = "nowplaying" } = {})
   return win32.join(win32.dirname(windowsSetupDraftPath({ localAppData, appName })), "config.json");
 }
 
+// The installed app's current config, migrated and validated, or null when
+// there is none or it can't be used (setup then writes a fresh one, as the
+// app's own error message tells people to do).
+export async function readCurrentConfig(file) {
+  try {
+    await migrateAppConfig(file);
+    return parseAppConfig(await readFile(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 // Writes the finished setup as the app config: atomic, owner-only, and built by
 // createSetupConfig, which refuses anything that looks like a credential.
+// Setup owns servers, the Discord basics and Spotify. Everything else already
+// in config.json (Discord timer, hosted card, privacy, card look) is kept, so
+// running setup again on an installed app doesn't reset settings made on the
+// settings page.
 export async function writeSetupConfig(file, draft) {
   if (!draft?.account) throw new TypeError("setup is not signed in");
   // Every server signed in during setup (#252), oldest first.
@@ -40,11 +57,22 @@ export async function writeSetupConfig(file, draft) {
     discordIdleBehavior: draft.discordIdleBehavior,
     discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
     ...(draft.spotify ? { spotify: { clientId: draft.spotify.clientId, identity: draft.spotify.identity } } : {}),
+    ...keptSettings(await readCurrentConfig(file)),
   });
   await mkdir(dirname(file), { recursive: true });
   const temporary = `${file}.tmp`;
   await writeFile(temporary, body, { encoding: "utf8", mode: 0o600 });
   await rename(temporary, file);
+}
+
+function keptSettings(current) {
+  if (!current) return {};
+  return {
+    ...(current.discord?.timestamps !== undefined ? { discordTimestamps: current.discord.timestamps } : {}),
+    ...(current.hosted ? { hostedEnabled: current.hosted.enabled, ...(current.hosted.url ? { hostedUrl: current.hosted.url } : {}) } : {}),
+    ...(current.privacy ? { privacy: current.privacy } : {}),
+    ...(current.card ? { card: current.card } : {}),
+  };
 }
 
 // A random per-install id that providers see as the device (Plex client id,
