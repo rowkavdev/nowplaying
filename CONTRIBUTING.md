@@ -42,6 +42,8 @@ The package has no runtime dependencies yet. Do not add one when a small platfor
 
 Run all four before opening a pull request. CI repeats them across supported Node versions and validates the build artifact.
 
+`npm test` also checks the docs offline (`test/docs-links.test.js`): relative links and `#anchors` must resolve, links to this repo's files on github.com must point at files that exist, file paths in `code` must exist, and every `npm run` command must be a real script. Links to other websites aren't checked.
+
 ## Branches and pull requests
 
 Use a short branch name that describes the change, for example:

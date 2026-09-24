@@ -156,4 +156,4 @@ area:ci:
       - any-glob-to-any-file: [".github/**", "scripts/build*.js", "package*.json"]
 area:docs:
   - changed-files:
-      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+      - any-glob-to-any-file: ["**/*.md", "docs/**", "test/docs-*.js"]
