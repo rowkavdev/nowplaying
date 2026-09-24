@@ -65,6 +65,28 @@ export function cardRenderOptions(card) {
   });
 }
 
+// Spotify (#135) sits beside the media servers, not in servers[]: it feeds
+// the card and hosted card only, never Discord (Rowan's call), and presence
+// can't yet choose between servers (#252). The user brings their own Spotify
+// app's Client ID, which isn't a secret; the refresh token lives in the
+// credential store under credentialRef.
+function normalizeSpotify(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.spotify must be an object");
+  for (const key of Object.keys(value)) {
+    if (!["clientId", "identity", "credentialRef"].includes(key)) throw new TypeError(`setup config.spotify.${key} is not a setting`);
+  }
+  if (typeof value.clientId !== "string" || !/^[0-9a-f]{32}$/i.test(value.clientId)) throw new TypeError("setup config.spotify.clientId must be a 32-character Spotify Client ID");
+  const identity = createProviderIdentity(value.identity);
+  if (value.credentialRef !== undefined && (value.credentialRef?.provider !== "spotify" || value.credentialRef?.identityId !== identity.id)) {
+    throw new TypeError("setup config.spotify.credentialRef does not match its identity");
+  }
+  return Object.freeze({
+    clientId: value.clientId.toLowerCase(),
+    identity,
+    credentialRef: Object.freeze({ provider: "spotify", identityId: identity.id }),
+  });
+}
+
 export function createSetupConfig(input = {}) {
   if (input.credential !== undefined || input.token !== undefined || input.apiKey !== undefined) {
     throw new TypeError("setup config cannot contain credentials");
@@ -89,6 +111,7 @@ export function createSetupConfig(input = {}) {
   const privacy = input.privacy === undefined ? null : normalizePrivacy(input.privacy);
   const card = input.card === undefined ? null : normalizeCard(input.card);
   const servers = normalizeServers(input);
+  const spotify = input.spotify === undefined || input.spotify === null ? null : normalizeSpotify(input.spotify);
   const config = {
     version: CONFIG_SCHEMA_VERSION,
     servers,
@@ -108,6 +131,7 @@ export function createSetupConfig(input = {}) {
     } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card && Object.keys(card).length ? { card } : {}),
+    ...(spotify ? { spotify } : {}),
   };
   // Until presence can choose between servers (#252), the rest of the app
   // runs from the first server. These mirror servers[0] and are not

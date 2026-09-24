@@ -34,7 +34,7 @@ import { applyPrivacy } from "./privacy.js";
 // credentialRef at start-up.
 
 const MAX_CONFIG_BYTES = 16 * 1024;
-const CONFIG_KEYS = new Set(["version", "servers", "discord", "hosted", "privacy", "card"]);
+const CONFIG_KEYS = new Set(["version", "servers", "discord", "hosted", "privacy", "card", "spotify"]);
 const HOSTED_KEYS = new Set(["enabled", "url"]);
 
 export class StartupError extends Error {
@@ -70,6 +70,7 @@ export function parseAppConfig(text) {
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
       ...(parsed.card !== undefined ? { card: parsed.card } : {}),
+      ...(parsed.spotify !== undefined ? { spotify: parsed.spotify } : {}),
     });
   } catch {
     throw invalidConfig();

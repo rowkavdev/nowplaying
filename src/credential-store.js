@@ -1,4 +1,5 @@
-const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
+// "spotify" holds the Spotify refresh token (#135).
+const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby", "spotify"]);
 
 function credentialTarget(input = {}) {
   if (!PROVIDERS.has(input.provider)) throw new TypeError("credential.provider is invalid");
