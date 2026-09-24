@@ -17,6 +17,8 @@ export class SpotifyAuthError extends Error {
     super(message);
     this.name = "SpotifyAuthError";
     this.code = code;
+    // Lets the status page show "sign in again" rather than a generic error.
+    if (code === "reauth_needed") this.status = 401;
   }
 }
 

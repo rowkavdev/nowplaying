@@ -21,7 +21,7 @@ export function createSpotifySource(config, credentialStore, { fetchImpl = fetch
     saveRefreshToken: (token) => credentialStore.save(ref, token),
     fetchImpl,
   });
-  return withProviderBackoff(createSpotifyProvider({ getAccessToken: tokens.getAccessToken, fetchImpl }), backoff);
+  return withProviderBackoff(createSpotifyProvider({ getAccessToken: tokens.getAccessToken, forgetAccessToken: tokens.forget, fetchImpl }), backoff);
 }
 
 // Card source that picks between the media server (primary) and Spotify:
