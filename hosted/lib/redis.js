@@ -59,6 +59,14 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
         }
         case "EXPIRE": { const entry = live(key); if (!entry) return 0; entry.expiresAt = now() + Number(rest[0]) * 1000; return 1; }
         case "DEL": return data.delete(key) ? 1 : 0;
+        case "PFADD": {
+          const entry = live(key) ?? { value: new Set(), expiresAt: null };
+          const before = entry.value.size;
+          for (const item of rest) entry.value.add(String(item));
+          data.set(key, entry);
+          return entry.value.size > before ? 1 : 0;
+        }
+        case "PFCOUNT": return live(key)?.value.size ?? 0;
         default: throw new Error(`unsupported command ${name}`);
       }
     },

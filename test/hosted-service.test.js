@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryRedis, createUpstashRedis } from "../hosted/lib/redis.js";
-import { createService, validateIngest, STATE_TTL_SECONDS, REGISTRATIONS_PER_HOUR, INGESTS_PER_MINUTE } from "../hosted/lib/service.js";
+import { createService, validateIngest, STATE_TTL_SECONDS, REGISTRATIONS_PER_HOUR, INGESTS_PER_MINUTE, DAY_STATS_TTL_SECONDS } from "../hosted/lib/service.js";
 
 function setup(start = 1_800_000_000_000) {
   let clock = start;
@@ -93,6 +93,39 @@ test("unknown card ids 404 and counters stay aggregate", async () => {
   await service.readCardState(cardId);
   assert.equal(redis.data.get("np:stats:cards_rendered").value, "2");
   assert.equal(redis.data.get("np:stats:registrations").value, "1");
+});
+
+test("daily counters are aggregate, expire, and never hold device ids", async () => {
+  const { service, redis, now } = setup();
+  const day = new Date(now()).toISOString().slice(0, 10);
+  const a = await service.register();
+  const b = await service.register();
+  await service.ingest({ token: a.token, payload: update(now(), { seq: 1 }) });
+  await service.ingest({ token: a.token, payload: update(now(), { seq: 2 }) });
+  await service.ingest({ token: b.token, payload: update(now(), { seq: 1 }) });
+  await service.readCardState(a.cardId);
+  await service.readCardState(b.cardId);
+  await service.readCardState(b.cardId);
+  assert.equal(redis.data.get(`np:stats:day:${day}:renders`).value, "3");
+  assert.equal(redis.data.get(`np:stats:day:${day}:registrations`).value, "2");
+  assert.equal(await redis.command(["PFCOUNT", `np:stats:day:${day}:devices`]), 2);
+  for (const metric of ["renders", "registrations", "devices"]) {
+    assert.equal(redis.data.get(`np:stats:day:${day}:${metric}`).expiresAt, now() + DAY_STATS_TTL_SECONDS * 1000);
+  }
+  const members = [...redis.data.get(`np:stats:day:${day}:devices`).value];
+  for (const id of [a.deviceId, b.deviceId, a.cardId, b.cardId]) assert.ok(!members.some((m) => m.includes(id)));
+});
+
+test("a failing stats write never fails the card, ingest or registration", async () => {
+  const { redis, now } = setup();
+  const failing = { command: async (args) => {
+    if (String(args[1] ?? "").startsWith("np:stats:day:")) throw new Error("redis down");
+    return redis.command(args);
+  } };
+  const service = createService({ redis: failing, now });
+  const { token, cardId } = await service.register();
+  assert.equal((await service.ingest({ token, payload: update(now()) })).accepted, true);
+  assert.equal((await service.readCardState(cardId)).state, "playing");
 });
 
 test("upstash client posts commands with bearer auth and hides error bodies", async () => {

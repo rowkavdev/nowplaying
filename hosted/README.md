@@ -38,7 +38,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 
 ## Storage and counters
 
-State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The only counters are aggregate totals: `np:stats:cards_rendered` and `np:stats:registrations`.
+State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The counters are aggregate only. Totals: `np:stats:cards_rendered` and `np:stats:registrations`. Per UTC day, for the private usage dashboard (#218): `np:stats:day:<date>:renders` and `np:stats:day:<date>:registrations` (plain counts), and `np:stats:day:<date>:devices`, a HyperLogLog of hashed device IDs that can only estimate how many devices sent updates that day, never which ones. The per-day keys expire after 400 days. A failing stats write never fails a request.
 
 `GET /badges/requests.json` publishes the `np:stats:cards_rendered` total as a [Shields endpoint badge](https://shields.io/badges/endpoint-badge) (label "card requests", cached for 5 minutes). It's a single public number with nothing per card or device. The README shows it with `https://img.shields.io/endpoint?url=https://nowplaying-hosted.vercel.app/badges/requests.json`.
 
