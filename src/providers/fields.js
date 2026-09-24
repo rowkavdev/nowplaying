@@ -31,3 +31,19 @@ export function playbackTimes(positionMs, durationMs) {
   const duration = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null;
   return { positionMs: position !== null && duration !== null ? Math.min(position, duration) : position, durationMs: duration };
 }
+
+// One user can have several sessions at once: a TV left paused while music
+// plays on a phone. The first match in the server's list is often the paused
+// one, so a playing session wins over a paused one among the matches.
+export function pickSession(sessions, matches, isPaused) {
+  const found = sessions.filter(matches);
+  return found.find((session) => !isPaused(session)) ?? found[0] ?? null;
+}
+
+// Media servers answer with a JSON list of sessions. Anything else (a
+// reverse proxy's error page as JSON, an API change) is a clear error rather
+// than a TypeError from deep inside the mapper.
+export function sessionList(value, provider) {
+  if (!Array.isArray(value)) throw new Error(`${provider} sessions response was not a list`);
+  return value;
+}

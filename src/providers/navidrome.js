@@ -18,7 +18,10 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       const payload = await response.json();
       const root = payload["subsonic-response"];
       if (root?.status === "failed") throw new Error(`Navidrome API error: ${root.error?.message || "unknown error"}`);
-      const entries = root?.nowPlaying?.entry ?? [];
+      // Subsonic servers send a single entry as an object rather than a
+      // one-item list; anything else counts as nothing playing.
+      const listed = root?.nowPlaying?.entry ?? [];
+      const entries = (Array.isArray(listed) ? listed : [listed]).filter((item) => item && typeof item === "object");
       const entry = entries.find((item) => !playingUser || item.username?.localeCompare(playingUser, undefined, { sensitivity: "accent" }) === 0);
       return entry ? mapEntry(entry) : { state: "idle" };
     },

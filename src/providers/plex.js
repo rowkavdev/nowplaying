@@ -7,7 +7,7 @@
 
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear, playbackTimes } from "./fields.js";
+import { optionalCount, optionalText, optionalYear, playbackTimes, pickSession } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
 
@@ -24,7 +24,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
     return owner;
   }
   async function ownerSession(sessions) {
-    const candidate = sessions.find((item) => String(item?.User?.id ?? "") === "1");
+    const candidate = pickSession(sessions, (item) => String(item?.User?.id ?? "") === "1", (item) => item?.Player?.state === "paused");
     return candidate && await isOwner() ? candidate : null;
   }
   return defineProvider({
@@ -35,10 +35,13 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
       });
       if (!response.ok) throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
       const payload = await response.json();
-      const sessions = payload?.MediaContainer?.Metadata ?? [];
+      const listed = payload?.MediaContainer?.Metadata ?? [];
+      if (!Array.isArray(listed)) throw new Error("Plex sessions response was not a list");
+      const sessions = listed.filter((item) => item && typeof item === "object");
+      const paused = (item) => item?.Player?.state === "paused";
       const session = userId
-        ? sessions.find((item) => sameId(item?.User?.id, userId)) ?? await ownerSession(sessions)
-        : sessions.find((item) => matchesUser(item, username)) ?? null;
+        ? pickSession(sessions, (item) => sameId(item?.User?.id, userId), paused) ?? await ownerSession(sessions)
+        : pickSession(sessions, (item) => matchesUser(item, username), paused);
       return session ? mapSession(session) : { state: "idle" };
     },
   });
