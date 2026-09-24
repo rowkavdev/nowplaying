@@ -25,8 +25,10 @@ export function normalizeHostedUrl(value = DEFAULT_HOSTED_URL) {
   return url.origin + url.pathname.replace(/\/+$/, "");
 }
 
+const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+// Anonymous per-PC card ({ cardId }) or signed in with GitHub ({ login }).
 function validRegistration(value) {
-  return Boolean(value && ID.test(value.cardId) && ID.test(value.deviceId) && TOKEN.test(value.token));
+  return Boolean(value && ID.test(value.deviceId) && TOKEN.test(value.token) && (LOGIN.test(value.login ?? "") || ID.test(value.cardId ?? "")));
 }
 
 export class HostedUploadError extends Error {
@@ -76,7 +78,7 @@ export function createHostedUploader({
   async function ensureRegistered() {
     if (registration) return registration;
     const stored = await credentials.load();
-    if (validRegistration(stored)) return (registration = { cardId: stored.cardId, deviceId: stored.deviceId, token: stored.token });
+    if (validRegistration(stored)) return (registration = { ...stored });
     const created = await request("/api/register");
     if (!validRegistration(created)) throw new HostedUploadError("invalid_registration");
     registration = { cardId: created.cardId, deviceId: created.deviceId, token: created.token };
@@ -149,6 +151,15 @@ export function createHostedUploader({
     } catch (error) {
       const code = error instanceof HostedUploadError ? error.code : "upload_failed";
       if (error?.status === 401) {
+        // Signed in again elsewhere (setup's GitHub sign-in replaces the key):
+        // pick up the new key instead of wiping it.
+        const failed = registration?.token;
+        const stored = await credentials.load().catch(() => null);
+        if (validRegistration(stored) && stored.token !== failed) {
+          registration = { ...stored }; lastSent = null; failures = 0; retryAt = 0;
+          status = { ...status, state: "retrying", lastError: code };
+          return { sent: false, reason: "credentials_changed" };
+        }
         registration = null; pending = null;
         await credentials.clear().catch(() => {});
         status = { ...status, state: "unauthorized", lastError: code };
@@ -175,7 +186,7 @@ export function createHostedUploader({
 
   async function cardUrl() {
     const device = await ensureRegistered();
-    return `${origin}/card/${device.cardId}.svg`;
+    return device.login ? `${origin}/u/${device.login}.svg` : `${origin}/card/${device.cardId}.svg`;
   }
 
   return Object.freeze({ push, disconnect, cardUrl, status: () => ({ ...status, pending: pending !== null }) });
