@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "NowPlaying for YouTube",
+  "version": "0.1.0",
+  "description": "Sends what is playing on YouTube and YouTube Music to the NowPlaying app on this PC. Nothing else.",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://music.youtube.com/*"],
+      "js": ["reader.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html"
+}
