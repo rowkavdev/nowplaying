@@ -31,7 +31,7 @@ function normalizePrivacy(value) {
 // renderer defaults, so older configs draw the same card as before.
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
 const CARD_NUMBERS = Object.freeze({ width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12] });
-function normalizeCard(value) {
+export function normalizeCard(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.card must be an object");
   const card = {};
   for (const key of Object.keys(value)) {
