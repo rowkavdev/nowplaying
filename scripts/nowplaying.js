@@ -65,6 +65,8 @@ async function start() {
   }
   await logger.event("startup", "ok");
   const close = async () => {
+    // A deliberate stop after a successful start is not a crash (#497).
+    await recovery?.cleanShutdown?.();
     await app.close();
     await logger.event("startup", "stopped");
   };

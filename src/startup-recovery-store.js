@@ -64,6 +64,14 @@ export async function guardStartup({ store, start, healthyAfterMs = 60_000, setT
     app, safeMode, recovery: before,
     cancel: () => { if (timer) clearTimer(timer); },
     retryNormal: () => saveQuietly(store, confirmHealthyStartup(before, true)),
+    // A deliberate clean shutdown after a successful start is not a crash
+    // (#497): clear the counter so quick start/quit cycles can't trip safe
+    // mode. Safe-mode runs stay counted: quitting one proves nothing about
+    // the parts safe mode turned off.
+    cleanShutdown: async () => {
+      if (timer) clearTimer(timer);
+      if (!safeMode) await saveQuietly(store, confirmHealthyStartup(before, true));
+    },
   });
 }
 
