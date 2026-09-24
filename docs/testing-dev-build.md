@@ -53,6 +53,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Pick Light, 520 px, press Save. Open the card link from the Status page: the card is light and wider. Nothing restarted.
 - [ ] Quit and reopen nowplaying. Settings > Card still shows Light and 520, and the card still looks the same.
 - [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
+- [ ] Setup > Card hosting: choose NowPlaying's hosted service, then "Sign in with GitHub" and enter the code. The card link becomes `/u/<your-username>.svg`. Settings > Hosted card devices lists this PC; rename works and "Sign out" stops it updating.
 - [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
 - [ ] With artwork showing, the card background picks up the cover's colour. Set `card.artworkTint` to `false` in `config.json`: the background goes back to the plain theme colour.
 - [ ] The status page lists every connected server, each with its own connection state.
