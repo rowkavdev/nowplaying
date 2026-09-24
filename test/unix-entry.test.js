@@ -112,3 +112,17 @@ test("start runs the server and card from the setup config and the real Secret S
     await store.remove({ provider: "jellyfin", identityId });
   }
 });
+
+test("start and setup without HOME say so plainly, no stack trace (#500)", unix, async () => {
+  for (const args of [["start", "--no-setup"], ["setup", "--no-open"]]) {
+    const env = { ...process.env };
+    delete env.HOME;
+    const child = spawn(process.execPath, [ENTRY, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve) => child.on("close", resolve));
+    assert.equal(code, 1, args.join(" "));
+    assert.match(stderr, /HOME is not set/);
+    assert.doesNotMatch(stderr, /TypeError|app-paths\.js/);
+  }
+});

@@ -31,7 +31,7 @@ if (command === "--version" || command === "version") {
   let app;
   let startArgs;
   let legacyModule;
-  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
+  const configFile = windowsDataPaths().configFile;
   try {
     try { startArgs = parseStartArgs(process.argv.slice(3)); }
     catch (error) { console.error(`nowplaying: ${error.message}`); process.exit(2); }
@@ -120,14 +120,24 @@ if (command === "--version" || command === "version") {
   process.exitCode = 2;
 }
 
+// %LOCALAPPDATA% can be missing (damaged profile, service or scheduled-task
+// context): say so plainly instead of dying on a TypeError stack (#500).
+function windowsDataPaths() {
+  try {
+    return { configFile: windowsConfigPath({ localAppData: process.env.LOCALAPPDATA }), draftFile: windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA }) };
+  } catch {
+    console.error("nowplaying: LOCALAPPDATA is not set, so NowPlaying cannot find its data folder. Sign in again or repair the user profile, then retry.");
+    process.exit(1);
+  }
+}
+
 async function startSetup() {
-  const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
+  const { configFile, draftFile } = windowsDataPaths();
   const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
   const adapter = createWindowsCredentialAdapter();
   const credentialStore = createCredentialStore({ adapter });
   const hostedCredentials = createHostedCredentials({ adapter });
-  const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
   return startSetupApp({ draftFile, configFile, credentialStore, hostedCredentials, deviceId, version: manifest.version, startup: windowsStartup() });
 }
 

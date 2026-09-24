@@ -70,3 +70,25 @@ test("start runs from the wizard config and the real Credential Manager", window
     await store.remove({ provider: "jellyfin", identityId });
   }
 });
+
+// Runs everywhere: the missing-LOCALAPPDATA guard fires before any win32 gate.
+function runWithoutLocalAppData(args) {
+  const env = { ...process.env };
+  delete env.LOCALAPPDATA;
+  const child = spawn(process.execPath, [ENTRY, ...args], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
+  return { exited, output: () => ({ stdout, stderr }) };
+}
+
+test("start and setup without LOCALAPPDATA say so plainly, no stack trace (#500)", async () => {
+  for (const args of [["start"], ["start", "--no-setup"], ["setup"]]) {
+    const run = runWithoutLocalAppData(args);
+    assert.equal(await run.exited, 1, args.join(" "));
+    assert.match(run.output().stderr, /LOCALAPPDATA is not set/);
+    assert.doesNotMatch(run.output().stderr, /TypeError|setup-app\.js/);
+  }
+});
