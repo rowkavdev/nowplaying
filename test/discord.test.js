@@ -87,10 +87,14 @@ test("validates fields and Discord asset keys", () => {
   assert.throws(() => validateDiscordSettings({ minUpdateIntervalMs: 4999 }), /5000 to 300000/);
 });
 
-test("truncates without splitting Unicode code points", () => {
+test("truncates to 128 UTF-16 units without splitting code points", () => {
   const activity = formatDiscordActivity({ ...playing, title: "😀".repeat(140) });
-  assert.equal([...activity.details].length, 128);
-  assert.equal(activity.details.endsWith("😀"), true);
+  assert.equal(activity.details.length, 128);
+  assert.equal(activity.details, "😀".repeat(64));
+  const mixed = formatDiscordActivity({ ...playing, title: "a" + "😀".repeat(70) });
+  assert.equal(mixed.details.length, 127);
+  assert.equal(mixed.details.endsWith("😀"), true);
+  assert.equal(formatDiscordActivity({ ...playing, title: "x".repeat(140) }).details.length, 128);
 });
 
 test("pads one-character text so Discord accepts the activity", () => {
