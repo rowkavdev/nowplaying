@@ -44,6 +44,10 @@ $TestMessages = @{
   too_many_tests = 'Too many tests in a row. Wait a few seconds and try again.'
   user_mismatch = 'Your server says this sign-in belongs to a different user. Sign in again with the account you play on.'
 }
+$DraftErrors = @{
+  too_many_servers = 'You can add up to 8 servers.'
+  server_not_found = 'That server was already removed.'
+}
 $script:TestResult = $null
 $script:SignIn = @{ FlowId = $null; Code = $null }
 $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; navidrome = 'Navidrome' }
@@ -215,6 +219,16 @@ function Update-Buttons {
   $next.Text = switch ($script:Draft.step) { 'review' { 'Finish' } 'complete' { 'Close' } default { 'Next' } }
 }
 
+function Get-AccountLabel($Account) { "$($Providers[[string]$Account.provider]) (signed in as $($Account.displayName))" }
+function Get-AddedServers { @($script:Draft.servers | Where-Object { $_ }) }
+
+function New-ActionButton([string]$Name, [string]$Text, $OnClick) {
+  $button = [System.Windows.Forms.Button]::new()
+  $button.Name = $Name; $button.AutoSize = $true; $button.Text = $Text
+  $button.add_Click($OnClick)
+  $button
+}
+
 function Show-Step {
   $panel.SuspendLayout()
   $panel.Controls.Clear()
@@ -225,7 +239,10 @@ function Show-Step {
       $panel.Controls.Add((New-Text 'This takes about a minute. Your progress is saved on this PC, so you can close this window and come back.'))
     }
     'provider' {
-      $title.Text = 'Which media server do you use?'
+      # Several servers (#252): after "Add another server" this step picks the next one.
+      $adding = ((Get-AddedServers).Count -gt 0) -and -not $script:Draft.account
+      $title.Text = if ($adding) { 'Which server do you want to add?' } else { 'Which media server do you use?' }
+      if ($adding) { $panel.Controls.Add((New-Text ("Already added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
       $found = @($script:Discovered | Where-Object { $Providers.Contains([string]$_.provider) })
       $checkedOne = $false
       if ($found.Count -gt 0) { $panel.Controls.Add((New-Text 'Found on this PC:')) }
@@ -249,6 +266,7 @@ function Show-Step {
         $radio.add_CheckedChanged({ Update-Buttons })
         $panel.Controls.Add($radio)
       }
+      if ($adding) { $panel.Controls.Add((New-ActionButton 'cancelAddServer' "Don't add another server" $onCancelAddServer)) }
     }
     'signin' {
       $name = $Providers[[string]$script:Draft.provider]
@@ -293,7 +311,9 @@ function Show-Step {
           $resultLabel.Name = 'connectionResult'
           $panel.Controls.Add($resultLabel)
         }
+        $panel.Controls.Add((New-ActionButton 'addServer' 'Add another server' $onAddServer))
       }
+      if ((Get-AddedServers).Count -gt 0) { $panel.Controls.Add((New-Text ("Also added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
     }
     'discord' {
       $title.Text = 'Discord status'
@@ -321,7 +341,19 @@ function Show-Step {
       $provider = if ($script:Draft.provider) { $Providers[[string]$script:Draft.provider] } else { 'Not chosen' }
       $status = if ($script:Draft.discordEnabled) { 'On' } else { 'Off' }
       $who = if ($script:Draft.account) { " as $($script:Draft.account.displayName)" } else { '' }
-      $panel.Controls.Add((New-Text "Media server: $provider$who"))
+      if ((Get-AddedServers).Count -gt 0) {
+        # Every added server can be removed here; the one signed in last stays.
+        $panel.Controls.Add((New-Text 'Media servers:'))
+        foreach ($server in (Get-AddedServers)) {
+          $panel.Controls.Add((New-Text (Get-AccountLabel $server)))
+          $remove = New-ActionButton 'removeServer' 'Remove' $onRemoveServer
+          $remove.Tag = @{ provider = [string]$server.provider; id = [string]$server.id }
+          $panel.Controls.Add($remove)
+        }
+        if ($script:Draft.account) { $panel.Controls.Add((New-Text (Get-AccountLabel $script:Draft.account))) }
+      } else {
+        $panel.Controls.Add((New-Text "Media server: $provider$who"))
+      }
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
       $panel.Controls.Add((New-Text "Album art lookup: $(if ($script:Draft.discordArtworkLookup -ne $false) { 'On' } else { 'Off' })"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
@@ -341,7 +373,12 @@ function Send-Step([string]$Method, $Body) {
   $script:TestResult = $null
   $form.UseWaitCursor = $true
   try { $script:Draft = (Invoke-Setup $Method '/api/setup/draft' $Body).draft }
-  catch { $script:LastError = $_.Exception.Message; $errorLabel.Text = "Couldn't save that step. Check NowPlaying is still running and try again." }
+  catch {
+    $script:LastError = $_.Exception.Message
+    $code = $null
+    if ($_.ErrorDetails.Message) { try { $code = [string]($_.ErrorDetails.Message | ConvertFrom-Json).error } catch { $code = $null } }
+    $errorLabel.Text = if ($code -and $DraftErrors.ContainsKey($code)) { $DraftErrors[$code] } else { "Couldn't save that step. Check NowPlaying is still running and try again." }
+  }
   finally { $form.UseWaitCursor = $false }
   Show-Step
 }
@@ -361,6 +398,9 @@ $onTestConnection = {
   Show-Step
 }
 
+$onAddServer = { Send-Step 'POST' @{ action = 'add-server' } }
+$onCancelAddServer = { Send-Step 'POST' @{ action = 'cancel-add-server' } }
+$onRemoveServer = { param($sender) Send-Step 'POST' @{ action = 'remove-server'; server = $sender.Tag } }
 $onNext = { if ($script:Draft.step -eq 'complete') { $form.Close() } else { Send-Step 'POST' @{ action = 'next'; changes = (Get-Changes) } } }
 $onBack = { Send-Step 'POST' @{ action = 'back'; changes = (Get-Changes) } }
 $next.add_Click($onNext)
@@ -394,6 +434,14 @@ if ($SelfTest) {
   & $onTestConnection
   $resultText = [string]@($panel.Controls | Where-Object { $_.Name -eq 'connectionResult' })[0].Text
   if (-not ($TestMessages.Values -contains $resultText)) { throw "Test connection showed no known result: $resultText" }
+  # Add another server, then change our mind: the account comes back (#252).
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'addServer' })[0]) { throw 'sign-in step has no Add another server button' }
+  & $onAddServer
+  if ($script:Draft.step -ne 'provider' -or $script:Draft.account -or (Get-AddedServers).Count -ne 1) { throw 'Add another server did not keep the account and go back to the server choice' }
+  if ($title.Text -ne 'Which server do you want to add?') { throw "add-server step title was: $($title.Text)" }
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'cancelAddServer' })[0]) { throw 'add-server step has no cancel button' }
+  & $onCancelAddServer
+  if ($script:Draft.step -ne 'signin' -or -not $script:Draft.account -or (Get-AddedServers).Count -ne 0) { throw 'cancelling Add another server did not restore the account' }
   & $onNext
   & $onBack
   $seen += $script:Draft.step
