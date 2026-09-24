@@ -121,14 +121,18 @@ async function startSetup() {
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
   const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
   const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
-  // "Start with Windows" is offered only from the installed/portable bundle,
-  // where the launchers sit next to the app folder. The shortcut uses the
-  // no-console launcher when the bundle has it.
+  return startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup: windowsStartup() });
+}
+
+// "Start with Windows" is offered only from the installed/portable bundle,
+// where the launchers sit next to the app folder. The shortcut uses the
+// no-console launcher when the bundle has it. Setup and the settings page
+// share it.
+function windowsStartup() {
   const launcher = existsSync(resolve("nowplayingw.exe")) ? resolve("nowplayingw.exe") : resolve("nowplaying.exe");
-  const startup = process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
+  return process.platform === "win32" && process.env.APPDATA && existsSync(launcher)
     ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
     : undefined;
-  return startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup });
 }
 
 // First launch: opens the setup page in the default browser and resolves
@@ -171,7 +175,7 @@ async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
   console.log(safeMode
     ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run setup again from the tray to go back to normal. Card: ${app.url}/card.svg`
     : `NowPlaying is running. Card: ${app.url}/card.svg`);

@@ -138,3 +138,38 @@ test("the settings page turns the hosted card on, shows its link and disconnects
     await app.close();
   }
 });
+
+test("the settings page turns Start with Windows on and off through the shared shortcut", async () => {
+  const file = await configFile();
+  let enabled = false;
+  const startup = { isEnabled: async () => enabled, setEnabled: async (value) => { enabled = value; } };
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" }, startup });
+  try {
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const put = (body) => fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: true, startWithWindows: false });
+    const on = await put({ startup: { startWithWindows: true } });
+    assert.deepEqual([on.status, (await on.json()).startup], [200, { available: true, startWithWindows: true }]);
+    assert.equal(enabled, true);
+    assert.equal((await put({ startup: { startWithWindows: "yes" } })).status, 400);
+    assert.equal((await put({ startup: { startWithWindows: false, path: "C:\\evil.exe" } })).status, 400);
+    const before = await readFile(file, "utf8");
+    await put({ startup: { startWithWindows: false } });
+    assert.equal(enabled, false);
+    assert.equal(await readFile(file, "utf8"), before);
+  } finally {
+    await app.close();
+  }
+});
+
+test("Start with Windows is hidden when the build can't offer it", async () => {
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" } });
+  try {
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: false, startWithWindows: false });
+    const put = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { startWithWindows: true } }) });
+    assert.equal(put.status, 400);
+  } finally {
+    await app.close();
+  }
+});
