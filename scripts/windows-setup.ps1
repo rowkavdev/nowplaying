@@ -73,6 +73,11 @@ $DraftErrors = @{
 $script:TestResult = $null
 $script:SignIn = @{ FlowId = $null; Code = $null }
 $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; navidrome = 'Navidrome' }
+# Provider-specific sign-in help (#141), same wording as the browser page.
+$SignInHelp = @{
+  emby = 'Sign in as the Emby user whose playback you want to show, with the username and password you use in the Emby app. NowPlaying saves the sign-in Emby hands back, not your password.'
+  navidrome = 'Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted hash of it, not your password.'
+}
 $Idle = [ordered]@{ clear = 'Clear my status'; grace = 'Keep it for a short grace period'; show = 'Show that nothing is playing'; recent = 'Show what I played last' }
 
 # The setup server only accepts changes that carry this run's session secret.
@@ -385,6 +390,7 @@ function Show-Step {
         }
         default {
           [void](New-Field 'serverUrl' 'Server address' $serverUrl)
+          if ($SignInHelp.Contains([string]$script:Draft.provider)) { $panel.Controls.Add((New-Text $SignInHelp[[string]$script:Draft.provider])) }
           [void](New-Field 'username' 'Username' '')
           [void](New-Field 'password' 'Password (sent only to your server, never saved)' '' $true)
           $button.Text = 'Sign in'
