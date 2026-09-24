@@ -44,6 +44,13 @@ $TestMessages = @{
   too_many_tests = 'Too many tests in a row. Wait a few seconds and try again.'
   user_mismatch = 'Your server says this sign-in belongs to a different user. Sign in again with the account you play on.'
 }
+$SpotifyErrors = @{
+  bad_client_id = "That doesn't look like a Spotify Client ID. It's the 32-character ID on your app's page in the Spotify developer dashboard."
+  denied = "Spotify access wasn't allowed. Try again and choose Agree."
+  expired = 'That Spotify sign-in expired. Start again.'
+  too_many_signins = 'Too many sign-ins are open. Wait a minute and try again.'
+}
+$script:Spotify = @{ FlowId = $null; ClientId = '' }
 $DraftErrors = @{
   too_many_servers = 'You can add up to 8 servers.'
   server_not_found = 'That server was already removed.'
@@ -82,6 +89,23 @@ function Invoke-SignIn($Body) {
       } catch { }
     }
     $message = if ($code -and $SignInErrors.ContainsKey([string]$code)) { $SignInErrors[[string]$code] } else { "Sign-in didn't work. Check the details and try again." }
+    throw [System.InvalidOperationException]::new($message)
+  }
+}
+
+# Optional Spotify sign-in (#135): card and hosted card only, never Discord.
+function Invoke-Spotify($Body) {
+  try { return Invoke-Setup 'POST' '/api/setup/spotify' $Body }
+  catch {
+    $code = $null
+    try { $code = ($_.ErrorDetails.Message | ConvertFrom-Json).error } catch { }
+    if (-not $code) {
+      try {
+        $reader = [System.IO.StreamReader]::new($_.Exception.Response.GetResponseStream())
+        $code = ($reader.ReadToEnd() | ConvertFrom-Json).error
+      } catch { }
+    }
+    $message = if ($code -and $SpotifyErrors.ContainsKey([string]$code)) { $SpotifyErrors[[string]$code] } else { "Spotify sign-in didn't work. Check the Client ID and try again." }
     throw [System.InvalidOperationException]::new($message)
   }
 }
@@ -190,6 +214,47 @@ $onSignIn = {
     }
   }
 }
+
+$spotifyTimer = [System.Windows.Forms.Timer]::new()
+$spotifyTimer.Interval = 2000
+
+function Stop-Spotify { $spotifyTimer.Stop(); $script:Spotify.FlowId = $null }
+
+function Complete-Spotify($Result) {
+  if ($Result.status -eq 'signed_in') {
+    Stop-Spotify
+    $script:Draft = (Invoke-Setup 'GET' '/api/setup/draft').draft
+  } elseif ($Result.status -eq 'pending' -and $script:Spotify.FlowId) {
+    $spotifyTimer.Start()
+  }
+}
+
+$onSpotifyStart = {
+  $errorLabel.Text = ''
+  Stop-Spotify
+  $script:Spotify.ClientId = Get-Field 'spotifyClientId'
+  $form.UseWaitCursor = $true
+  try {
+    $result = Invoke-Spotify @{ action = 'start'; clientId = $script:Spotify.ClientId }
+    if ($result.status -eq 'pending') {
+      $script:Spotify.FlowId = [string]$result.flowId
+      if ($result.authUrl -and ([string]$result.authUrl).StartsWith('https://accounts.spotify.com/') -and -not $SelfTest) { Start-Process ([string]$result.authUrl) }
+    }
+    Complete-Spotify $result
+  } catch {
+    $script:LastError = $_.Exception.Message
+    $errorLabel.Text = $_.Exception.Message
+  } finally { $form.UseWaitCursor = $false }
+  Show-Step
+}
+
+$spotifyTimer.add_Tick({
+  $spotifyTimer.Stop()
+  if (-not $script:Spotify.FlowId) { return }
+  try { Complete-Spotify (Invoke-Spotify @{ action = 'poll'; flowId = $script:Spotify.FlowId }) }
+  catch { Stop-Spotify; $script:LastError = $_.Exception.Message; $errorLabel.Text = $_.Exception.Message }
+  if (-not $script:Spotify.FlowId) { Show-Step }
+})
 
 $pollTimer.add_Tick({
   $pollTimer.Stop()
@@ -313,6 +378,23 @@ function Show-Step {
         }
         $panel.Controls.Add((New-ActionButton 'addServer' 'Add another server' $onAddServer))
       }
+      if ($script:Draft.account) {
+        $spotifyTitle = New-Text 'Spotify on your card (optional)'
+        $spotifyTitle.Font = [System.Drawing.Font]::new($spotifyTitle.Font, [System.Drawing.FontStyle]::Bold)
+        $spotifyTitle.Margin = [System.Windows.Forms.Padding]::new(0, 14, 0, 6)
+        $panel.Controls.Add($spotifyTitle)
+        if ($script:Draft.spotify) {
+          $connected = New-Text "Connected as $($script:Draft.spotify.identity.displayName). Spotify shows on your card only, not on Discord."
+          $connected.Name = 'spotifyAccount'
+          $panel.Controls.Add($connected)
+          $panel.Controls.Add((New-ActionButton 'spotifyClear' 'Disconnect Spotify' $onSpotifyClear))
+        } else {
+          $panel.Controls.Add((New-Text 'Shows what you play on Spotify on your card and hosted card, never on Discord. You need a Client ID from your own app in the Spotify developer dashboard, with http://127.0.0.1/spotify/callback as its redirect URI.'))
+          [void](New-Field 'spotifyClientId' 'Spotify Client ID' $script:Spotify.ClientId)
+          if ($script:Spotify.FlowId) { $panel.Controls.Add((New-Text "Finish signing in on the Spotify page in your browser. This window updates when you're done.")) }
+          $panel.Controls.Add((New-ActionButton 'spotifyStart' $(if ($script:Spotify.FlowId) { 'Open Spotify sign-in again' } else { 'Sign in with Spotify' }) $onSpotifyStart))
+        }
+      }
       if (@(Get-AddedServers).Count -gt 0) { $panel.Controls.Add((New-Text ("Also added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
     }
     'discord' {
@@ -355,6 +437,7 @@ function Show-Step {
         $panel.Controls.Add((New-Text "Media server: $provider$who"))
       }
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
+      $panel.Controls.Add((New-Text "Spotify on your card: $(if ($script:Draft.spotify) { "On (signed in as $($script:Draft.spotify.identity.displayName))" } else { 'Off' })"))
       $panel.Controls.Add((New-Text "Album art lookup: $(if ($script:Draft.discordArtworkLookup -ne $false) { 'On' } else { 'Off' })"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
     }
@@ -398,6 +481,7 @@ $onTestConnection = {
   Show-Step
 }
 
+$onSpotifyClear = { Stop-Spotify; Send-Step 'POST' @{ action = 'clear-spotify' } }
 $onAddServer = { Send-Step 'POST' @{ action = 'add-server' } }
 $onCancelAddServer = { Send-Step 'POST' @{ action = 'cancel-add-server' } }
 $onRemoveServer = { param($sender) Send-Step 'POST' @{ action = 'remove-server'; server = $sender.Tag } }
@@ -441,6 +525,12 @@ if ($SelfTest) {
   if ($title.Text -ne 'Which server do you want to add?') { throw "add-server step title was: $($title.Text)" }
   if (-not @($panel.Controls | Where-Object { $_.Name -eq 'cancelAddServer' })[0]) { throw 'add-server step has no cancel button' }
   & $onCancelAddServer
+  # Spotify (#135): the section is offered after sign-in; a bad Client ID is caught before any sign-in starts.
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'spotifyStart' })[0]) { throw 'sign-in step has no Sign in with Spotify button' }
+  @($panel.Controls | Where-Object { $_.Name -eq 'spotifyClientId' })[0].Text = 'not-a-client-id'
+  & $onSpotifyStart
+  if ($errorLabel.Text -ne $SpotifyErrors['bad_client_id']) { throw "bad Spotify Client ID showed: $($errorLabel.Text)" }
+  $errorLabel.Text = ''
   if ($script:Draft.step -ne 'signin' -or -not $script:Draft.account -or @(Get-AddedServers).Count -ne 0) { throw "cancelling Add another server did not restore the account ($($errorLabel.Text) $script:LastError)" }
   & $onNext
   & $onBack
