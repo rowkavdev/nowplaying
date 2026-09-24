@@ -2,7 +2,7 @@ import { SetupStepError, addAnotherServer, advanceSetupDraft, cancelAddServer, c
 
 const PATH = "/api/setup/draft";
 const ACTIONS = new Set(["save", "next", "back", "add-server", "cancel-add-server", "remove-server", "clear-spotify"]);
-const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "discordArtworkLookup", "startWithWindows"]);
+const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior", "discordArtworkLookup", "startWithWindows", "hostedEnabled", "hostedUrl"]);
 
 // onFinish runs when the review step is confirmed, before the draft moves to
 // "complete"; if it throws, the wizard stays on review so the user can retry.

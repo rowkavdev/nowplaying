@@ -1,3 +1,5 @@
+import { normalizeHostedUrl } from "./hosted-uploader.js";
+
 const STEPS = Object.freeze(["welcome", "provider", "signin", "discord", "review", "complete"]);
 const MAX_ACCOUNT_FIELD = 200;
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
@@ -14,6 +16,11 @@ export function createSetupDraft(input = {}) {
   if (input.discordIdleBehavior !== undefined && !IDLE_BEHAVIORS.has(input.discordIdleBehavior)) throw new TypeError("setup.discordIdleBehavior is invalid");
   if (input.discordArtworkLookup !== undefined && typeof input.discordArtworkLookup !== "boolean") throw new TypeError("setup.discordArtworkLookup is invalid");
   if (input.startWithWindows !== undefined && input.startWithWindows !== null && typeof input.startWithWindows !== "boolean") throw new TypeError("setup.startWithWindows is invalid");
+  if (input.hostedEnabled !== undefined && input.hostedEnabled !== null && typeof input.hostedEnabled !== "boolean") throw new TypeError("setup.hostedEnabled is invalid");
+  let hostedUrl = null;
+  if (input.hostedUrl !== undefined && input.hostedUrl !== null) {
+    try { hostedUrl = normalizeHostedUrl(input.hostedUrl); } catch { throw new TypeError("setup.hostedUrl is invalid"); }
+  }
   if (input.credential !== undefined || input.token !== undefined || input.apiKey !== undefined) throw new TypeError("setup draft cannot contain credentials");
   const provider = input.provider ?? null;
   const account = createAccount(input.account);
@@ -39,6 +46,10 @@ export function createSetupDraft(input = {}) {
     discordArtworkLookup: input.discordArtworkLookup ?? true,
     // null means "not offered / leave as it is" (no Windows startup support).
     startWithWindows: input.startWithWindows ?? null,
+    // Card hosting (#140): null means "not chosen, keep what's installed".
+    // hostedUrl is only for a self-hosted service; null means nowplaying's own.
+    hostedEnabled: input.hostedEnabled ?? null,
+    hostedUrl,
   });
 }
 

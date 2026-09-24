@@ -225,6 +225,17 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   return Object.freeze({ status: "on", connection, stop: () => loop.stop(), refreshArtwork });
 }
 
+// What the hosted uploader may send (#140): the privacy policy plus the card's
+// own field switches, so a field the card doesn't show never leaves the PC.
+// The setup and settings previews use the same function.
+export function hostedUploadSettings(config) {
+  const theme = config?.card?.theme ?? "midnight-blue";
+  return Object.freeze({
+    privacy: privacyPolicyFromConfig(config),
+    show: Object.freeze({ progress: config?.card?.showProgress ?? theme !== "compact" }),
+  });
+}
+
 // Hosted card upload (#140) runs only when the config turns it on. It pushes
 // privacy-filtered state to the hosted service and is independent of Discord:
 // a host that's down or unreachable never affects presence.
@@ -317,7 +328,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   let hosted = offHosted;
   const launchHosted = (settings) => {
     if (safeMode) return paused;
-    try { return startHostedFromConfig(settings, cardProvider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions }); }
+    try { return startHostedFromConfig(settings, cardProvider, { credentials: hostedCredentials, fetchImpl, settings: () => hostedUploadSettings(current), ...hostedOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null }); }
   };
   const launchDiscord = (settings) => {
