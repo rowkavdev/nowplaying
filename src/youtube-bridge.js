@@ -1,7 +1,8 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { defineProvider } from "./provider.js";
 
-// YouTube (#136), app side: the browser extension posts what the active
+// YouTube (#136), app side. The extension itself lives in
+// rowkavdev/nowplaying-youtube. The browser extension posts what the active
 // YouTube or YouTube Music player is doing, and this turns it into a
 // provider. YouTube has no API for "what is this user watching now", so the
 // extension is the only source. Only active playback arrives here: never page
@@ -20,6 +21,7 @@ const EXTENSION_ORIGIN = /^(chrome-extension:\/\/[a-p]{32}|moz-extension:\/\/[0-
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const STATES = new Set(["playing", "paused", "stopped"]);
+// rowkavdev/nowplaying-youtube keeps a copy of this list in its tests.
 const EVENT_KEYS = new Set(["tabId", "videoId", "title", "channel", "thumbnail", "positionMs", "durationMs", "state", "live", "music", "ad", "shorts"]);
 const MAX_TABS = 16;
 
