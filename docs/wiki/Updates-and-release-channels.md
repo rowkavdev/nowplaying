@@ -27,3 +27,19 @@ Builds also carry GitHub build provenance, a signed record of which workflow and
 ```sh
 gh attestation verify nowplaying-0.1.0-windows-x64-setup.exe --repo rowkavdev/nowplaying
 ```
+
+## Upgrading
+
+- With the default **notify** policy, nowplaying tells you an update is ready; apply it from the prompt.
+- With **install**, updates verify their SHA-256 hash and swap in atomically. The previous version is kept alongside as a backup during the swap.
+- To move between stable and development builds, download the one you want from [releases](https://github.com/rowkavdev/nowplaying/releases) and install over the top. Check the hash the same way as a first install.
+
+## Rolling back
+
+If a build misbehaves:
+
+1. Quit nowplaying from the tray.
+2. Download the previous version's installer or ZIP from [releases](https://github.com/rowkavdev/nowplaying/releases) and install it over the top. Your settings and sign-ins are kept.
+3. Report what broke in an [issue](https://github.com/rowkavdev/nowplaying/issues) with the build number that failed and the one you went back to.
+
+Settings migrate forward automatically, and the file is backed up before any format change, so going back a version is safe.
