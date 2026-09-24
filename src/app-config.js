@@ -28,6 +28,7 @@ import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 import { withProviderBackoff } from "./provider-backoff.js";
 import { createMultiServerProvider } from "./multi-server.js";
 import { applyPrivacy } from "./privacy.js";
+import { combinePresence, createSpotifySource } from "./spotify-source.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
@@ -267,7 +268,16 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // The status page (local only) sees what's really playing; the card,
   // Discord and hosted uploads get the privacy-filtered version.
   const provider = withPrivacy(tracked, () => current);
-  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
+  // Spotify (#135) feeds the local card, its preview and the hosted card,
+  // never Discord (Rowan's call). When it and the media server are both
+  // playing, whichever started most recently shows. A Spotify problem never
+  // stops the start; it just isn't shown.
+  let spotify = null;
+  if (!safeMode && config.spotify) {
+    try { spotify = createSpotifySource(config, credentialStore, { fetchImpl, backoff: providerBackoff }); } catch { spotify = null; }
+  }
+  const cardProvider = spotify ? withPrivacy(combinePresence({ primary: tracked, secondary: spotify }), () => current) : provider;
+  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
   // status page run. Discord and hosted uploads, which poll in the background,
@@ -278,7 +288,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   let hosted = offHosted;
   const launchHosted = (settings) => {
     if (safeMode) return paused;
-    try { return startHostedFromConfig(settings, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions }); }
+    try { return startHostedFromConfig(settings, cardProvider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null }); }
   };
   const launchDiscord = (settings) => {
@@ -336,7 +346,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     // or a sample track when nothing is, so layout changes are visible.
     async previewCard(card) {
       let presence = null;
-      try { presence = await provider.getPresence(); } catch { presence = null; }
+      try { presence = await cardProvider.getPresence(); } catch { presence = null; }
       if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is only fetched for /card.svg.
