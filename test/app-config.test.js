@@ -427,3 +427,12 @@ test("the local card embeds the server's album art, and a failed fetch leaves it
     }
   }
 });
+
+test("reads a config saved with a UTF-8 byte order mark (Notepad, PowerShell 5)", async () => {
+  const file = await configFile(`\uFEFF${serializeSetupConfig(JELLYFIN)}`);
+  const config = await loadAppConfig(file);
+  assert.equal(config.provider, "jellyfin");
+  assert.equal(config.serverUrl, "http://127.0.0.1:8096");
+  // Only a leading mark is allowed; one anywhere else is still invalid.
+  assert.throws(() => parseAppConfig(`{\uFEFF${serializeSetupConfig(JELLYFIN).slice(1)}`), code("CONFIG_INVALID"));
+});
