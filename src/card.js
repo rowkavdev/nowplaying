@@ -26,7 +26,7 @@ export function resolveCardTheme(theme = "midnight-blue", colors = {}) {
 }
 
 
-export function renderCard(presence, { width = 440, show = {}, theme = "midnight-blue", colors = {}, artworkDataUri = null, layout = {} } = {}) {
+export function renderCard(presence, { width = 440, show = {}, theme = "midnight-blue", colors = {}, artworkDataUri = null, layout = {}, tint = null } = {}) {
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
@@ -43,7 +43,8 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${presence.title ?? ""}${presence.subtitle ?? ""}`));
   const artworkPosition = layout.artworkPosition ?? (rtl ? "right" : "left");
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
-  const artworkWidth = bounded(layout.artworkWidth, 68, 48, 160, "layout.artworkWidth");
+  // Album art is square; posters and episode stills keep the 2:3 shape.
+  const artworkWidth = bounded(layout.artworkWidth, presence.kind === "track" ? 100 : 68, 48, 160, "layout.artworkWidth");
   const artworkHeight = bounded(layout.artworkHeight, 100, 48, 180, "layout.artworkHeight");
   const fieldOrder = layout.fieldOrder ?? DEFAULT_FIELD_ORDER;
   if (!Array.isArray(fieldOrder) || fieldOrder.length !== 3 || new Set(fieldOrder).size !== 3 || !fieldOrder.every((field) => DEFAULT_FIELD_ORDER.includes(field))) throw new TypeError("layout.fieldOrder: expected state, title and subtitle, each once");
@@ -61,6 +62,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
   }
   const palette = resolveCardTheme(theme, colors);
+  if (tint !== null && (typeof tint !== "string" || !COLOR_PATTERN.test(tint))) throw new TypeError("tint must be a six-digit hex color");
   const hasArtwork = visibility.artwork && artworkDataUri !== null;
   const artworkX = artworkPosition === "right" ? width - padding - artworkWidth : padding;
   const contentX = hasArtwork && artworkPosition === "left" ? padding + artworkWidth + 24 : padding;
@@ -103,16 +105,36 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const barWidth = progressSpan === "full" ? width - padding * 2 : contentWidth;
   const progress = progressWidth(presence, barWidth);
   const description = subtitle || status;
+  // Elapsed / total sits across from the status line when the layout is the
+  // plain default, so it never collides with reordered or centred text.
+  const showTime = visibility.progress && visibility.state && !customOrder && textAlign === "start" && presence.durationMs > 0 && presence.positionMs != null;
+  const timeX = rtl ? contentX : contentX + contentWidth;
+  const timeAnchor = rtl ? "start" : "end";
+  const timeLabel = showTime ? `${clock(presence.positionMs)} / ${clock(presence.durationMs)}` : "";
+  const dot = visibility.state && presence.state === "playing" && edge !== "middle";
+  const dotX = edge === "right" ? textX - 4 : textX + 4;
+  const stateX = dot ? (edge === "right" ? textX - 14 : textX + 14) : textX;
+  const light = luminance(palette.background) > 0.5;
+  const tintStop = tint ? mix(palette.background, tint, light ? 0.12 : 0.34) : null;
+  const background = tintStop ? "url(#bg)" : palette.background;
+  const defs = [
+    tintStop ? `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${tintStop}"/><stop offset="0.75" stop-color="${palette.background}"/></linearGradient>` : "",
+    hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(radius, 8)}"/></clipPath>` : "",
+  ].join("");
+  const font = 'font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif"';
 
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title><desc id="desc">${escapeXml(description)}</desc>
-  <rect width="100%" height="100%" rx="${radius}" fill="${palette.background}" stroke="${palette.border}"/>
-  ${hasArtwork ? `<defs><clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(radius, 12)}"/></clipPath></defs><image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
-  ${visibility.state ? `<text x="${textX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
-  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${titleSize}" font-weight="600">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
-  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${subtitleSize}">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
+  ${defs ? `<defs>${defs}</defs>` : ""}
+  <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" fill="${background}" stroke="${palette.border}"/>
+  ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/><rect x="${artworkX + 0.5}" y="${padding + 0.5}" width="${artworkWidth - 1}" height="${artworkHeight - 1}" rx="${Math.min(radius, 8)}" fill="none" stroke="${light ? "#000000" : "#ffffff"}" stroke-opacity="0.12"/>` : ""}
+  ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
+  ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="1.1">${status}</text>` : ""}
+  ${showTime ? `<text x="${timeX}" y="${stateY}" text-anchor="${timeAnchor}" fill="${palette.secondary}" ${font} font-size="11" font-variant-numeric="tabular-nums">${timeLabel}</text>` : ""}
+  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="700" letter-spacing="-0.2">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
+  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="500">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
   ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
@@ -138,6 +160,10 @@ export function cardText(presence) {
   }
   return { title: presence.title || null, subtitle: presence.subtitle || null };
 }
+function clock(ms) { const total = Math.floor(ms / 1000); const h = Math.floor(total / 3600); const m = Math.floor((total % 3600) / 60); const sec = pad(total % 60); return h ? `${h}:${pad(m)}:${sec}` : `${m}:${sec}`; }
+function channels(hex) { return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); }
+function luminance(hex) { const [r, g, b] = channels(hex); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; }
+function mix(from, to, amount) { const a = channels(from); const b = channels(to); return `#${a.map((v, i) => Math.round(v + (b[i] - v) * amount).toString(16).padStart(2, "0")).join("")}`; }
 function pad(value) { return String(value).padStart(2, "0"); }
 function providerLabel(kind) { return kind === "track" ? "Music" : kind === "movie" ? "Movie" : kind === "episode" ? "Episode" : "Media"; }
 function truncate(value, length) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }

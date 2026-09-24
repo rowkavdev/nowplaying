@@ -60,8 +60,8 @@ test("right-to-left layout mirrors text, artwork and progress", () => {
   assert.equal(renderCard(latin, { artworkDataUri: art, layout: { direction: "ltr" } }), renderCard(latin, { artworkDataUri: art }));
   assert.equal(renderCard(hebrew, { artworkDataUri: art }), renderCard(hebrew, { artworkDataUri: art, layout: { direction: "ltr" } }), "ltr stays the default");
   const rtl = renderCard(hebrew, { width: 440, artworkDataUri: art, layout: { direction: "rtl" } });
-  assert.match(rtl, /<image [^>]*x="348"/, "artwork moves to the right");
-  assert.match(rtl, /<text x="324" y="\d+" direction="rtl"[^>]*>שלום</, "text starts at the right edge of the text column");
+  assert.match(rtl, /<image [^>]*x="316"/, "artwork moves to the right");
+  assert.match(rtl, /<text x="292" y="\d+" direction="rtl"[^>]*>שלום</, "text starts at the right edge of the text column");
   const [track, fill] = [...rtl.matchAll(/<rect x="(\d+)" y="\d+" width="(\d+)" height="4"/g)].map((m) => [Number(m[1]), Number(m[2])]);
   assert.equal(fill[0] + fill[1], track[0] + track[1], "progress fills from the right");
   assert.equal(renderCard(hebrew, { width: 440, artworkDataUri: art, layout: { direction: "auto" } }), rtl);
