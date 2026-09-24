@@ -46,7 +46,7 @@ test("a sign-in puts the secret only in the credential store, never in files set
     replies.push(await api("/api/setup/draft", "POST", { action: "next", changes: { provider: "navidrome" } }));
     replies.push(await api("/api/setup/signin", "POST", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "rowan", password: PASSWORD }));
     replies.push(await api("/api/setup/draft", "GET"));
-    for (let i = 0; i < 3; i += 1) replies.push(await api("/api/setup/draft", "POST", { action: "next" }));
+    for (let i = 0; i < 4; i += 1) replies.push(await api("/api/setup/draft", "POST", { action: "next" }));
   } finally {
     await app.close();
   }

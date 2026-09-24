@@ -42,7 +42,7 @@ test("native setup window walks every step, including sign-in, against the real 
     const { code, output, errors } = await runNativeSetup(app.url, { sessionSecret: app.sessionSecret, scriptPath, selfTest: true });
     assert.equal(code, 0, `${output}\n${errors}`);
     const result = JSON.parse(output);
-    assert.deepEqual(result.steps, ["welcome", "provider", "signin", "signin", "discord", "review", "complete"]);
+    assert.deepEqual(result.steps, ["welcome", "provider", "signin", "signin", "discord", "hosting", "review", "complete"]);
     assert.deepEqual([result.provider, result.account, result.startWithWindows], ["navidrome", "Self Test", true]);
     assert.equal(result.connectionTest, "Connected. NowPlaying can see what you're playing.");
     assert.deepEqual(startupApplied, [true]);

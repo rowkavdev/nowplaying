@@ -40,6 +40,7 @@ nav{display:flex;gap:.5rem;margin-top:2rem}
 button{font:inherit;padding:.5rem 1rem;border-radius:.4rem;border:1px solid #555;background:#222;color:#eee;cursor:pointer}
 button#next{background:#0b5cad;border-color:#0b5cad;color:#fff}
 :focus-visible{outline:3px solid #7ab8ff;outline-offset:2px}
+a{color:#7ab8ff}
 fieldset{border:0;margin:0;padding:0}
 button.link{margin-left:auto;background:none;border:none;text-decoration:underline}
 button:disabled{opacity:.5;cursor:default}
@@ -54,6 +55,7 @@ const JS = `"use strict";
   var API = "/api/setup/draft";
   var SIGNIN_API = "/api/setup/signin";
   var TEST_API = "/api/setup/test";
+  var HOSTED_API = "/api/setup/hosted/";
   var SPOTIFY_API = "/api/setup/spotify";
   var SPOTIFY_ERRORS = {
     bad_client_id: "That doesn't look like a Spotify Client ID. It's the 32-character ID on your app's page in the Spotify developer dashboard.",
@@ -86,9 +88,9 @@ const JS = `"use strict";
     no_app_id: "This build of NowPlaying has no Discord app ID, so it can't show a status.",
     test_running: "A test is already running. Wait a few seconds."
   };
-  var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
+  var STEPS = ["welcome", "provider", "signin", "discord", "hosting", "review", "complete"];
   var PREVIEWS = [["music", "Music"], ["episode", "TV episode"], ["film", "Film"]];
-  var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
+  var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", hosting: "Card hosting", review: "Review", complete: "Done" };
   var DEFAULT_URLS = { plex: "http://127.0.0.1:32400", jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
   var SIGNIN_ERRORS = {
     authentication_failed: "That username or password didn't work.",
@@ -115,6 +117,35 @@ const JS = `"use strict";
   var IDLE = [["clear", "Clear my status"], ["grace", "Keep it for a short grace period"], ["show", "Show that nothing is playing"], ["recent", "Show what I played last"]];
   var draft = null;
   var busy = false;
+  // Card hosting step (#140): the choice and typed address live here until
+  // Next saves them, so switching options doesn't lose what was typed.
+  var HOSTING = [["off", "Not now"], ["hosted", "NowPlaying's hosted service"], ["self", "My own card service (self-hosted)"]];
+  var HOSTED_CHECK = {
+    ok: "That's a NowPlaying card service.",
+    invalid_url: "Enter the service address, starting with https://.",
+    bad_status: "That address answered, but not like a NowPlaying card service.",
+    not_nowplaying: "That address answered, but not like a NowPlaying card service.",
+    timeout: "That address took too long to answer.",
+    unreachable: "Couldn't reach that address. Check it and that the service is running."
+  };
+  var hosting = { choice: null, url: null, check: "", preview: null, previewFailed: false, loading: false, signin: { code: null, uri: null, login: null, cardUrl: null, message: "" } };
+  // Sign in with GitHub (#140): GitHub's device flow through /api/setup/hosted/signin.
+  // The device key goes to the OS credential store; the page only ever sees the
+  // short code, the github.com link and, at the end, the login and card link.
+  var HOSTED_SIGNIN = {
+    not_configured: "Signing in with GitHub isn't switched on in this version yet. Your card still works without it, on a link for this PC only.",
+    expired: "The code ran out before it was approved. Get a new one.",
+    not_started: "The code ran out before it was approved. Get a new one.",
+    denied: "Sign-in was cancelled on GitHub.",
+    unreachable: "Couldn't reach GitHub. Check your internet connection and try again.",
+    github_error: "GitHub didn't answer as expected. Try again in a minute.",
+    hosted_unreachable: "Couldn't reach the card service. Check the address and try again.",
+    hosted_error: "The card service didn't accept the sign-in. Try again in a minute.",
+    rate_limited: "Too many sign-in attempts. Wait a minute and try again.",
+    invalid_url: "Enter the service address, starting with https://.",
+    no_credential_store: "This PC has no safe place to keep the sign-in, so it can't sign in here.",
+  };
+  var hostedPoll = null;
 
   function el(tag, props, children) {
     var node = document.createElement(tag);
@@ -351,6 +382,11 @@ const JS = `"use strict";
     if (art) result.discordArtworkLookup = art.checked;
     var startup = document.getElementById("startWithWindows");
     if (startup) result.startWithWindows = startup.checked;
+    var host = document.querySelector("input[name=hosting]:checked");
+    if (host) {
+      result.hostedEnabled = host.value !== "off";
+      result.hostedUrl = host.value === "self" ? value("hostedUrl") || null : null;
+    }
     return result;
   }
 
@@ -407,6 +443,8 @@ const JS = `"use strict";
         ].concat(draft.startWithWindows === null ? [] : [
           el("label", {}, [el("input", { type: "checkbox", id: "startWithWindows", checked: draft.startWithWindows }), " Start NowPlaying when I sign in to Windows"]),
         ]);
+      case "hosting":
+        return hostingPanel();
       case "review":
         return [
           el("h2", { textContent: "Check your choices" }),
@@ -419,6 +457,7 @@ const JS = `"use strict";
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
           el("p", { textContent: "Album art lookup: " + (draft.discordArtworkLookup !== false ? "On" : "Off") }),
           el("p", { textContent: "Spotify on your card: " + (draft.spotify ? "On (signed in as " + draft.spotify.identity.displayName + ")" : "Off") }),
+          el("p", { textContent: "Card hosting: " + (draft.hostedEnabled === true ? (draft.hostedUrl ? "Your own service at " + draft.hostedUrl : "NowPlaying's hosted service") : "Off") }),
         ]).concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]).concat([
           el("h3", { textContent: "How your card will look" }),
           el("p", { textContent: "Made-up examples. You can change the look later on the settings page." }),
@@ -429,6 +468,141 @@ const JS = `"use strict";
         if (draft.account && draft.servers && draft.servers.length) return [el("h2", { textContent: "All set" }), el("p", { textContent: "You're signed in to " + (draft.servers.length + 1) + " media servers, and your choices are saved." })];
         return [el("h2", { textContent: "All set" }), el("p", { textContent: draft.account ? "You're signed in to " + nameOf(PROVIDERS, draft.provider) + " as " + draft.account.displayName + ", and your choices are saved." : "Your choices are saved." })];
     }
+  }
+
+  function hostingChoice() {
+    if (hosting.choice) return hosting.choice;
+    return draft.hostedEnabled === true ? (draft.hostedUrl ? "self" : "hosted") : "off";
+  }
+
+  function hostingPanel() {
+    var choice = hostingChoice();
+    var parts = [
+      el("h2", { textContent: "Card hosting" }),
+      el("p", { textContent: "Put your card online so a GitHub README can show it, without opening your media server to the internet. You can change this later in Settings." }),
+      el("fieldset", { ariaLabel: "Card hosting" }, HOSTING.map(function (item) {
+        return el("label", {}, [el("input", { type: "radio", name: "hosting", value: item[0], checked: choice === item[0] }), " " + item[1]]);
+      })),
+    ];
+    if (choice === "self") {
+      parts.push(field("hostedUrl", "Card service address", "url", hosting.url !== null ? hosting.url : (draft.hostedUrl || "")));
+      parts.push(el("button", { type: "button", id: "hostedCheck", textContent: "Check this address" }));
+      parts.push(el("p", { id: "hostedCheckResult", role: "status", textContent: hosting.check }));
+    }
+    if (choice === "off") return parts;
+    parts.push(el("div", { id: "hostedSignIn" }, hostedSignInParts()));
+    parts.push(el("h3", { textContent: "What leaves your PC" }));
+    if (!hosting.preview) {
+      parts.push(el("p", { textContent: hosting.previewFailed ? "Couldn't load the list. Check NowPlaying is still running." : "Loading..." }));
+      if (!hosting.previewFailed) loadHostedPreview();
+      return parts;
+    }
+    var preview = hosting.preview;
+    if (choice === "hosted" && preview.defaultUrl) parts.push(el("p", { textContent: "Your card goes to " + preview.defaultUrl.replace("https://", "") + "." }));
+    parts.push(el("p", { textContent: "Sent, with your current card and privacy settings:" }));
+    parts.push(el("ul", { id: "hostedSent" }, preview.sent.map(function (item) { return el("li", { textContent: item.label }); })
+      .concat(preview.alwaysSent.map(function (label) { return el("li", { textContent: label }); }))));
+    if (preview.withheld && preview.withheld.length) {
+      parts.push(el("p", { textContent: "Not sent, because your card doesn't show it:" }));
+      parts.push(el("ul", { id: "hostedWithheld" }, preview.withheld.map(function (item) { return el("li", { textContent: item.label }); })));
+    }
+    parts.push(el("p", { textContent: "Never sent:" }));
+    parts.push(el("ul", { id: "hostedNever" }, preview.neverSent.map(function (label) { return el("li", { textContent: label }); })));
+    return parts;
+  }
+
+  function loadHostedPreview() {
+    if (hosting.loading) return;
+    hosting.loading = true;
+    fetch(HOSTED_API + "preview", { cache: "no-store" })
+      .then(function (response) { if (!response.ok) throw new Error("preview"); return response.json(); })
+      .then(function (result) { hosting.preview = result; })
+      .catch(function () { hosting.previewFailed = true; })
+      .then(function () { hosting.loading = false; if (draft && draft.step === "hosting") render(); });
+  }
+
+  function runHostedCheck() {
+    var button = document.getElementById("hostedCheck");
+    var out = document.getElementById("hostedCheckResult");
+    if (!button || button.disabled) return;
+    hosting.url = value("hostedUrl");
+    button.disabled = true;
+    out.textContent = "Checking...";
+    fetch(HOSTED_API + "check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: hosting.url }) })
+      .then(function (response) { return response.json().catch(function () { return {}; }); })
+      .then(function (result) { hosting.check = result.ok ? HOSTED_CHECK.ok : (HOSTED_CHECK[result.reason] || HOSTED_CHECK.invalid_url); })
+      .catch(function () { hosting.check = "Couldn't reach NowPlaying. Make sure it is running."; })
+      .then(function () { out.textContent = hosting.check; button.disabled = false; });
+  }
+
+  function hostedSignInParts() {
+    var s = hosting.signin;
+    var parts = [el("h3", { textContent: "Sign in with GitHub" })];
+    if (s.login) {
+      parts.push(el("p", { id: "hostedSignInResult", role: "status", textContent: "Signed in as " + s.login + ". Your card link: " + s.cardUrl }));
+      return parts;
+    }
+    parts.push(el("p", { textContent: "Optional. Signing in gives you one card link that any of your PCs can update. GitHub only tells NowPlaying your username." }));
+    if (s.code) {
+      parts.push(el("p", {}, ["Open ", el("a", { href: s.uri, target: "_blank", rel: "noopener", textContent: s.uri.replace("https://", "") }), " and enter this code: ", el("strong", { id: "hostedSignInCode", textContent: s.code })]));
+    }
+    parts.push(el("button", { type: "button", id: "hostedSignInStart", textContent: s.code ? "Get a new code" : "Sign in with GitHub" }));
+    parts.push(el("p", { id: "hostedSignInResult", role: "status", textContent: s.message }));
+    return parts;
+  }
+
+  function stopHostedPoll() {
+    if (hostedPoll) clearTimeout(hostedPoll);
+    hostedPoll = null;
+  }
+
+  function resetHostedSignIn() {
+    stopHostedPoll();
+    hosting.signin = { code: null, uri: null, login: null, cardUrl: null, message: "" };
+  }
+
+  function hostedSignIn(body) {
+    return fetch(HOSTED_API + "signin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (response) { return response.json().catch(function () { return {}; }); });
+  }
+
+  function onHostedSignInResult(result) {
+    var s = hosting.signin;
+    stopHostedPoll();
+    if (result.status === "started" && typeof result.verificationUri === "string" && result.verificationUri.indexOf("https://github.com/") === 0) {
+      s.code = result.userCode; s.uri = result.verificationUri; s.message = "Waiting for you to approve it on GitHub...";
+      hostedPoll = setTimeout(pollHostedSignIn, Math.max(5, Number(result.interval) || 5) * 1000);
+    } else if (result.status === "pending" && s.code) {
+      hostedPoll = setTimeout(pollHostedSignIn, 5000);
+      return;
+    } else if (result.status === "signed_in") {
+      s.code = null; s.login = result.login; s.cardUrl = result.cardUrl; s.message = "";
+    } else {
+      s.code = null; s.message = HOSTED_SIGNIN[result.status] || HOSTED_SIGNIN.github_error;
+    }
+    if (draft && draft.step === "hosting") render();
+  }
+
+  function pollHostedSignIn() {
+    hostedPoll = null;
+    if (!draft || draft.step !== "hosting" || hostingChoice() === "off" || !hosting.signin.code) return;
+    hostedSignIn({ action: "poll" }).then(onHostedSignInResult)
+      .catch(function () { hosting.signin.code = null; hosting.signin.message = "Couldn't reach NowPlaying. Make sure it is running."; render(); });
+  }
+
+  function startHostedSignIn() {
+    var button = document.getElementById("hostedSignInStart");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    resetHostedSignIn();
+    var body = { action: "start" };
+    if (hostingChoice() === "self") body.url = document.getElementById("hostedUrl") ? value("hostedUrl") : (hosting.url || draft.hostedUrl || "");
+    hostedSignIn(body).then(onHostedSignInResult)
+      .catch(function () { hosting.signin.message = "Couldn't reach NowPlaying. Make sure it is running."; render(); });
+  }
+
+  function needsHostedUrl() {
+    return draft.step === "hosting" && hostingChoice() === "self" && !value("hostedUrl");
   }
 
   function render() {
@@ -444,7 +618,7 @@ const JS = `"use strict";
     var needsProvider = draft.step === "provider" && !document.querySelector("input[name=provider]:checked");
     var needsSignIn = draft.step === "signin" && !draft.account;
     document.getElementById("back").disabled = busy || index <= 0;
-    document.getElementById("next").disabled = busy || index >= STEPS.length - 1 || needsProvider || needsSignIn;
+    document.getElementById("next").disabled = busy || index >= STEPS.length - 1 || needsProvider || needsSignIn || needsHostedUrl();
     var start = document.getElementById("signinStart");
     if (start) start.disabled = busy;
     var tester = document.getElementById("connectionTest");
@@ -458,11 +632,27 @@ const JS = `"use strict";
   document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("panel").addEventListener("change", function () {
       if (draft && draft.step === "provider") document.getElementById("next").disabled = busy || !document.querySelector("input[name=provider]:checked");
+      var host = document.querySelector("input[name=hosting]:checked");
+      if (draft && draft.step === "hosting" && host && host.value !== hostingChoice()) {
+        if (document.getElementById("hostedUrl")) hosting.url = value("hostedUrl");
+        hosting.choice = host.value;
+        hosting.check = "";
+        resetHostedSignIn();
+        render();
+      }
+    });
+    document.getElementById("panel").addEventListener("input", function (event) {
+      if (event.target && event.target.id === "hostedUrl") {
+        hosting.url = event.target.value;
+        document.getElementById("next").disabled = busy || needsHostedUrl();
+      }
     });
     document.getElementById("panel").addEventListener("click", function (event) {
       if (event.target && event.target.id === "signinStart") onSignInClick();
       if (event.target && event.target.id === "connectionTest") runConnectionTest();
       if (event.target && event.target.id === "discordTest") runDiscordTest();
+      if (event.target && event.target.id === "hostedCheck") runHostedCheck();
+      if (event.target && event.target.id === "hostedSignInStart") startHostedSignIn();
       if (event.target && event.target.id === "spotifyStart") startSpotify();
       if (event.target && event.target.id === "spotifyClear") send("POST", { action: "clear-spotify" });
       if (event.target && event.target.id === "addServer") send("POST", { action: "add-server" });
