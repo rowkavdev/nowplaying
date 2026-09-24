@@ -82,3 +82,14 @@ test("episodes and films read like TV and films, not music (#143)", async () => 
   // Music is untouched.
   assert.deepEqual(cardText(createPresence({ state: "playing", kind: "track", title: "Song", subtitle: "Artist" })), { title: "Song", subtitle: "Artist" });
 });
+
+test("drops characters that are invalid in XML 1.0 so the SVG still parses", () => {
+  const svg = renderCard({ state: "playing", kind: "track", title: "Song\u0000", subtitle: "Art\u0001ist\uFFFE", album: "x", positionMs: 1, durationMs: 2 });
+  assert.doesNotMatch(svg, /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/);
+  assert.match(svg, />Song</);
+  assert.match(svg, />Artist</);
+  const lone = renderCard({ state: "playing", kind: "track", title: "A\uD83DB", subtitle: "\uDE00C" });
+  assert.doesNotMatch(lone, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  assert.match(lone, />AB</);
+  assert.match(renderCard({ state: "playing", kind: "track", title: "Tab\there 😀" }), /Tab\there 😀/);
+});
