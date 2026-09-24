@@ -1,12 +1,16 @@
 import { reconnectDelay } from "./discord-convergence.js";
 
 // retryDelayMs is the first reconnect delay; it doubles on each failure up to
-// maxRetryDelayMs, and resets once Discord answers.
-export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryDelayMs = 60_000, minUpdateIntervalMs = 15_000, now = Date.now } = {}) {
+// maxRetryDelayMs, and resets once Discord answers. Each delay is shortened by
+// a random share of up to `jitter` (#153), so several copies started together
+// (after a reboot or a Discord update) don't all retry at the same moment.
+export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryDelayMs = 60_000, minUpdateIntervalMs = 15_000, jitter = 0.2, random = Math.random, now = Date.now } = {}) {
   if (!transport || typeof transport.connect !== "function" || typeof transport.setActivity !== "function" || typeof transport.clearActivity !== "function") throw new TypeError("transport: expected connect, setActivity and clearActivity functions");
   if (!Number.isInteger(retryDelayMs) || retryDelayMs < 100 || retryDelayMs > 300_000) throw new RangeError("retryDelayMs: must be between 100 and 300000");
   if (!Number.isInteger(minUpdateIntervalMs) || minUpdateIntervalMs < 0 || minUpdateIntervalMs > 300_000) throw new RangeError("minUpdateIntervalMs: must be between 0 and 300000");
   if (!Number.isInteger(maxRetryDelayMs) || maxRetryDelayMs < retryDelayMs || maxRetryDelayMs > 600_000) throw new RangeError("maxRetryDelayMs: must be between retryDelayMs and 600000");
+  if (typeof jitter !== "number" || !(jitter >= 0 && jitter <= 0.5)) throw new RangeError("jitter: must be between 0 and 0.5");
+  if (typeof random !== "function") throw new TypeError("random: expected a function");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   let connected = false, closed = false, retryAt = 0, lastPublishAt = -Infinity, lastKey;
   let failures = 0, lastPublishedAt = null, lastError = null;
@@ -14,7 +18,9 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryD
   function failed(code) {
     connected = false;
     lastError = code;
-    retryAt = now() + reconnectDelay(failures, { baseMs: retryDelayMs, maxMs: maxRetryDelayMs });
+    const delay = reconnectDelay(failures, { baseMs: retryDelayMs, maxMs: maxRetryDelayMs });
+    const share = Math.min(1, Math.max(0, Number(random()) || 0));
+    retryAt = now() + Math.round(delay * (1 - jitter * share));
     failures += 1;
     return false;
   }

@@ -57,6 +57,8 @@ Do not add tokens, usernames, media titles, private URLs or random cache-busting
 
 Discord Rich Presence is local. A server process running without a desktop session cannot publish activity to a Discord client on another machine.
 
+If Discord isn't running or restarts, nowplaying keeps trying to reconnect: after 5 seconds, then doubling up to once a minute, with a little random spread. Once Discord answers, it shows the current activity again. The status page shows `degraded` with `DISCORD_NOT_RUNNING` while it waits.
+
 ## Discord shows the default image or old album art
 
 Discord fetches images itself, so it can only show public HTTPS artwork. Covers from a private media server can't be used there. See [Discord artwork](artwork.md#discord-artwork) for the order nowplaying tries.
