@@ -65,3 +65,15 @@ test("whoami maps a Navidrome wrong-credentials error to a sign-in rejection", a
   });
   await assert.rejects(provider.whoami(), /request failed: 401/);
 });
+
+test("Navidrome says it is music-only, and the app keeps that through its wrappers (#143)", async () => {
+  const { createProviderFromConfig, parseAppConfig } = await import("../src/app-config.js");
+  const { serializeSetupConfig } = await import("../src/setup-config.js");
+  const direct = createNavidromeProvider({ baseUrl: "https://music.test/", username: "u", token: "t", salt: "s", fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
+  assert.deepEqual([...direct.mediaKinds], ["track"]);
+  const config = parseAppConfig(serializeSetupConfig({ provider: "navidrome", serverUrl: "https://music.test", identity: { id: "rowan", displayName: "rowan" }, credentialStored: true }));
+  const app = createProviderFromConfig(config, JSON.stringify({ token: "t", salt: "s" }), { fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
+  assert.deepEqual([...app.mediaKinds], ["track"]);
+  const jellyfin = createProviderFromConfig(parseAppConfig(serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true })), "k", { fetchImpl: async () => Response.json([]) });
+  assert.deepEqual([...jellyfin.mediaKinds], ["track", "episode", "movie"]);
+});

@@ -9,6 +9,8 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
 
   return defineProvider({
     id: "navidrome",
+    // Navidrome is a music server: it never reports films or TV.
+    mediaKinds: ["track"],
     async getPresence({ username: playingUser } = {}) {
       const response = await fetchImpl(`${origin}/rest/getNowPlaying.view?${auth}`);
       if (!response.ok) throw new Error(`Navidrome now-playing request failed: ${response.status} ${response.statusText}`);
