@@ -32,18 +32,21 @@ const CSS = `body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#111;co
 main{max-width:34rem;margin:3rem auto;padding:0 1rem}
 figure{margin:0 0 1rem}figure img{display:block;max-width:100%;height:auto}figcaption{font-size:.875rem;color:#bbb}
 h1{font-size:1.5rem}
-ol{display:flex;gap:.75rem;padding:0;list-style:none;font-size:.85rem;color:#888}
+ol{display:flex;flex-wrap:wrap;gap:.25rem .75rem;padding:0;list-style:none;font-size:.85rem;color:#aaa}
 ol li[aria-current=step]{color:#fff;font-weight:600}
 label{display:block;margin:.5rem 0}
 select{font:inherit}
 nav{display:flex;gap:.5rem;margin-top:2rem}
 button{font:inherit;padding:.5rem 1rem;border-radius:.4rem;border:1px solid #555;background:#222;color:#eee;cursor:pointer}
-button#next{background:#3b6;border-color:#3b6;color:#000}
+button#next{background:#0b5cad;border-color:#0b5cad;color:#fff}
+:focus-visible{outline:3px solid #7ab8ff;outline-offset:2px}
+fieldset{border:0;margin:0;padding:0}
 button.link{margin-left:auto;background:none;border:none;text-decoration:underline}
 button:disabled{opacity:.5;cursor:default}
 #addServer{margin-left:.5rem}
 #addedServers button{margin-left:.5rem;padding:.2rem .6rem}
-#error{color:#f77}
+#error{color:#f0a040}
+#error::before{content:"! ";font-weight:700}
 `;
 
 const JS = `"use strict";
@@ -379,9 +382,9 @@ const JS = `"use strict";
         var adding = draft.servers && draft.servers.length > 0 && !draft.account;
         return [el("h2", { textContent: adding ? "Which server do you want to add?" : "Which media server do you use?" })]
           .concat(adding ? [el("p", { textContent: "Already added:" }), addedServers(false)] : [])
-          .concat(PROVIDERS.map(function (item) {
+          .concat([el("fieldset", { ariaLabel: "Media server" }, PROVIDERS.map(function (item) {
             return el("label", {}, [el("input", { type: "radio", name: "provider", value: item[0], checked: draft.provider === item[0] }), " " + item[1]]);
-          }))
+          }))])
           .concat(adding ? [el("button", { type: "button", id: "cancelAddServer", textContent: "Don't add another server" })] : []);
       case "signin":
         return signInPanel();
