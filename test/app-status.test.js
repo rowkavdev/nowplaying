@@ -235,3 +235,13 @@ test("status lists every server with a safe per-server state (#252)", () => {
   status.setServers(() => { throw new Error("boom"); });
   assert.deepEqual(status.snapshot().servers, []);
 });
+
+test("the status page previews the exact diagnostics report before copying (#141)", async () => {
+  const status = createAppStatus({ config });
+  const handle = createStatusPageHandler({ status, fallback: async () => ({ status: 404, headers: {}, body: "" }) });
+  const page = (await handle({ method: "GET", url: "/status" })).body;
+  assert.match(page, /<details id="diagnostics-details"><summary>See exactly what's in the report<\/summary><pre id="diagnostics-preview">/);
+  const script = (await handle({ method: "GET", url: "/status.js" })).body;
+  assert.match(script, /diagnostics-details"\)\.addEventListener\("toggle"/);
+  assert.doesNotThrow(() => new Function(script));
+});
