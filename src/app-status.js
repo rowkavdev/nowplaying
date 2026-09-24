@@ -8,7 +8,7 @@ const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", 
 
 // Tracks what the local status page shows. It only keeps the latest poll
 // outcome and the current track; never secrets, tokens or raw error text.
-export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null, build = null } = {}) {
+export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null, build = null, safeMode = false } = {}) {
   if (!config || typeof config.provider !== "string") throw new TypeError("config: expected an app config");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   const startedAt = now();
@@ -53,7 +53,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   // Polls the server once when nothing else has recently (for example when
   // the card isn't embedded anywhere and Discord is off).
   async function refresh() {
-    if (!provider || (lastPollAt !== null && now() - lastPollAt < refreshAfterMs)) return;
+    if (safeMode || !provider || (lastPollAt !== null && now() - lastPollAt < refreshAfterMs)) return;
     inflight ??= record(Promise.resolve().then(() => provider.getPresence())).catch(() => {}).finally(() => { inflight = null; });
     await inflight;
   }
@@ -71,7 +71,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
         type: PROVIDER_LABELS[config.provider] ?? config.provider,
         address: serverOrigin(config.serverUrl),
         user: text(config.identity?.displayName),
-        state: failure ? STATE_BY_FAILURE[failure] : lastOkAt === null ? "starting" : "connected",
+        state: safeMode ? "safe_mode" : failure ? STATE_BY_FAILURE[failure] : lastOkAt === null ? "starting" : "connected",
         lastPollAt: iso(lastPollAt),
         lastOkAt: iso(lastOkAt),
       }),
@@ -106,6 +106,8 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   // user name or address. Windows caps tooltips at 63 characters.
   function tray() {
     const s = snapshot();
+    // Safe mode (#122): server checks, Discord and uploads are off on purpose.
+    if (safeMode) return Object.freeze({ status: "degraded", action: "open_troubleshooting", text: "NowPlaying: safe mode - run setup again" });
     const provider = s.server.state === "error" ? "unreachable" : s.server.state;
     const discordOutput = !s.discord.enabled ? "disabled" : DISCORD_OUTPUT[s.discord.state] ?? "starting";
     const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, lastSuccessfulPollAt: lastOkAt, now: now() });
