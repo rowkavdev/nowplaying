@@ -12,7 +12,7 @@ Choose `stable` or `beta` explicitly: there is no default, and the updater refus
 
 ## Safety model
 
-An update is offered only when the release contains both `nowplaying-v<version>.tar.gz` and `SHA256SUMS`. Before install, the archive is size-bounded and its exact SHA-256 entry is verified. The updater stages the archive outside the live install, checks `dist/manifest.json`, then swaps directories atomically. The prior install remains at `<target>.backup` for rollback. A successful install returns `restartRequired: true`; the process manager should restart the service.
+An update is offered only when the release contains `SHA256SUMS` and the asset for this platform: `nowplaying-v<version>-windows-x64.zip` (the Windows bundle) on Windows, `nowplaying-v<version>.tar.gz` elsewhere. A Windows install never falls back to the tarball. Before install, the archive is size-bounded and its exact SHA-256 entry is verified. The updater stages the archive outside the live install and checks it (on Windows: `app/build-info.json` names the verified version and `nowplaying.exe`, `runtime/node.exe` and `app/package.json` are present; elsewhere: `dist/manifest.json`), then swaps directories atomically. The prior install remains at `<target>.backup` for rollback. A successful install returns `restartRequired: true`; the process manager should restart the service.
 
 ```js
 import { createAutoUpdater } from "nowplaying";
@@ -33,3 +33,5 @@ await updater.check();
 ```
 
 Do not point `targetDir` at a source checkout with uncommitted work. Automatic installation is best for packaged deployments managed by systemd, Docker or another supervisor.
+
+The desktop app doesn't run the updater yet; a later release wires it into the settings page. Until then, install a newer version by running its installer.
