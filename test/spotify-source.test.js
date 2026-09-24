@@ -27,7 +27,7 @@ test("Spotify source reads and saves the refresh token through the credential st
   const saved = new Map([["spotify:me", "r1"]]);
   const store = { read: async (ref) => saved.get(`${ref.provider}:${ref.identityId}`), save: async (ref, v) => { saved.set(`${ref.provider}:${ref.identityId}`, v); } };
   const fetchImpl = async (url) => {
-    if (String(url).startsWith("https://accounts.spotify.com")) return { ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r2", expires_in: 3600 }) };
+    if (new URL(url).hostname === "accounts.spotify.com") return { ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r2", expires_in: 3600 }) };
     return { ok: true, status: 200, headers: new Headers(), json: async () => ({ is_playing: true, progress_ms: 1, currently_playing_type: "track", item: { name: "Song", duration_ms: 10, artists: [{ name: "A" }], album: { images: [] } } }) };
   };
   const config = { spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "me" }, credentialRef: { provider: "spotify", identityId: "me" } } };
