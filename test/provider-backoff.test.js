@@ -53,3 +53,17 @@ test("rejects bad options", () => {
   assert.throws(() => withProviderBackoff(provider, { jitter: 1 }), RangeError);
   assert.throws(() => withProviderBackoff(provider, { now: 1 }), TypeError);
 });
+
+test("waits at least as long as the server's Retry-After, capped at an hour (#135)", async () => {
+  let time = 0;
+  const limited = Object.assign(new Error("Spotify now-playing request failed: 429"), { retryAfterMs: 30_000 });
+  const huge = Object.assign(new Error("429"), { retryAfterMs: 10 * 3_600_000 });
+  const { calls, provider } = flaky([limited, huge, { state: "idle" }]);
+  const p = withProviderBackoff(provider, { baseMs: 1_000, maxMs: 4_000, random: () => 0, now: () => time });
+  await assert.rejects(p.getPresence(), (error) => error === limited);
+  assert.equal(p.backoff().nextRetryInMs, 30_000);
+  time = 29_999; await assert.rejects(p.getPresence());
+  assert.equal(calls.length, 1);
+  time = 30_000; await assert.rejects(p.getPresence(), (error) => error === huge);
+  assert.equal(p.backoff().nextRetryInMs, 3_600_000);
+});

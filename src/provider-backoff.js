@@ -5,6 +5,9 @@
 // While waiting, getPresence fails straight away with the last error, so the
 // card, Discord and the status page all see the same "unreachable" state
 // without hammering the server. One success resets it.
+// If the error says how long to wait (error.retryAfterMs, set from a 429's
+// Retry-After by the Spotify provider, #135), the wait is at least that long,
+// capped at one hour.
 export function withProviderBackoff(provider, { baseMs = 5_000, maxMs = 120_000, jitter = 0.2, random = Math.random, now = Date.now } = {}) {
   if (!provider || typeof provider.getPresence !== "function") throw new TypeError("provider: expected a provider");
   if (!Number.isInteger(baseMs) || baseMs < 100 || !Number.isInteger(maxMs) || maxMs < baseMs || maxMs > 3_600_000) throw new RangeError("backoff: baseMs and maxMs are invalid");
@@ -27,7 +30,8 @@ export function withProviderBackoff(provider, { baseMs = 5_000, maxMs = 120_000,
       failures = 0; retryAt = 0; lastError = null;
       return presence;
     } catch (error) {
-      retryAt = now() + delay();
+      const asked = Number.isFinite(error?.retryAfterMs) && error.retryAfterMs > 0 ? Math.min(error.retryAfterMs, 3_600_000) : 0;
+      retryAt = now() + Math.max(delay(), asked);
       failures += 1;
       lastError = error;
       throw error;
