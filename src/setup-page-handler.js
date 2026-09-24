@@ -50,6 +50,14 @@ const JS = `"use strict";
   var API = "/api/setup/draft";
   var SIGNIN_API = "/api/setup/signin";
   var TEST_API = "/api/setup/test";
+  var SPOTIFY_API = "/api/setup/spotify";
+  var SPOTIFY_ERRORS = {
+    bad_client_id: "That doesn't look like a Spotify Client ID. It's the 32-character ID on your app's page in the Spotify developer dashboard.",
+    denied: "Spotify access wasn't allowed. Try again and choose Agree.",
+    expired: "That Spotify sign-in expired. Start again.",
+    too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
+  };
+  var spotify = { flowId: null, timer: null, clientId: "" };
   var TEST_MESSAGES = {
     connected: "Connected. NowPlaying can see what you're playing.",
     authentication_failed: "Your server rejected the saved sign-in. Sign in again.",
@@ -151,6 +159,69 @@ const JS = `"use strict";
       .then(function () { busy = false; render(); });
   }
 
+  // Optional Spotify sign-in (#135). Spotify only feeds the card and the
+  // hosted card, never Discord.
+  function callSpotify(body) {
+    var init = { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store", body: JSON.stringify(body) };
+    return fetch(SPOTIFY_API, init).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (result) {
+        if (!response.ok) throw new Error(SPOTIFY_ERRORS[result.error] || "Spotify sign-in didn't work. Check the Client ID and try again.");
+        return result;
+      });
+    });
+  }
+
+  function stopSpotify() {
+    if (spotify.timer) clearTimeout(spotify.timer);
+    spotify.flowId = null;
+    spotify.timer = null;
+  }
+
+  function spotifyResult(result) {
+    if (result.status === "signed_in") {
+      stopSpotify();
+      return request("GET").then(function (fresh) { draft = fresh.draft; });
+    }
+    if (result.status === "pending" && spotify.flowId) {
+      spotify.timer = setTimeout(function () {
+        callSpotify({ action: "poll", flowId: spotify.flowId }).then(spotifyResult)
+          .catch(function (error) { stopSpotify(); showError(error.message); })
+          .then(function () { render(); });
+      }, 2000);
+    }
+  }
+
+  function startSpotify() {
+    if (busy) return;
+    spotify.clientId = value("spotifyClientId");
+    busy = true;
+    showError("");
+    stopSpotify();
+    render();
+    callSpotify({ action: "start", clientId: spotify.clientId }).then(function (result) {
+      if (result.status === "pending") {
+        spotify.flowId = result.flowId;
+        if (result.authUrl && result.authUrl.indexOf("https://accounts.spotify.com/") === 0) window.open(result.authUrl, "_blank", "noopener");
+      }
+      return spotifyResult(result);
+    }).catch(function (error) { showError(error.message); })
+      .then(function () { busy = false; render(); });
+  }
+
+  function spotifyPanel() {
+    var parts = [el("h3", { textContent: "Spotify on your card (optional)" })];
+    if (draft.spotify) {
+      parts.push(el("p", { id: "spotifyAccount", textContent: "Connected as " + draft.spotify.identity.displayName + ". Spotify shows on your card only, not on Discord." }));
+      parts.push(el("button", { type: "button", id: "spotifyClear", textContent: "Disconnect Spotify" }));
+      return parts;
+    }
+    parts.push(el("p", { textContent: "Shows what you play on Spotify on your card and hosted card, never on Discord. You need a Client ID from your own app in the Spotify developer dashboard, with http://127.0.0.1/spotify/callback as its redirect URI." }));
+    parts.push(field("spotifyClientId", "Spotify Client ID", "text", spotify.clientId));
+    if (spotify.flowId) parts.push(el("p", { textContent: "Finish signing in on the Spotify page. This page updates when you're done." }));
+    parts.push(el("button", { type: "button", id: "spotifyStart", textContent: spotify.flowId ? "Open Spotify sign-in again" : "Sign in with Spotify" }));
+    return parts;
+  }
+
   function field(id, label, type, value) {
     return el("label", { htmlFor: id }, [label, el("br"), el("input", { id: id, type: type, value: value || "", autocomplete: type === "password" ? "current-password" : "off", size: 36 })]);
   }
@@ -186,6 +257,8 @@ const JS = `"use strict";
       parts.push(el("p", { textContent: "Your password is only sent to your server. It is never saved." }));
       parts.push(el("button", { type: "button", id: "signinStart", textContent: "Sign in" }));
     }
+    // Offered once the media server sign-in is done.
+    if (draft.account) parts = parts.concat(spotifyPanel());
     return parts;
   }
 
@@ -304,6 +377,7 @@ const JS = `"use strict";
         ]).concat([
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
           el("p", { textContent: "Album art lookup: " + (draft.discordArtworkLookup !== false ? "On" : "Off") }),
+          el("p", { textContent: "Spotify on your card: " + (draft.spotify ? "On (signed in as " + draft.spotify.identity.displayName + ")" : "Off") }),
         ]).concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]);
       default:
         if (draft.account && draft.servers && draft.servers.length) return [el("h2", { textContent: "All set" }), el("p", { textContent: "You're signed in to " + (draft.servers.length + 1) + " media servers, and your choices are saved." })];
@@ -329,7 +403,7 @@ const JS = `"use strict";
     if (start) start.disabled = busy;
     var tester = document.getElementById("connectionTest");
     if (tester) tester.disabled = busy;
-    ["addServer", "cancelAddServer"].forEach(function (id) { var node = document.getElementById(id); if (node) node.disabled = busy; });
+    ["addServer", "cancelAddServer", "spotifyStart", "spotifyClear"].forEach(function (id) { var node = document.getElementById(id); if (node) node.disabled = busy; });
     Array.prototype.forEach.call(document.querySelectorAll(".removeServer"), function (node) { node.disabled = busy; });
     document.getElementById("next").textContent = draft.step === "review" ? "Finish" : "Next";
     document.getElementById("reset").disabled = busy;
@@ -342,6 +416,8 @@ const JS = `"use strict";
     document.getElementById("panel").addEventListener("click", function (event) {
       if (event.target && event.target.id === "signinStart") onSignInClick();
       if (event.target && event.target.id === "connectionTest") runConnectionTest();
+      if (event.target && event.target.id === "spotifyStart") startSpotify();
+      if (event.target && event.target.id === "spotifyClear") send("POST", { action: "clear-spotify" });
       if (event.target && event.target.id === "addServer") send("POST", { action: "add-server" });
       if (event.target && event.target.id === "cancelAddServer") send("POST", { action: "cancel-add-server" });
       if (event.target && event.target.classList && event.target.classList.contains("removeServer")) {
