@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createYouTubeBridge, parseYouTubeEvent } from "../src/youtube-bridge.js";
+import { createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken, parseYouTubeEvent } from "../src/youtube-bridge.js";
 
 const token = "t".repeat(40);
 const origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
@@ -81,4 +81,22 @@ test("live streams have no position or duration", () => {
   const e = parseYouTubeEvent(video({ live: true }));
   assert.equal(e.positionMs, null);
   assert.equal(e.durationMs, null);
+});
+
+test("pairing token is made once and reused (#136)", async () => {
+  const saved = {};
+  const store = { read: async (ref) => saved[`${ref.provider}:${ref.identityId}`] ?? null, save: async (ref, secret) => { saved[`${ref.provider}:${ref.identityId}`] = secret; } };
+  const first = await loadYouTubePairingToken(store);
+  assert.match(first, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(await loadYouTubePairingToken(store), first);
+});
+
+test("bridge route parses JSON and passes other paths on (#136)", async () => {
+  const bridge = createYouTubeBridge({ token });
+  const handle = createYouTubeBridgeHandler({ bridge, fallback: async () => ({ status: 299 }) });
+  assert.equal((await handle({ method: "GET", url: "/card.svg" })).status, 299);
+  assert.equal((await handle({ method: "POST", url: "/bridge/youtube", headers, body: "{not json" })).status, 400);
+  assert.equal((await handle({ method: "GET", url: "/bridge/youtube", headers })).status, 405);
+  assert.equal((await handle({ method: "POST", url: "/bridge/youtube", headers, body: JSON.stringify(video()) })).status, 204);
+  assert.equal((await bridge.provider.getPresence()).title, "A video");
 });

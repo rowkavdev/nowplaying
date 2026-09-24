@@ -94,7 +94,7 @@ test("starts the card server from config and the credential store", async () => 
   const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: store, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
   try {
     assert.equal(app.discord, "no_app_id");
-    assert.deepEqual(store.reads, [{ provider: "jellyfin", identityId: "u1" }]);
+    assert.deepEqual(store.reads.filter((ref) => ref.provider !== "youtube"), [{ provider: "jellyfin", identityId: "u1" }]);
     assert.match(app.url, /^http:\/\/127\.0\.0\.1:\d+$/);
     const health = await fetch(`${app.url}/healthz`);
     assert.deepEqual([health.status, await health.text()], [200, "ok\n"]);
@@ -328,7 +328,7 @@ test("polls every signed-in server; a second server's missing sign-in doesn't st
   const fetchImpl = async (url) => { hosts.push(new URL(url).port); return Response.json([]); };
   const app = await startAppFromConfig({ configFile: await configFile({ servers, credentialStored: true }), credentialStore: store, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
   try {
-    assert.deepEqual(store.reads.map((ref) => ref.provider), ["jellyfin", "emby", "plex"]);
+    assert.deepEqual(store.reads.map((ref) => ref.provider).filter((p) => p !== "youtube"), ["jellyfin", "emby", "plex"]);
     const status = await (await fetch(`${app.url}/api/status`)).json();
     assert.equal(status.server.type, "Jellyfin");
     assert.ok(hosts.includes("8096") && hosts.includes("8920"), "both signed-in servers are polled");
@@ -338,6 +338,26 @@ test("polls every signed-in server; a second server's missing sign-in doesn't st
       ["emby", "idle", null],
       ["plex", "unavailable", "CREDENTIAL_MISSING"],
     ]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("the YouTube extension bridge feeds the card, with a stored pairing token (#136)", async () => {
+  const secrets = { "jellyfin:u1": "jf-token" };
+  const store = { read: async (ref) => secrets[`${ref.provider}:${ref.identityId}`] ?? null, save: async (ref, secret) => { secrets[`${ref.provider}:${ref.identityId}`] = secret; } };
+  const fetchImpl = async () => Response.json([]);
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: store, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const token = secrets["youtube:extension"];
+    assert.ok(token && token.length >= 32);
+    const post = (headers, body) => fetch(`${app.url}/bridge/youtube`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const event = { tabId: "tab1", videoId: "dQw4w9WgXcQ", title: "Bridge Video", channel: "Bridge Channel", state: "playing", positionMs: 1000, durationMs: 60000 };
+    const origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
+    assert.equal((await post({ Origin: origin }, event)).status, 401);
+    assert.equal((await post({ Origin: "https://evil.example", Authorization: `Bearer ${token}` }, event)).status, 403);
+    assert.equal((await post({ Origin: origin, Authorization: `Bearer ${token}` }, event)).status, 204);
+    assert.match(await (await fetch(`${app.url}/card.svg`)).text(), /Bridge Video/);
   } finally {
     await app.close();
   }
