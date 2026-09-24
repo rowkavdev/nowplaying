@@ -1,3 +1,4 @@
+import { networkFailure } from "./setup-network-failure.js";
 const AUTHENTICATION_STATUS = /request failed:\s*(401|403)\b/i;
 
 export async function checkProviderConnection({ createProvider, config, context = {} }) {
@@ -19,7 +20,7 @@ export async function checkProviderConnection({ createProvider, config, context 
     if (AUTHENTICATION_STATUS.test(String(error?.message))) {
       return connectionResult("authentication_failed");
     }
-    if (isNetworkError(error)) return connectionResult("unreachable");
+    if (isNetworkError(error)) return connectionResult(networkFailure(error));
     return connectionResult("connection_failed");
   }
 }
@@ -53,6 +54,6 @@ function connectionResult(status, activity = null) {
 }
 
 function isNetworkError(error) {
-  if (error instanceof TypeError) return true;
+  if (error instanceof TypeError || error?.name === "TimeoutError") return true;
   return ["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "ETIMEDOUT"].includes(error?.cause?.code ?? error?.code);
 }

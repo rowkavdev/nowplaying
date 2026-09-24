@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { networkFailure } from "./setup-network-failure.js";
 
 // Sign-in flows for the setup wizard. Each flow turns a user action (approve a
 // Plex PIN, approve a Jellyfin Quick Connect code, or type a username and
@@ -35,8 +36,8 @@ async function request(fetchImpl, url, init = {}) {
   let response;
   try {
     response = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
-  } catch {
-    throw new SignInError("unreachable");
+  } catch (error) {
+    throw new SignInError(networkFailure(error));
   }
   if (response.status === 401 || response.status === 403) throw new SignInError("authentication_failed");
   if (!response.ok) throw new SignInError("connection_failed");
