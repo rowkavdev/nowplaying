@@ -63,3 +63,17 @@ test("passes an abort signal so a stalled download times out", async () => {
   await downloadVerifiedUpdate({ update, fetchImpl });
   assert.ok(seen instanceof AbortSignal);
 });
+
+test("verifies the Windows bundle against its own SHA256SUMS line (#373)", async () => {
+  const zipUpdate = { ...update, assetName: "nowplaying-v0.2.0-windows-x64.zip" };
+  const sums = `${"1".repeat(64)}  nowplaying-v0.2.0.tar.gz\n${digest}  nowplaying-v0.2.0-windows-x64.zip\n`;
+  const result = await downloadVerifiedUpdate({ update: zipUpdate, fetchImpl: fetchPair(sums) });
+  assert.equal(result.filename, "nowplaying-v0.2.0-windows-x64.zip");
+  await assert.rejects(downloadVerifiedUpdate({ update: zipUpdate, fetchImpl: fetchPair(`${digest}  nowplaying-v0.2.0.tar.gz\n`) }), /invalid checksum manifest/);
+});
+
+test("refuses an asset name the release workflow never publishes", async () => {
+  for (const assetName of ["nowplaying-v0.3.0-windows-x64.zip", "../nowplaying-v0.2.0.tar.gz", "evil.exe"]) {
+    await assert.rejects(downloadVerifiedUpdate({ update: { ...update, assetName }, fetchImpl: fetchPair() }), /unexpected release asset/);
+  }
+});

@@ -6,7 +6,7 @@ const noRelease = async () => ({ ok: true, json: async () => [] });
 
 test("supports off and notify policies without installing", async () => {
   assert.deepEqual(await createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", mode: "off" }).check(), { status: "disabled" });
-  const updater = createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", mode: "notify", channel: "stable", fetchImpl: noRelease });
+  const updater = createAutoUpdater({ platform: "linux", currentVersion: "0.1.0", repository: "x/y", mode: "notify", channel: "stable", fetchImpl: noRelease });
   assert.deepEqual(await updater.check(), { status: "current", version: "0.1.0" });
 });
 
@@ -15,7 +15,7 @@ test("deduplicates concurrent checks", async () => {
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const fetchImpl = async () => { calls += 1; await gate; return { ok: true, json: async () => [] }; };
-  const updater = createAutoUpdater({ currentVersion: "0.1.0", repository: "x/y", channel: "beta", fetchImpl });
+  const updater = createAutoUpdater({ platform: "linux", currentVersion: "0.1.0", repository: "x/y", channel: "beta", fetchImpl });
   const first = updater.check();
   const second = updater.check();
   release();

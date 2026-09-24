@@ -8,7 +8,15 @@ const CHECK_TIMEOUT_MS = 30 * 1000;
 const VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/;
 const MAX_VERSION_LENGTH = 128;
 
-export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", fetchImpl = globalThis.fetch, timeoutMs = CHECK_TIMEOUT_MS } = {}) {
+// The release asset an install of this platform updates from (#373). Windows
+// installs are the bundle (launcher, runtime, app); the tarball is Node source.
+export function updateAssetName(version, platform = process.platform) {
+  if (typeof version !== "string" || !VERSION_PATTERN.test(version)) throw new TypeError("version: expected semver");
+  const normalized = version.replace(/^v/, "");
+  return platform === "win32" ? `nowplaying-v${normalized}-windows-x64.zip` : `nowplaying-v${normalized}.tar.gz`;
+}
+
+export async function checkForUpdate({ currentVersion, repository, token, channel = "stable", platform = process.platform, fetchImpl = globalThis.fetch, timeoutMs = CHECK_TIMEOUT_MS } = {}) {
   const current = parseVersion(currentVersion);
   if (!["stable", "beta"].includes(channel)) throw new TypeError("channel: expected stable or beta");
   if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new TypeError("repository: expected owner/name");
@@ -23,10 +31,11 @@ export async function checkForUpdate({ currentVersion, repository, token, channe
     .sort((a, b) => compareVersion(b.version, a.version));
   const latest = candidates[0];
   if (!latest || compareVersion(latest.version, current) <= 0) return Object.freeze({ available: false, currentVersion: current.normalized });
-  const asset = latest.release.assets?.find((value) => value.name === `nowplaying-v${latest.version.normalized}.tar.gz`);
+  const assetName = updateAssetName(latest.version.normalized, platform);
+  const asset = latest.release.assets?.find((value) => value.name === assetName);
   const checksum = latest.release.assets?.find((value) => value.name === "SHA256SUMS");
   if (!asset || !checksum) throw new Error("update release is missing verified assets");
-  return Object.freeze({ available: true, currentVersion: current.normalized, version: latest.version.normalized, releaseUrl: latest.release.html_url, assetUrl: asset.url, checksumUrl: checksum.url });
+  return Object.freeze({ available: true, currentVersion: current.normalized, version: latest.version.normalized, releaseUrl: latest.release.html_url, assetName, assetUrl: asset.url, checksumUrl: checksum.url });
 }
 
 function parseVersion(value) {
