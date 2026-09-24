@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/ghostdeps-device-relay.user.js", "destination": "/api/device-relay?script=1" }
+  ]
+}
