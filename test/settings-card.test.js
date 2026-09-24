@@ -99,3 +99,15 @@ test("the page has a Card section with a live preview and no inline script or st
   const css = (await h({ url: "/settings.css" })).body;
   assert.doesNotMatch(css, /#(?:f00|ff0000|0f0|00ff00|d73a49|28a745|2da44e|cf222e)\b/i);
 });
+
+test("the hosted link follows the saved card style, width and progress bar", async () => {
+  const script = (await handler()({ url: "/settings.js" })).body;
+  const hostedLink = new Function("savedCard", script.match(/function hostedLink\(base\) \{[\s\S]*?\n\}/)[0] + "; return hostedLink;");
+  const base = "https://nowplaying-hosted.vercel.app/card/abc.svg";
+  assert.equal(hostedLink(null)(base), base);
+  assert.equal(hostedLink(DEFAULTS)(base), base);
+  assert.equal(hostedLink({ ...DEFAULTS, theme: "paper", width: 520, showProgress: false })(base), `${base}?theme=paper&width=520&show=mediaType,state,subtitle`);
+  assert.equal(hostedLink({ ...DEFAULTS, theme: "compact", showProgress: false })(base), `${base}?theme=compact`);
+  assert.equal(hostedLink({ ...DEFAULTS, radius: 0, padding: 12 })(base), base);
+  assert.equal(hostedLink(DEFAULTS)(""), "");
+});
