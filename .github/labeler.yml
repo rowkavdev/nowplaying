@@ -86,6 +86,7 @@ area:security:
           - "src/credential-store.js"
           - "src/windows-credential-adapter.js"
           - "src/linux-credential-adapter.js"
+          - "src/platform-credential-adapter.js"
           - "src/macos-credential-adapter.js"
           - "src/hosted-credentials.js"
           - "src/privacy.js"
@@ -94,6 +95,7 @@ area:security:
           - "test/credential-store*.js"
           - "test/windows-credential-adapter*.js"
           - "test/linux-credential-adapter*.js"
+          - "test/platform-credential-adapter*.js"
           - "test/macos-credential-adapter*.js"
           - "test/privacy*.js"
           - "test/bounded-response*.js"
@@ -125,11 +127,13 @@ area:installer:
           - "scripts/windows-launcher.cs"
           - "scripts/windows-setup.ps1"
           - "scripts/windows-entry.js"
+          - "scripts/nowplaying.js"
           - "scripts/generate-windows-icon.ps1"
           - "assets/**"
           - "test/windows-installer*.js"
           - "test/windows-setup*.js"
           - "test/windows-start-config*.js"
+          - "test/unix-entry*.js"
 area:tray:
   - changed-files:
       - any-glob-to-any-file:

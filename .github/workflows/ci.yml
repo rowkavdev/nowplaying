@@ -32,7 +32,8 @@ jobs:
       - run: npm run check
       - run: npm test
 
-  # Real Secret Service round trip for the Linux credential adapter (#215).
+  # Real Secret Service round trip for the Linux credential adapter, and the
+  # Linux entry point running the server and card from it (#215).
   secret-service:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -46,7 +47,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsecret-tools gnome-keyring dbus
       - name: Linux credential adapter against gnome-keyring
         run: |
-          dbus-run-session -- sh -c 'printf ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null && NOWPLAYING_SECRET_SERVICE_TEST=1 node --test --test-reporter=spec test/linux-credential-adapter.test.js'
+          dbus-run-session -- sh -c 'printf ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null && NOWPLAYING_SECRET_SERVICE_TEST=1 node --test --test-reporter=spec test/linux-credential-adapter.test.js test/unix-entry.test.js'
 
   # Real Keychain round trip for the macOS credential adapter (#215), in a
   # throwaway keychain so the runner's own keychain isn't touched.

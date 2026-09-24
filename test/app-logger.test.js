@@ -44,3 +44,11 @@ test("Windows entry logs startup lifecycle with fixed codes only", async () => {
   }
   assert.doesNotMatch(entry, /event\([^)]*(message|configPath|stack)/);
 });
+
+test("an explicit log file works on any OS (Linux/macOS entry, #215)", async () => {
+  const files = [];
+  const createLog = ({ file }) => { files.push(file); return { write: async () => {} }; };
+  const logger = createAppLogger({ platform: "linux", env: {}, file: "/home/rowan/.local/state/nowplaying/logs/nowplaying.log", createLog });
+  assert.equal(await logger.event("startup", "ok"), true);
+  assert.deepEqual(files, ["/home/rowan/.local/state/nowplaying/logs/nowplaying.log"]);
+});
