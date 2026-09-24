@@ -93,3 +93,14 @@ test("drops characters that are invalid in XML 1.0 so the SVG still parses", () 
   assert.match(lone, />AB</);
   assert.match(renderCard({ state: "playing", kind: "track", title: "Tab\there 😀" }), /Tab\there 😀/);
 });
+
+test("a negative, NaN or overrun position never draws a negative bar or a broken clock", () => {
+  const negative = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: -5000, durationMs: 200000 });
+  assert.doesNotMatch(negative, /width="-/);
+  assert.doesNotMatch(negative, /-\d+:/);
+  assert.match(negative, /0:00 \/ 3:20/);
+  const nan = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: Number.NaN, durationMs: 200000 });
+  assert.doesNotMatch(nan, /NaN/);
+  const over = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 250000, durationMs: 200000 });
+  assert.match(over, /3:20 \/ 3:20/);
+});
