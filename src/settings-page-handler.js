@@ -26,6 +26,8 @@ const PAGE = `<!doctype html>
 </select></p>
 <p class="hint">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org. Art from a private server is never sent to Discord.</p>
 <p><button type="submit" id="discord-save">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
+<p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
+<p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
 </form>
 <form id="hosted-form">
@@ -81,6 +83,24 @@ form.addEventListener("submit", async (event) => {
     say("Couldn't save. Nothing was changed.", "bad");
   } finally {
     save.disabled = false;
+  }
+});
+document.getElementById("refresh-art").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const result = document.getElementById("refresh-result");
+  button.disabled = true;
+  result.textContent = "Refreshing..."; result.className = "warn";
+  try {
+    const res = await fetch("/api/settings/discord/refresh-artwork", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: "{}" });
+    if (!res.ok) throw new Error(String(res.status));
+    await res.json();
+    result.textContent = fields.enabled.checked ? "Done. Discord will show the new cover in a moment." : "Done. Covers are looked up again when Discord is on.";
+    result.className = "ok";
+  } catch {
+    result.textContent = "Couldn't refresh.";
+    result.className = "bad";
+  } finally {
+    button.disabled = false;
   }
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], off: ["Off", ""] };
@@ -161,17 +181,25 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     const url = new URL(request?.url || "/", "http://localhost");
     const asset = assets[url.pathname];
     const disconnect = url.pathname === "/api/settings/hosted/disconnect";
-    if (!asset && url.pathname !== "/api/settings" && !disconnect) return fallback(request);
+    const refresh = url.pathname === "/api/settings/discord/refresh-artwork";
+    if (!asset && url.pathname !== "/api/settings" && !disconnect && !refresh) return fallback(request);
     if (asset) {
       if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
       const result = response(200, method === "HEAD" ? "" : asset.body, { "Content-Type": asset.type, "Cache-Control": "no-store" });
       return asset.page ? { ...result, page: true } : result;
     }
-    if (disconnect ? method !== "POST" : method !== "GET" && method !== "PUT") return response(405, "Method Not Allowed", { Allow: disconnect ? "POST" : "GET, PUT" });
+    const action = disconnect || refresh;
+    if (action ? method !== "POST" : method !== "GET" && method !== "PUT") return response(405, "Method Not Allowed", { Allow: action ? "POST" : "GET, PUT" });
     // Settings are for this app's own page: refuse other sites' requests.
     const site = header(request?.headers, "sec-fetch-site");
     if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
     if (method === "GET") return json(200, await read());
+    if (refresh) {
+      if (typeof settings.refreshArtwork !== "function") return response(404, "Not Found");
+      let dropped;
+      try { dropped = await settings.refreshArtwork(); } catch { return json(500, { error: "refresh_failed" }); }
+      return json(200, { dropped: Number.isInteger(dropped) && dropped >= 0 ? dropped : 0 });
+    }
     if (disconnect) {
       if (typeof settings.disconnectHosted !== "function") return response(404, "Not Found");
       try { await settings.disconnectHosted(); } catch { return json(502, { error: "disconnect_failed" }); }

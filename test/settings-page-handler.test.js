@@ -82,3 +82,20 @@ test("hosted: saves the section and disconnects by POST only", async () => {
   assert.equal((await old({ method: "POST", url: "/api/settings/hosted/disconnect", body: "{}" })).status, 404);
   assert.equal((await old(put({ hosted: { enabled: true } }))).status, 400);
 });
+
+test("refresh artwork: POST only, reports how many covers were dropped", async () => {
+  let refreshed = 0;
+  const settings = { read: () => ({ discord: {} }), updateDiscord: async () => {}, refreshArtwork: async () => { refreshed += 1; return 4; } };
+  const h = createSettingsPageHandler({ settings, fallback: async () => null });
+  const done = await h({ method: "POST", url: "/api/settings/discord/refresh-artwork", body: "{}" });
+  assert.deepEqual([done.status, JSON.parse(done.body)], [200, { dropped: 4 }]);
+  assert.equal(refreshed, 1);
+  assert.equal((await h({ url: "/api/settings/discord/refresh-artwork" })).status, 405);
+  assert.equal((await h({ method: "POST", url: "/api/settings/discord/refresh-artwork", headers: { "sec-fetch-site": "cross-site" }, body: "{}" })).status, 403);
+  const odd = createSettingsPageHandler({ settings: { ...settings, refreshArtwork: async () => "lots" }, fallback: async () => null });
+  assert.equal(JSON.parse((await odd({ method: "POST", url: "/api/settings/discord/refresh-artwork", body: "{}" })).body).dropped, 0);
+  const broken = createSettingsPageHandler({ settings: { ...settings, refreshArtwork: async () => { throw new Error("cache C:\\x"); } }, fallback: async () => null });
+  assert.deepEqual(JSON.parse((await broken({ method: "POST", url: "/api/settings/discord/refresh-artwork", body: "{}" })).body), { error: "refresh_failed" });
+  const old = createSettingsPageHandler({ settings: { read: () => ({ discord: {} }), updateDiscord: async () => {} }, fallback: async () => null });
+  assert.equal((await old({ method: "POST", url: "/api/settings/discord/refresh-artwork", body: "{}" })).status, 404);
+});
