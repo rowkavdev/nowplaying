@@ -52,6 +52,9 @@ export class StartupError extends Error {
 
 export function parseAppConfig(text) {
   let parsed;
+  // Notepad's "UTF-8 with BOM" and PowerShell 5's Set-Content/Out-File start the
+  // file with U+FEFF, which JSON.parse rejects. Drop one leading mark only.
+  if (typeof text === "string" && text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   try {
     if (Buffer.byteLength(text) > MAX_CONFIG_BYTES) throw new RangeError("too large");
     parsed = JSON.parse(text);
