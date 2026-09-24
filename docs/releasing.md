@@ -260,4 +260,4 @@ Before creating `v0.1.0`:
 
 ## Curated release notes
 
-Release Please writes `CHANGELOG.md`. The GitHub release page is rewritten after publication by the `stable-release-notes` job in `release-cadence.yml`: it takes `docs/release-notes/vX.Y.Z.md` (the Breaking changes, Migration, Compatibility and Security sections above) when that file exists, then adds the ten highest-impact changes and the Full Changelog link. Add the file in the release-preparation PR, before merging the Release Please PR.
+Release Please writes `CHANGELOG.md`. The GitHub release page is rewritten after publication by the `stable-release-notes` job in `release-cadence.yml`: it takes a file in `docs/release-notes/` named after the tag (for example `docs/release-notes/v0.2.0.md`) (the Breaking changes, Migration, Compatibility and Security sections above) when that file exists, then adds the ten highest-impact changes and the Full Changelog link. Add the file in the release-preparation PR, before merging the Release Please PR.
