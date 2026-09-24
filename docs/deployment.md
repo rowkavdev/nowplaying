@@ -1,6 +1,6 @@
 # Deployment
 
-`nowplaying` does not yet ship a production server or Discord runtime. The current build is a library and smoke artifact for development. This guide separates what works now from the deployment shape the project is building toward.
+> **Status:** this is a self-hosting design note. The Windows app and the hosted card service have since shipped; for what runs today see [Hosted card deployment](hosted-card.md), [Hosted card: what leaves your PC](hosted-upload.md) and the [user wiki](https://github.com/rowkavdev/nowplaying/wiki). The guidance below still applies to running your own card endpoint or a future server build.
 
 Do not expose a current development instance directly to the internet. See [SECURITY.md](../SECURITY.md) before handling real credentials or activity.
 
