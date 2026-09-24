@@ -65,7 +65,15 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
     }
     const [primary] = results;
     if (primary.state === "error") throw primary.error;
-    return primary.presence;
+    if (primary.state === "ok") return primary.presence;
+    // The first server couldn't start (signed out, bad config): fall back to
+    // the next one that answered instead of returning nothing, which the
+    // card and hosted upload can't render.
+    const answered = results.find((result) => result.state === "ok");
+    if (answered) return answered.presence;
+    const failed = results.find((result) => result.state === "error");
+    if (failed) throw failed.error;
+    throw new Error("No media server is available");
   }
 
   // Per-server view for the status page: no secrets, no raw errors.

@@ -77,3 +77,18 @@ test("needs at least one server with a provider (#252)", () => {
   assert.throws(() => createMultiServerProvider([{ server: server("plex") }]), /needs a provider/);
   assert.throws(() => createMultiServerProvider([{ provider: { getPresence: async () => ({}) } }]), /needs its server/);
 });
+
+test("first server unavailable and nothing playing: the next server's result shows, never undefined", async () => {
+  const idle = createMultiServerProvider([
+    { server: { provider: "plex" }, unavailable: "CONFIG_INVALID" },
+    { server: { provider: "jellyfin" }, provider: { getPresence: async () => ({ state: "idle" }) } },
+  ]);
+  assert.deepEqual(await idle.getPresence(), { state: "idle" });
+  const failing = createMultiServerProvider([
+    { server: { provider: "plex" }, unavailable: "CONFIG_INVALID" },
+    { server: { provider: "jellyfin" }, provider: { getPresence: async () => { throw new Error("down"); } } },
+  ]);
+  await assert.rejects(failing.getPresence(), /down/);
+  const none = createMultiServerProvider([{ server: { provider: "plex" }, unavailable: "CONFIG_INVALID" }]);
+  await assert.rejects(none.getPresence(), /No media server is available/);
+});
