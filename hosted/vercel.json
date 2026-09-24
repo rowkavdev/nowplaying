@@ -13,6 +13,10 @@
     {
       "source": "/healthz",
       "destination": "/api/health"
+    },
+    {
+      "source": "/badges/requests.json",
+      "destination": "/api/badge"
     }
   ],
   "headers": [

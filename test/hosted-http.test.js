@@ -105,3 +105,31 @@ test("card layout options come from the URL, are checked, and cache separately",
     }
   } finally { await app.close(); }
 });
+
+test("the requests badge publishes the card request total as a Shields endpoint", async () => {
+  const { compactCount } = await import("../hosted/lib/app.js");
+  const redis = createMemoryRedis();
+  const service = createService({ redis });
+  const handlers = createHandlers({ getService: () => service });
+  const server = createServer((req, res) => handlers.requestsBadge(req, res));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  try {
+    let badge = await call(port, "GET", "/badges/requests.json");
+    assert.equal(badge.status, 200);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "card requests", message: "0", color: "#58a6ff" });
+    assert.match(badge.headers["cache-control"], /max-age=300/);
+    await redis.command(["SET", "np:stats:cards_rendered", "12345"]);
+    badge = await call(port, "GET", "/badges/requests.json");
+    assert.equal(JSON.parse(badge.body).message, "12.3k");
+    assert.equal((await call(port, "POST", "/badges/requests.json")).status, 405);
+    await redis.command(["SET", "np:stats:cards_rendered", "garbage"]);
+    badge = await call(port, "GET", "/badges/requests.json");
+    assert.equal(badge.status, 503);
+    assert.equal(JSON.parse(badge.body).message, "unavailable");
+    assert.equal(badge.headers["cache-control"], "no-store");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  assert.deepEqual([0, 999, 1000, 12_345, 999_950, 4_560_000, 2_500_000_000].map(compactCount), ["0", "999", "1k", "12.3k", "1M", "4.56M", "2.5B"]);
+});

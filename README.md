@@ -6,6 +6,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/rowkavdev/nowplaying)](https://github.com/rowkavdev/nowplaying/commits/main)
 [![Coverage](https://codecov.io/gh/rowkavdev/nowplaying/graph/badge.svg?branch=main)](https://app.codecov.io/gh/rowkavdev/nowplaying)
 [![Downloads](https://img.shields.io/github/downloads/rowkavdev/nowplaying/total)](https://github.com/rowkavdev/nowplaying/releases)
+[![Card requests](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Frequests.json)](hosted/README.md#storage-and-counters)
 [![License](https://img.shields.io/github/license/rowkavdev/nowplaying)](LICENSE)
 
 Live README cards and Discord Rich Presence for Plex, Jellyfin, Navidrome and Emby.

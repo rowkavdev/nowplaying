@@ -10,3 +10,8 @@ test("hosted static output is limited to public/ and has a root page", async () 
   const page = await readFile(new URL("../hosted/public/index.html", import.meta.url), "utf8");
   assert.match(page, /href="\/healthz"/);
 });
+
+test("the requests badge has its public path", async () => {
+  const config = JSON.parse(await readFile(new URL("../hosted/vercel.json", import.meta.url), "utf8"));
+  assert.ok(config.rewrites.some((rule) => rule.source === "/badges/requests.json" && rule.destination === "/api/badge"));
+});

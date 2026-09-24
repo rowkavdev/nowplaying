@@ -40,6 +40,8 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 
 State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The only counters are aggregate totals: `np:stats:cards_rendered` and `np:stats:registrations`.
 
+`GET /badges/requests.json` publishes the `np:stats:cards_rendered` total as a [Shields endpoint badge](https://shields.io/badges/endpoint-badge) (label "card requests", cached for 5 minutes). It's a single public number with nothing per card or device. The README shows it with `https://img.shields.io/endpoint?url=https://nowplaying-hosted.vercel.app/badges/requests.json`.
+
 ## Deploy
 
 `.github/workflows/hosted-deploy.yml` deploys to Vercel on pushes to `main` that touch `hosted/` or `src/card.js`, and on manual dispatch. It needs repo secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` and the repo variable `HOSTED_BASE_URL`. The Vercel project uses `hosted` as its root directory; the Redis credentials are Vercel environment variables, not GitHub secrets.

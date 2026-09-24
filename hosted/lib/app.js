@@ -35,6 +35,16 @@ export function createHandlers({ getService }) {
         sendCard(req, res, presence, options);
       } catch (error) { sendError(res, error); }
     },
+    // Shields.io endpoint badge (https://shields.io/badges/endpoint-badge).
+    async requestsBadge(req, res) {
+      if (!requireMethod(req, res, ["GET", "HEAD"])) return;
+      try {
+        const count = await getService().readRequestCount();
+        sendJson(res, 200, { schemaVersion: 1, label: "card requests", message: compactCount(count), color: "#58a6ff" }, { "cache-control": "public, max-age=300, s-maxage=300" });
+      } catch {
+        sendJson(res, 503, { schemaVersion: 1, label: "card requests", message: "unavailable", color: "lightgrey" });
+      }
+    },
     health(req, res) {
       res.statusCode = 200;
       res.setHeader("content-type", "text/plain; charset=utf-8");
@@ -42,4 +52,14 @@ export function createHandlers({ getService }) {
       res.end("ok");
     },
   };
+}
+
+// 999 -> "999", 12_345 -> "12.3k", 4_560_000 -> "4.56M".
+export function compactCount(count) {
+  let value = count;
+  for (const unit of ["", "k", "M", "B"]) {
+    const shown = unit === "" ? value : Number(value.toPrecision(3));
+    if (shown < 1000 || unit === "B") return `${shown}${unit}`;
+    value /= 1000;
+  }
 }
