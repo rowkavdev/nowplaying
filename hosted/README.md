@@ -13,11 +13,24 @@ What it never does:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/register` | Create an opaque card ID, device ID and device token. Rate limited per client. |
+| `POST` | `/api/auth/github` | Body `{ githubToken, deviceName?, legacyToken? }`. Signs this PC in to the GitHub user's card. The GitHub token is checked once with `api.github.com/user` and never stored. Returns `{ login, deviceId, token, cardPath }`. Passing an old per-PC `legacyToken` makes that old card link show the user's card. Rate limited per client. |
+| `GET` / `POST` | `/api/devices` | `Authorization: Bearer <device token>` of a signed-in PC. `GET` lists the user's PCs; `POST { action: "rename", deviceId?, name }`, `{ action: "remove", deviceId }` or `{ action: "remove-all" }`. |
 | `POST` | `/api/ingest` | `Authorization: Bearer <device token>`. Push one state update (schema below). |
 | `POST` / `DELETE` | `/api/revoke` | Delete the device token and any stored state. |
 | `GET` / `HEAD` | `/card/<cardId>.svg` | Public SVG. Options: `theme`, `width`, `show` (same as the local card). |
 | | | Layout options, all optional: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`). Out-of-range or repeated values return 400 `invalid_layout`. Set only in the URL, never sent by the app. |
+| `GET` / `HEAD` | `/u/<github-login>.svg` | The signed-in user's card, same options as above. |
 | `GET` | `/healthz` | Liveness. |
+
+### One card, several PCs
+
+A GitHub user has one card, and up to 10 PCs can update it. Each PC's state is kept separately and expires on its own. The card shows:
+
+1. A PC that is playing over one that is paused. Paused never replaces a PC that is playing.
+2. Of several PCs playing, the one that started playing most recently. Heartbeats and track changes don't count as a new start, so two PCs playing at once don't flip back and forth.
+3. Clearing (idle) on one PC removes only that PC's state; the card falls back to the next PC.
+
+Ordering uses the server's clock, not the PC's. Signing in on an 11th PC removes the one that has been quiet for longest. The service stores the GitHub user ID and login, and the names of the signed-in PCs; never the GitHub token.
 
 The device token is only stored as a SHA-256 hash. The card ID is random and can't be traced to an email, server or username.
 

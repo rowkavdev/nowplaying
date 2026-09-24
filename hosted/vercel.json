@@ -11,6 +11,14 @@
       "destination": "/api/card?id=:id"
     },
     {
+      "source": "/u/:login.svg",
+      "destination": "/api/card?user=:login"
+    },
+    {
+      "source": "/api/auth/github",
+      "destination": "/api/auth-github"
+    },
+    {
       "source": "/healthz",
       "destination": "/api/health"
     },

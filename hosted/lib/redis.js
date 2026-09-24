@@ -40,6 +40,7 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
     async command([name, key, ...rest]) {
       switch (String(name).toUpperCase()) {
         case "GET": return live(key)?.value ?? null;
+        case "MGET": return [key, ...rest].map((k) => live(k)?.value ?? null);
         case "SET": {
           let expiresAt = null; let nx = false;
           for (let i = 1; i < rest.length; i += 1) {

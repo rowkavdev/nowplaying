@@ -5,13 +5,13 @@ import { createHandlers } from "../hosted/lib/app.js";
 import { createMemoryRedis } from "../hosted/lib/redis.js";
 import { createService } from "../hosted/lib/service.js";
 
-async function start() {
-  const service = createService({ redis: createMemoryRedis() });
+async function start({ githubUser } = {}) {
+  const service = createService({ redis: createMemoryRedis(), ...(githubUser ? { githubUser } : {}) });
   const handlers = createHandlers({ getService: () => service });
-  const routes = { "/api/register": handlers.register, "/api/ingest": handlers.ingest, "/api/revoke": handlers.revoke, "/api/card": handlers.card, "/api/health": handlers.health };
+  const routes = { "/api/register": handlers.register, "/api/ingest": handlers.ingest, "/api/revoke": handlers.revoke, "/api/card": handlers.card, "/api/health": handlers.health, "/api/auth/github": handlers.signInGitHub, "/api/devices": handlers.devices };
   const server = createServer((req, res) => {
     const path = new URL(req.url, "http://x").pathname;
-    const route = routes[path] ?? (path.startsWith("/card/") ? handlers.card : null);
+    const route = routes[path] ?? (path.startsWith("/card/") || path.startsWith("/u/") ? handlers.card : null);
     if (!route) { res.statusCode = 404; return res.end(); }
     return route(req, res);
   });
@@ -132,4 +132,28 @@ test("the requests badge publishes the card request total as a Shields endpoint"
     await new Promise((resolve) => server.close(resolve));
   }
   assert.deepEqual([0, 999, 1000, 12_345, 999_950, 4_560_000, 2_500_000_000].map(compactCount), ["0", "999", "1k", "12.3k", "1M", "4.56M", "2.5B"]);
+});
+
+test("GitHub sign-in, device list and the /u/<login>.svg card over HTTP", async () => {
+  const app = await start({ githubUser: async () => ({ id: 42, login: "octo" }) });
+  try {
+    const bad = await call(app.port, "POST", "/api/auth/github", { body: JSON.stringify({ githubToken: "gho_abcdefghijk", extra: 1 }), headers: json() });
+    assert.equal(bad.status, 400);
+    const res = await call(app.port, "POST", "/api/auth/github", { body: JSON.stringify({ githubToken: "gho_abcdefghijk", deviceName: "Desk" }), headers: json() });
+    assert.equal(res.status, 201);
+    const me = JSON.parse(res.body);
+    assert.equal(me.cardPath, "/u/octo.svg");
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "playing", kind: "track", title: "Blue Monday" });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(me.token) })).status, 202);
+    const card = await call(app.port, "GET", "/u/octo.svg");
+    assert.equal(card.status, 200);
+    assert.match(card.body, /Blue Monday/);
+    assert.doesNotMatch(card.body, new RegExp(me.token));
+    assert.equal((await call(app.port, "GET", "/u/nobody.svg")).status, 404);
+    const list = JSON.parse((await call(app.port, "GET", "/api/devices", { headers: json(me.token) })).body);
+    assert.deepEqual(list.devices.map((d) => d.name), ["Desk"]);
+    assert.equal((await call(app.port, "POST", "/api/devices", { body: JSON.stringify({ action: "nope" }), headers: json(me.token) })).status, 400);
+    assert.equal((await call(app.port, "POST", "/api/devices", { body: JSON.stringify({ action: "remove-all" }), headers: json(me.token) })).status, 200);
+    assert.equal((await call(app.port, "GET", "/api/devices", { headers: json(me.token) })).status, 401);
+  } finally { await app.close(); }
 });
