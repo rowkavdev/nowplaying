@@ -32,6 +32,21 @@ jobs:
       - run: npm run check
       - run: npm test
 
+  # The whole suite on macOS (#215), so Linux/macOS support doesn't rot.
+  test-macos:
+    name: Test on macOS
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts
+      - run: npm test
+
   # Real Secret Service round trip for the Linux credential adapter, and the
   # Linux entry point running the server and card from it (#215).
   secret-service:
