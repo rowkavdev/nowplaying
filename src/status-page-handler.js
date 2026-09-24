@@ -6,7 +6,7 @@ const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying status</title><link rel="stylesheet" href="/status.css"></head>
 <body><main>
-<nav><span aria-current="page">Status</span> <a href="/settings">Settings</a></nav>
+<nav><span aria-current="page">Status</span> <a href="/settings">Settings</a> <a href="/logs">Logs</a></nav>
 <h1>NowPlaying</h1>
 <p id="summary" role="status" aria-live="polite">Loading status...</p>
 <section aria-labelledby="h-playing"><h2 id="h-playing">Now playing</h2><p id="playing">-</p></section>

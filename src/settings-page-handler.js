@@ -7,7 +7,7 @@ const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"></head>
 <body><main>
-<nav><a href="/">Status</a> <span aria-current="page">Settings</span></nav>
+<nav><a href="/">Status</a> <span aria-current="page">Settings</span> <a href="/logs">Logs</a></nav>
 <h1>Settings</h1>
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
