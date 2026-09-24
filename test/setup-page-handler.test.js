@@ -78,3 +78,15 @@ test("the page offers an optional Spotify sign-in and opens only Spotify's accou
   assert.match(js, /action: "clear-spotify"/);
   assert.match(js, /never on Discord/);
 });
+
+test("Emby and Navidrome sign-in shows provider help, the same in the browser and the native window (#141)", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  const { readFile } = await import("node:fs/promises");
+  const ps1 = await readFile(new URL("../scripts/windows-setup.ps1", import.meta.url), "utf8");
+  for (const provider of ["emby", "navidrome"]) {
+    const text = new RegExp(`${provider}: "([^"]+)"`).exec(js.slice(js.indexOf("SIGNIN_HELP")))?.[1];
+    assert.ok(text, provider);
+    assert.match(text, /not your password/);
+    assert.ok(ps1.includes(`${provider} = '${text}'`), `${provider} wording matches the native window`);
+  }
+});

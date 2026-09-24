@@ -107,6 +107,11 @@ const JS = `"use strict";
     server_not_found: "That server was already removed.",
   };
   var PROVIDERS = [["plex", "Plex"], ["jellyfin", "Jellyfin"], ["emby", "Emby"], ["navidrome", "Navidrome"]];
+  // Provider-specific sign-in help (#141) for the username and password providers.
+  var SIGNIN_HELP = {
+    emby: "Sign in as the Emby user whose playback you want to show, with the username and password you use in the Emby app. NowPlaying saves the sign-in Emby hands back, not your password.",
+    navidrome: "Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted hash of it, not your password.",
+  };
   var IDLE = [["clear", "Clear my status"], ["grace", "Keep it for a short grace period"], ["show", "Show that nothing is playing"], ["recent", "Show what I played last"]];
   var draft = null;
   var busy = false;
@@ -271,6 +276,7 @@ const JS = `"use strict";
       parts.push(el("button", { type: "button", id: "signinStart", textContent: signin.code ? "Get a new code" : "Get a Quick Connect code" }));
     } else {
       parts.push(field("serverUrl", "Server address", "url", DEFAULT_URLS[draft.provider]));
+      if (SIGNIN_HELP[draft.provider]) parts.push(el("p", { id: "signinHelp", textContent: SIGNIN_HELP[draft.provider] }));
       parts.push(field("username", "Username", "text", ""));
       parts.push(field("password", "Password", "password", ""));
       parts.push(el("p", { textContent: "Your password is only sent to your server. It is never saved." }));
