@@ -52,3 +52,21 @@ test("progress bar position and width are optional and bounded", () => {
   assert.ok(bar(text)[1] < height(text) - 24);
   for (const layout of [{ progressPosition: "top" }, { progressWidth: "half" }, { progressWidth: 200 }]) assert.throws(() => renderCard(p, { layout }), TypeError, JSON.stringify(layout));
 });
+
+test("right-to-left layout mirrors text, artwork and progress", () => {
+  const art = "data:image/png;base64,iVBORw0KGgo=";
+  const hebrew = { state: "playing", kind: "track", title: "שלום", subtitle: "אמן", positionMs: 1, durationMs: 4 };
+  const latin = { ...hebrew, title: "Song", subtitle: "Artist" };
+  assert.equal(renderCard(latin, { artworkDataUri: art, layout: { direction: "ltr" } }), renderCard(latin, { artworkDataUri: art }));
+  assert.equal(renderCard(hebrew, { artworkDataUri: art }), renderCard(hebrew, { artworkDataUri: art, layout: { direction: "ltr" } }), "ltr stays the default");
+  const rtl = renderCard(hebrew, { width: 440, artworkDataUri: art, layout: { direction: "rtl" } });
+  assert.match(rtl, /<image [^>]*x="348"/, "artwork moves to the right");
+  assert.match(rtl, /<text x="324" y="\d+" direction="rtl"[^>]*>שלום</, "text starts at the right edge of the text column");
+  const [track, fill] = [...rtl.matchAll(/<rect x="(\d+)" y="\d+" width="(\d+)" height="4"/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  assert.equal(fill[0] + fill[1], track[0] + track[1], "progress fills from the right");
+  assert.equal(renderCard(hebrew, { width: 440, artworkDataUri: art, layout: { direction: "auto" } }), rtl);
+  assert.equal(renderCard(latin, { layout: { direction: "auto" } }), renderCard(latin));
+  assert.match(renderCard(hebrew, { width: 440, layout: { direction: "rtl", textAlign: "end" } }), /<text x="24" y="\d+" text-anchor="end" direction="rtl"[^>]*>שלום</);
+  assert.match(renderCard(hebrew, { artworkDataUri: art, layout: { direction: "rtl", artworkPosition: "left" } }), /<image [^>]*x="24"/, "an explicit side wins");
+  for (const layout of [{ direction: "RTL" }, { direction: true }]) assert.throws(() => renderCard(hebrew, { layout }), TypeError);
+});
