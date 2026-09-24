@@ -12,11 +12,11 @@ Every image below is generated from the shipped renderer by `node scripts/render
 
 ## TV episode
 
-![Card showing a TV episode, The Constant, with the series Lost and episode code S04E05](assets/cards/episode-playing.svg)
+![Card showing the series Lost as the title with the episode code S04E05 and episode title The Constant below](assets/cards/episode-playing.svg)
 
 ## Movie
 
-![Card showing the movie Spirited Away from 2001 with a progress bar](assets/cards/movie-playing.svg)
+![Card showing the film Spirited Away (2001) with a progress bar](assets/cards/movie-playing.svg)
 
 ## Paused
 
