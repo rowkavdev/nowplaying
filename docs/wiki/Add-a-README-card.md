@@ -7,11 +7,11 @@ It's off until you turn it on.
 ## Steps
 
 1. Open the nowplaying **Settings** page (tray icon, **Settings**) and find the **hosted card** section.
-2. Turn it on. nowplaying gives you your card link (a random ID that can't be traced to you) and a ready-made Markdown snippet.
+2. Turn it on. Sign in with GitHub to get one card for all your PCs at `https://nowplaying-hosted.vercel.app/u/<your-github-username>.svg`, or skip sign-in for a per-PC link with a random ID that can't be traced to you. Either way you get a ready-made Markdown snippet.
 3. Paste the snippet into your README, for example:
 
    ```markdown
-   ![Now playing](https://nowplaying-hosted.vercel.app/card.svg?id=example)
+   ![Now playing](https://nowplaying-hosted.vercel.app/u/your-github-username.svg)
    ```
 
 4. Play something on your media server. Your card updates within a few seconds.
@@ -36,4 +36,4 @@ Stop playing or close the app and the card goes back to "Not playing" within abo
 
 ## Turning it off
 
-**Disconnect** in the hosted card section deletes your card's state and device key on the service and on your PC. The old card link stops showing anything.
+**Disconnect** in the hosted card section deletes this PC's state and device key on the service and on your PC. With GitHub sign-in your other PCs keep updating the card; without it, the card link stops showing anything.

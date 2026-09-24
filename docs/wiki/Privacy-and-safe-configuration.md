@@ -20,7 +20,7 @@ Provider sign-ins and the hosted-card device key live in **Windows Credential Ma
 ## The card never exposes your server
 
 - Your media server's address, username and artwork never leave your PC. The hosted card receives only the fields your card shows, and with privacy on it only ever receives "nothing playing".
-- Your card link uses a random ID that can't be traced to your account.
+- Without GitHub sign-in, your card link uses a random ID that can't be traced to your account. With GitHub sign-in, the link is your GitHub username (it sits on your public README anyway). The card service stores your GitHub user ID, username and the names of your signed-in PCs, never your GitHub sign-in itself.
 - Never put tokens in a card URL or post a card URL with extra query strings in public.
 
 ## If a token ever leaks
