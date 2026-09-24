@@ -52,6 +52,8 @@ Write down the build number and version from the release title, for example `dev
 - [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
 - [ ] The status page lists every connected server, each with its own connection state.
 - [ ] Remove a server in Settings. It stops feeding the card and Discord; the other servers keep working.
+- [ ] Settings shows a YouTube section with a pairing code and port. "Make a new code" warns the old code stops working.
+- [ ] With the YouTube extension paired, playing a YouTube video shows it on the card and in Discord. A Short shows nothing.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
