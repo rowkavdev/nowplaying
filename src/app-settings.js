@@ -73,6 +73,8 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card ? { card } : {}),
+    // Settings changes never drop the Spotify connection (#135).
+    ...(config.spotify ? { spotify: { clientId: config.spotify.clientId, identity: config.spotify.identity } } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
 }
