@@ -35,6 +35,14 @@ $SignInErrors = @{
   expired = 'That sign-in expired. Start again.'
   too_many_signins = 'Too many sign-ins are open. Wait a minute and try again.'
 }
+$DiscordTestMessages = @{
+  connected = 'Discord is working. You should have seen a test status for a few seconds.'
+  not_running = "Discord isn't open. Start the Discord desktop app (the website won't work), then try again."
+  no_answer = "Discord is open but didn't answer. Restart the Discord app, then try again."
+  rejected = 'Discord refused the test status. Check ''Share your activity'' is on in Discord''s Activity Privacy settings.'
+  no_app_id = "This build of NowPlaying has no Discord app ID, so it can't show a status."
+  test_running = 'A test is already running. Wait a few seconds.'
+}
 $TestMessages = @{
   connected = "Connected. NowPlaying can see what you're playing."
   authentication_failed = 'Your server rejected the saved sign-in. Sign in again.'
@@ -423,6 +431,14 @@ function Show-Step {
         $startup.Name = 'startWithWindows'; $startup.Text = 'Start NowPlaying when I sign in to Windows'; $startup.AutoSize = $true; $startup.Checked = [bool]$script:Draft.startWithWindows
         $panel.Controls.Add($startup)
       }
+      # Test Discord updates its label in place, so unsaved choices stay put.
+      $discordTest = [System.Windows.Forms.Button]::new()
+      $discordTest.Name = 'discordTest'; $discordTest.AutoSize = $true; $discordTest.Text = 'Test Discord'
+      $discordTest.add_Click($onDiscordTest)
+      $panel.Controls.Add($discordTest)
+      $discordResult = New-Text ''
+      $discordResult.Name = 'discordTestResult'
+      $panel.Controls.Add($discordResult)
     }
     'review' {
       $title.Text = 'Check your choices'
@@ -492,6 +508,20 @@ $onTestConnection = {
   Show-Step
 }
 
+$onDiscordTest = {
+  $out = @($panel.Controls | Where-Object { $_.Name -eq 'discordTestResult' })[0]
+  $out.Text = 'Testing... look at your Discord status.'
+  $form.UseWaitCursor = $true
+  try {
+    $reply = try { Invoke-Setup 'POST' '/api/setup/discord-test' @{} } catch {
+      $text = $_.ErrorDetails.Message
+      if ($text) { try { $text | ConvertFrom-Json } catch { $null } } else { $null }
+    }
+    $status = [string]$reply.status
+    $out.Text = if ($DiscordTestMessages.ContainsKey($status)) { $DiscordTestMessages[$status] } else { "Couldn't test Discord. Try again." }
+  } finally { $form.UseWaitCursor = $false }
+}
+
 $onSpotifyClear = { Stop-Spotify; Send-Step 'POST' @{ action = 'clear-spotify' } }
 $onAddServer = { Send-Step 'POST' @{ action = 'add-server' } }
 $onCancelAddServer = { Send-Step 'POST' @{ action = 'cancel-add-server' } }
@@ -547,6 +577,10 @@ if ($SelfTest) {
   & $onBack
   $seen += $script:Draft.step
   & $onNext; $seen += $script:Draft.step
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'discordTest' })[0]) { throw 'discord step has no Test Discord button' }
+  & $onDiscordTest
+  $discordText = [string]@($panel.Controls | Where-Object { $_.Name -eq 'discordTestResult' })[0].Text
+  if ($discordText -ne $DiscordTestMessages['connected']) { throw "Test Discord showed: $discordText" }
   $startupBox = @($panel.Controls | Where-Object { $_.Name -eq 'startWithWindows' })[0]
   if ($null -ne $script:Draft.startWithWindows) {
     if (-not $startupBox) { throw 'discord step has no Start with Windows choice' }

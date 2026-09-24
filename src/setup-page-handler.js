@@ -75,6 +75,14 @@ const JS = `"use strict";
     user_mismatch: "Your server says this sign-in belongs to a different user. Sign in again with the account you play on."
   };
   var connectionTest = null;
+  var DISCORD_TEST_MESSAGES = {
+    connected: "Discord is working. You should have seen a test status for a few seconds.",
+    not_running: "Discord isn't open. Start the Discord desktop app (the website won't work), then try again.",
+    no_answer: "Discord is open but didn't answer. Restart the Discord app, then try again.",
+    rejected: "Discord refused the test status. Check 'Share your activity' is on in Discord's Activity Privacy settings.",
+    no_app_id: "This build of NowPlaying has no Discord app ID, so it can't show a status.",
+    test_running: "A test is already running. Wait a few seconds."
+  };
   var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
   var PREVIEWS = [["music", "Music"], ["episode", "TV episode"], ["film", "Film"]];
   var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
@@ -282,6 +290,20 @@ const JS = `"use strict";
       .then(function () { busy = false; render(); });
   }
 
+  // Updates the result in place so unsaved choices on the step stay as they are.
+  function runDiscordTest() {
+    var button = document.getElementById("discordTest");
+    var out = document.getElementById("discordTestResult");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    out.textContent = "Testing... look at your Discord status.";
+    fetch("/api/setup/discord-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then(function (response) { return response.json().catch(function () { return {}; }); })
+      .then(function (result) { out.textContent = DISCORD_TEST_MESSAGES[result.status] || "Couldn't test Discord. Try again."; })
+      .catch(function () { out.textContent = "Couldn't reach NowPlaying. Make sure it is running."; })
+      .then(function () { button.disabled = false; });
+  }
+
   function onSignInClick() {
     if (draft.provider === "plex") return startSignIn({ action: "start", provider: "plex", baseUrl: value("serverUrl") });
     if (draft.provider === "jellyfin") return startSignIn({ action: "start", provider: "jellyfin", baseUrl: value("serverUrl") });
@@ -371,6 +393,8 @@ const JS = `"use strict";
           el("select", { id: "discordIdleBehavior" }, IDLE.map(function (item) { return el("option", { value: item[0], textContent: item[1], selected: draft.discordIdleBehavior === item[0] }); })),
           el("label", {}, [el("input", { type: "checkbox", id: "discordArtworkLookup", checked: draft.discordArtworkLookup !== false }), " Look up album art online"]),
           el("p", { textContent: "Sends only the track title and artist to MusicBrainz to find the cover. Your server address and account are never sent." }),
+          el("button", { type: "button", id: "discordTest", textContent: "Test Discord" }),
+          el("p", { id: "discordTestResult", role: "status" }),
         ].concat(draft.startWithWindows === null ? [] : [
           el("label", {}, [el("input", { type: "checkbox", id: "startWithWindows", checked: draft.startWithWindows }), " Start NowPlaying when I sign in to Windows"]),
         ]);
@@ -429,6 +453,7 @@ const JS = `"use strict";
     document.getElementById("panel").addEventListener("click", function (event) {
       if (event.target && event.target.id === "signinStart") onSignInClick();
       if (event.target && event.target.id === "connectionTest") runConnectionTest();
+      if (event.target && event.target.id === "discordTest") runDiscordTest();
       if (event.target && event.target.id === "spotifyStart") startSpotify();
       if (event.target && event.target.id === "spotifyClear") send("POST", { action: "clear-spotify" });
       if (event.target && event.target.id === "addServer") send("POST", { action: "add-server" });
