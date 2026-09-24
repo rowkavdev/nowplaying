@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="500" height="134" role="img" aria-labelledby="title desc">
   <title id="title">NOT PLAYING: Nothing playing</title><desc id="desc">Media</desc>
-  
+  <defs><clipPath id="txt"><rect x="22" y="0" width="456" height="134"/></clipPath></defs>
   <rect x="0.5" y="0.5" width="499" height="133" rx="10" fill="#0d1117" stroke="#30363d"/>
   
   
   <text x="24" y="30" fill="#58a6ff" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-weight="700" letter-spacing="1.1">NOT PLAYING</text>
   
-  <text x="24" y="64" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.2">Nothing playing</text>
-  <text x="24" y="88" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500">Media</text>
+  <text x="24" y="64" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">Nothing playing</text>
+  <text x="24" y="88" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" clip-path="url(#txt)">Media</text>
   <rect x="24" y="110" width="452" height="4" rx="2" fill="#30363d"/><rect x="24" y="110" width="0" height="4" rx="2" fill="#58a6ff"/>
 </svg>
