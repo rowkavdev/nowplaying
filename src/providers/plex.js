@@ -6,6 +6,7 @@
  */
 
 import { defineProvider } from "../provider.js";
+import { optionalCount, optionalText, optionalYear } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
 
@@ -68,5 +69,12 @@ function mapSession(session) {
     artwork: imageId ? { provider: "plex", imageId, type: "thumb" } : null,
     artworkUrl: null,
     positionMs: session.viewOffset, durationMs: session.duration,
+    // Episode and movie details (#143). Plex sends parentIndex/index for the
+    // season and episode number.
+    series: kind === "episode" ? optionalText(session.grandparentTitle) : null,
+    season: kind === "episode" ? optionalCount(session.parentIndex) : null,
+    episode: kind === "episode" ? optionalCount(session.index) : null,
+    year: kind === "episode" || kind === "movie" ? optionalYear(session.year) : null,
   };
 }
+
