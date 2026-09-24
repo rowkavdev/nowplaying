@@ -144,7 +144,23 @@ export function applyServerRemoval(config, { provider, id } = {}) {
   return rewrite(config, { servers });
 }
 
-export function createAppSettingsStore({ file } = {}) {
+// On Windows, replacing config.json fails with EPERM, EACCES or EBUSY while
+// another program (antivirus, the search indexer, a backup tool) briefly has it
+// open. Retry for about a second before reporting the save as failed.
+const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_DELAYS_MS = Object.freeze([50, 100, 200, 300, 400]);
+
+async function renameWithRetry(renameFile, from, to, delays) {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return await renameFile(from, to); }
+    catch (error) {
+      if (attempt >= delays.length || !RENAME_RETRY_CODES.has(error?.code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
+export function createAppSettingsStore({ file, renameFile = rename, renameRetryDelaysMs = RENAME_RETRY_DELAYS_MS } = {}) {
   if (typeof file !== "string" || !file) throw new TypeError("file is required");
   let queue = Promise.resolve();
   async function update(apply, changes) {
@@ -153,7 +169,7 @@ export function createAppSettingsStore({ file } = {}) {
     const temporary = `${file}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       await writeFile(temporary, text, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      await rename(temporary, file);
+      await renameWithRetry(renameFile, temporary, file, renameRetryDelaysMs);
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => {});
       throw error;

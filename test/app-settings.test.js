@@ -224,3 +224,27 @@ test("lists servers without credentials and removes one, never the last (#252)",
   assert.throws(() => applyServerRemoval(one, { provider: "navidrome", id: "rowan" }), /at least one server/);
   assert.throws(() => applyServerRemoval(config, { provider: "plex", id: "x" }), /isn't in the config/);
 });
+
+test("a save retries while Windows briefly locks config.json, then gives up cleanly", async () => {
+  const locked = (code) => Object.assign(new Error(code), { code });
+  const { rename } = await import("node:fs/promises");
+  const file = await configFile();
+  let calls = 0;
+  const flaky = createAppSettingsStore({ file, renameRetryDelaysMs: [1, 1, 1], renameFile: async (from, to) => { calls += 1; if (calls <= 2) throw locked(calls === 1 ? "EPERM" : "EBUSY"); return rename(from, to); } });
+  await flaky.updateDiscord({ timestamps: "none" });
+  assert.equal(calls, 3);
+  assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "none");
+
+  let stuckCalls = 0;
+  const stuck = createAppSettingsStore({ file, renameRetryDelaysMs: [1, 1], renameFile: async () => { stuckCalls += 1; throw locked("EACCES"); } });
+  await assert.rejects(stuck.updateDiscord({ timestamps: "both" }), { code: "EACCES" });
+  assert.equal(stuckCalls, 3);
+  assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "none");
+  assert.deepEqual(await readdir(join(file, "..")), ["config.json"]);
+
+  // Other failures are not retried.
+  let otherCalls = 0;
+  const other = createAppSettingsStore({ file, renameRetryDelaysMs: [1, 1], renameFile: async () => { otherCalls += 1; throw locked("ENOSPC"); } });
+  await assert.rejects(other.updateDiscord({ timestamps: "both" }), { code: "ENOSPC" });
+  assert.equal(otherCalls, 1);
+});
