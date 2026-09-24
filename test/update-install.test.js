@@ -70,9 +70,11 @@ test("a hostile archive filename can't write outside the work folder", async () 
 
 test("if restoring the old install also fails, the error says where it is", async () => {
   const { target } = await installRoot();
-  // Fail the swap, then make the restore fail too by putting a file where the install goes.
+  // Fail the swap, then make the restore fail too by putting a non-empty
+  // folder where the install goes. A file blocker isn't enough: Windows rename
+  // replaces an existing file, so the restore would succeed there (#328).
   const renameImpl = async (from, to) => {
-    if (to === target) { await writeFile(target, "blocker"); throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); }
+    if (to === target) { await mkdir(target); await writeFile(join(target, "blocker.txt"), "blocker"); throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); }
     return rename(from, to);
   };
   await assert.rejects(installVerifiedUpdate({ update: { bytes, version: "0.2.0" }, targetDir: target, unpack: goodUnpack, renameImpl }), (error) => {
