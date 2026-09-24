@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="104" role="img" aria-labelledby="title desc">
   <title id="title">PAUSED: The Constant</title><desc id="desc">Lost · S4 E5</desc>
-  
+  <defs><clipPath id="txt"><rect x="10" y="0" width="340" height="104"/></clipPath></defs>
   <rect x="0.5" y="0.5" width="359" height="103" rx="0" fill="#0d1117" stroke="#30363d"/>
   
   
   <text x="348" y="18" text-anchor="end" fill="#58a6ff" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-weight="700" letter-spacing="1.1">PAUSED</text>
   
-  <text x="348" y="52" text-anchor="end" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="16" font-weight="700" letter-spacing="-0.2">The Constant</text>
-  <text x="348" y="74" text-anchor="end" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="12" font-weight="500">Lost · S4 E5</text>
+  <text x="348" y="52" text-anchor="end" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="16" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">The Constant</text>
+  <text x="348" y="74" text-anchor="end" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="12" font-weight="500" clip-path="url(#txt)">Lost · S4 E5</text>
   <rect x="12" y="92" width="336" height="4" rx="2" fill="#30363d"/><rect x="12" y="92" width="156" height="4" rx="2" fill="#58a6ff"/>
 </svg>

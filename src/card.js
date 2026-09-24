@@ -107,11 +107,14 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const description = subtitle || status;
   // Elapsed / total sits across from the status line when the layout is the
   // plain default, so it never collides with reordered or centred text.
-  const showTime = visibility.progress && visibility.state && !customOrder && textAlign === "start" && presence.durationMs > 0 && presence.positionMs != null;
+  // It's left out when the two wouldn't both fit (narrow cards, long films).
+  const dot = visibility.state && presence.state === "playing" && edge !== "middle";
+  const timeCandidate = presence.durationMs > 0 && presence.positionMs != null ? `${clock(presence.positionMs)} / ${clock(presence.durationMs)}` : "";
+  const timeFits = (dot ? 14 : 0) + estimateWidth(status, 11, 0.64, 1.1) + 16 + estimateWidth(timeCandidate, 11, 0.6, 0) <= contentWidth;
+  const showTime = Boolean(timeCandidate) && timeFits && visibility.progress && visibility.state && !customOrder && textAlign === "start";
   const timeX = rtl ? contentX : contentX + contentWidth;
   const timeAnchor = rtl ? "start" : "end";
-  const timeLabel = showTime ? `${clock(presence.positionMs)} / ${clock(presence.durationMs)}` : "";
-  const dot = visibility.state && presence.state === "playing" && edge !== "middle";
+  const timeLabel = showTime ? timeCandidate : "";
   const dotX = edge === "right" ? textX - 4 : textX + 4;
   const stateX = dot ? (edge === "right" ? textX - 14 : textX + 14) : textX;
   const light = luminance(palette.background) > 0.5;
@@ -119,6 +122,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const background = tintStop ? "url(#bg)" : palette.background;
   const defs = [
     tintStop ? `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${tintStop}"/><stop offset="0.75" stop-color="${palette.background}"/></linearGradient>` : "",
+    `<clipPath id="txt"><rect x="${contentX - 2}" y="0" width="${contentWidth + 4}" height="${height}"/></clipPath>`,
     hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(radius, 8)}"/></clipPath>` : "",
   ].join("");
   const font = 'font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif"';
@@ -133,8 +137,8 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
   ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="1.1">${status}</text>` : ""}
   ${showTime ? `<text x="${timeX}" y="${stateY}" text-anchor="${timeAnchor}" fill="${palette.secondary}" ${font} font-size="11" font-variant-numeric="tabular-nums">${timeLabel}</text>` : ""}
-  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="700" letter-spacing="-0.2">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
-  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="500">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
+  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">${escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
+  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="500" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
   ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
@@ -160,6 +164,9 @@ export function cardText(presence) {
   }
   return { title: presence.title || null, subtitle: presence.subtitle || null };
 }
+// Rough width of a line of text: size x per-character factor, plus spacing.
+// Generous on purpose so the check fails safe.
+function estimateWidth(text, size, factor, spacing) { return text.length * (size * factor + spacing); }
 function clock(ms) { const total = Math.floor(ms / 1000); const h = Math.floor(total / 3600); const m = Math.floor((total % 3600) / 60); const sec = pad(total % 60); return h ? `${h}:${pad(m)}:${sec}` : `${m}:${sec}`; }
 function channels(hex) { return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); }
 function luminance(hex) { const [r, g, b] = channels(hex); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; }
