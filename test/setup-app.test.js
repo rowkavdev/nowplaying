@@ -334,3 +334,70 @@ test("a draft in progress wins over the installed config", async () => {
     await app.close();
   }
 });
+
+// #141: switching provider on an installed app, and signing in again with a
+// new secret (credential rotation), both through the real setup server.
+async function rerunSetup({ configFile, draftFile, credentialStore, signIn }, steps) {
+  const app = await startSetupApp({ draftFile, configFile, credentialStore, deviceId: "device-0001", signIn });
+  const api = (path, body) => fetch(new URL(path, app.url), { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+  try { return await steps(api); } finally { await app.close(); }
+}
+
+test("setup again can switch provider and keeps the card, privacy and hosted settings (#141)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const configFile = join(dir, "config.json");
+  const card = { theme: "paper" };
+  const privacy = { redactTitles: true, hideArtwork: false, hideProgress: false, suppressMediaKinds: [] };
+  await writeFile(configFile, serializeSetupConfig({
+    servers: [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } }],
+    credentialStored: true, hostedEnabled: true, card, privacy,
+  }));
+  const saved = [];
+  const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "nd-secret" }) };
+  await rerunSetup({ configFile, draftFile: join(dir, "draft.json"), credentialStore, signIn }, async (api) => {
+    await api("/api/setup/draft", { action: "next" });
+    const [, picked] = await api("/api/setup/draft", { action: "next", changes: { provider: "navidrome" } });
+    assert.equal(picked.draft.step, "signin");
+    assert.equal(picked.draft.account, null, "the old Jellyfin account doesn't carry over to Navidrome");
+    assert.deepEqual(await api("/api/setup/draft", { action: "next" }), [409, { error: "signin_required" }]);
+    const [status] = await api("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "rowan", password: "pw-123" });
+    assert.equal(status, 200);
+    let step = "signin";
+    for (let i = 0; i < 8 && step !== "complete"; i += 1) step = (await api("/api/setup/draft", { action: "next" }))[1].draft.step;
+    assert.equal(step, "complete");
+  });
+  const after = parseAppConfig(await readFile(configFile, "utf8"));
+  assert.deepEqual(after.servers.map((server) => [server.provider, server.identity.id]), [["navidrome", "rowan"]]);
+  assert.equal(after.hosted.enabled, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(after.card)), card);
+  assert.deepEqual(JSON.parse(JSON.stringify(after.privacy)), privacy);
+  assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "rowan" }, "nd-secret"]]);
+  assert.doesNotMatch(await readFile(configFile, "utf8"), /nd-secret|pw-123/);
+});
+
+test("signing in again replaces the stored secret and leaves the config pointing at the same entry (#141)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const configFile = join(dir, "config.json");
+  await writeFile(configFile, serializeSetupConfig({
+    servers: [{ provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "Rowan" } }],
+    credentialStored: true,
+  }));
+  const before = await readFile(configFile, "utf8");
+  const vault = new Map([["navidrome/rowan", "old-secret"]]);
+  const credentialStore = { save: async (key, secret) => { vault.set(`${key.provider}/${key.identityId}`, secret); } };
+  const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "new-secret" }) };
+  await rerunSetup({ configFile, draftFile: join(dir, "draft.json"), credentialStore, signIn }, async (api) => {
+    await api("/api/setup/draft", { action: "next" });
+    await api("/api/setup/draft", { action: "next", changes: { provider: "navidrome" } });
+    const [status, body] = await api("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "rowan", password: "new-pw" });
+    assert.deepEqual([status, body.status], [200, "signed_in"]);
+    let step = "signin";
+    for (let i = 0; i < 8 && step !== "complete"; i += 1) step = (await api("/api/setup/draft", { action: "next" }))[1].draft.step;
+    assert.equal(step, "complete");
+  });
+  assert.deepEqual([...vault], [["navidrome/rowan", "new-secret"]], "one entry, now holding the new secret");
+  const after = await readFile(configFile, "utf8");
+  assert.deepEqual(parseAppConfig(after).servers[0].credentialRef, parseAppConfig(before).servers[0].credentialRef);
+  assert.doesNotMatch(after, /secret|new-pw/);
+});
