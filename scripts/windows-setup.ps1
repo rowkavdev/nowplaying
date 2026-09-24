@@ -240,7 +240,7 @@ function Show-Step {
     }
     'provider' {
       # Several servers (#252): after "Add another server" this step picks the next one.
-      $adding = ((Get-AddedServers).Count -gt 0) -and -not $script:Draft.account
+      $adding = (@(Get-AddedServers).Count -gt 0) -and -not $script:Draft.account
       $title.Text = if ($adding) { 'Which server do you want to add?' } else { 'Which media server do you use?' }
       if ($adding) { $panel.Controls.Add((New-Text ("Already added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
       $found = @($script:Discovered | Where-Object { $Providers.Contains([string]$_.provider) })
@@ -313,7 +313,7 @@ function Show-Step {
         }
         $panel.Controls.Add((New-ActionButton 'addServer' 'Add another server' $onAddServer))
       }
-      if ((Get-AddedServers).Count -gt 0) { $panel.Controls.Add((New-Text ("Also added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
+      if (@(Get-AddedServers).Count -gt 0) { $panel.Controls.Add((New-Text ("Also added: " + ((Get-AddedServers | ForEach-Object { Get-AccountLabel $_ }) -join ', ')))) }
     }
     'discord' {
       $title.Text = 'Discord status'
@@ -341,10 +341,10 @@ function Show-Step {
       $provider = if ($script:Draft.provider) { $Providers[[string]$script:Draft.provider] } else { 'Not chosen' }
       $status = if ($script:Draft.discordEnabled) { 'On' } else { 'Off' }
       $who = if ($script:Draft.account) { " as $($script:Draft.account.displayName)" } else { '' }
-      if ((Get-AddedServers).Count -gt 0) {
+      if (@(Get-AddedServers).Count -gt 0) {
         # Every added server can be removed here; the one signed in last stays.
         $panel.Controls.Add((New-Text 'Media servers:'))
-        foreach ($server in (Get-AddedServers)) {
+        foreach ($server in @(Get-AddedServers)) {
           $panel.Controls.Add((New-Text (Get-AccountLabel $server)))
           $remove = New-ActionButton 'removeServer' 'Remove' $onRemoveServer
           $remove.Tag = @{ provider = [string]$server.provider; id = [string]$server.id }
@@ -437,11 +437,11 @@ if ($SelfTest) {
   # Add another server, then change our mind: the account comes back (#252).
   if (-not @($panel.Controls | Where-Object { $_.Name -eq 'addServer' })[0]) { throw 'sign-in step has no Add another server button' }
   & $onAddServer
-  if ($script:Draft.step -ne 'provider' -or $script:Draft.account -or (Get-AddedServers).Count -ne 1) { throw 'Add another server did not keep the account and go back to the server choice' }
+  if ($script:Draft.step -ne 'provider' -or $script:Draft.account -or @(Get-AddedServers).Count -ne 1) { throw "Add another server did not keep the account and go back to the server choice (step=$($script:Draft.step) servers=$(@(Get-AddedServers).Count) $($errorLabel.Text) $script:LastError)" }
   if ($title.Text -ne 'Which server do you want to add?') { throw "add-server step title was: $($title.Text)" }
   if (-not @($panel.Controls | Where-Object { $_.Name -eq 'cancelAddServer' })[0]) { throw 'add-server step has no cancel button' }
   & $onCancelAddServer
-  if ($script:Draft.step -ne 'signin' -or -not $script:Draft.account -or (Get-AddedServers).Count -ne 0) { throw 'cancelling Add another server did not restore the account' }
+  if ($script:Draft.step -ne 'signin' -or -not $script:Draft.account -or @(Get-AddedServers).Count -ne 0) { throw "cancelling Add another server did not restore the account ($($errorLabel.Text) $script:LastError)" }
   & $onNext
   & $onBack
   $seen += $script:Draft.step
