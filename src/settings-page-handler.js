@@ -290,8 +290,10 @@ function showCard(c) {
   }
   cardChanged();
 }
+// Registered before cardChanged so a single click or arrow key leaves Auto
+// before the size is read, without relying on capture order (#480 review).
+for (const key of Object.keys(ART_AUTO)) cardField(key).addEventListener("input", () => { ART_AUTO[key] = false; });
 for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction"]) cardField(key).addEventListener("input", cardChanged);
-for (const key of Object.keys(ART_AUTO)) cardField(key).addEventListener("input", () => { ART_AUTO[key] = false; }, { capture: true });
 cardField("theme").addEventListener("change", () => {
   // Compact hides the bar by default; the others show it.
   cardField("showProgress").checked = cardField("theme").value !== "compact";
