@@ -104,3 +104,22 @@ jobs:
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$previous" "$TAG"
           } > release-notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+
+  # The tag above was created with GITHUB_TOKEN, which never starts the
+  # tag-triggered Release workflow. Dispatch it on the new tag instead (#353).
+  start-release-workflow:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Run the Release workflow on the new tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected tag: $TAG"; exit 1; }
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "Started release.yml on $TAG"
