@@ -261,6 +261,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const provider0 = safeMode ? OFFLINE_PROVIDER : multi;
   const status = createAppStatus({ config, version, build, packageType, safeMode });
   const tracked = safeMode ? provider0 : status.wrapProvider(provider0);
+  if (multi) status.setServers(() => multi.servers());
   let current = config;
   // The status page (local only) sees what's really playing; the card,
   // Discord and hosted uploads get the privacy-filtered version.

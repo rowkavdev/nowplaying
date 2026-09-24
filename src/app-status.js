@@ -15,6 +15,8 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   let provider = null;
   let discord = () => ({ enabled: false, state: "off" });
   let hosted = () => ({ enabled: false, state: "off" });
+  // Per-server rows when several servers are signed in (#252).
+  let servers = () => [];
   let lastPollAt = null;
   let lastOkAt = null;
   let failure = null;
@@ -43,6 +45,25 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   function setDiscord(read) {
     if (typeof read !== "function") throw new TypeError("discord: expected a function");
     discord = read;
+  }
+
+  function setServers(read) {
+    if (typeof read !== "function") throw new TypeError("servers: expected a function");
+    servers = read;
+  }
+
+  function serverRows() {
+    let rows;
+    try { rows = servers(); } catch { rows = []; }
+    if (!Array.isArray(rows)) return Object.freeze([]);
+    return Object.freeze(rows.map((row, index) => Object.freeze({
+      type: PROVIDER_LABELS[row?.provider] ?? word(row?.provider),
+      address: serverOrigin(config.servers?.[index]?.serverUrl),
+      user: text(row?.displayName),
+      state: word(row?.state),
+      reason: typeof row?.reason === "string" ? word(row.reason.toLowerCase()) : null,
+      lastPollAt: iso(row?.checkedAt ?? null),
+    })));
   }
 
   function setHosted(read) {
@@ -76,6 +97,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
         lastOkAt: iso(lastOkAt),
       }),
       playing: failure ? null : playing,
+      servers: serverRows(),
       discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError), ...artworkStatus(discordState?.artwork) }),
       hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: word(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedState?.lastError ? word(hostedState.lastError) : null }),
     });
@@ -114,7 +136,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     return Object.freeze({ status: health.status, action: health.action, text: trayText(health, s) });
   }
 
-  return Object.freeze({ wrapProvider, setDiscord, setHosted, refresh, snapshot, diagnostics, tray });
+  return Object.freeze({ wrapProvider, setDiscord, setHosted, setServers, refresh, snapshot, diagnostics, tray });
 }
 
 const DISCORD_OUTPUT = Object.freeze({ ready: "healthy", disconnected: "disabled", off: "disabled", no_app_id: "disabled", degraded: "failed", failed: "failed", closed: "failed" });

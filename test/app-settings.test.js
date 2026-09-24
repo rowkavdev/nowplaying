@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { applyDiscordChanges, applyHostedChanges, createAppSettingsStore, discordSettingsView, hostedSettingsView } from "../src/app-settings.js";
+import { applyDiscordChanges, applyHostedChanges, applyServerRemoval, createAppSettingsStore, serversSettingsView, discordSettingsView, hostedSettingsView } from "../src/app-settings.js";
 import { parseAppConfig, startAppFromConfig } from "../src/app-config.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 
@@ -201,4 +201,26 @@ test("settings changes keep every server in a multi-server config (#252)", () =>
   assert.deepEqual(next.servers, config.servers);
   assert.deepEqual(JSON.parse(text).servers.map((s) => s.provider), ["jellyfin", "navidrome"]);
   assert.deepEqual(applyHostedChanges(config, { enabled: true }).config.servers, config.servers);
+});
+
+test("lists servers without credentials and removes one, never the last (#252)", () => {
+  const config = parseAppConfig(serializeSetupConfig({
+    servers: [
+      { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } },
+      { provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "rowan" } },
+    ],
+    credentialStored: true,
+  }));
+  assert.deepEqual(serversSettingsView(config).map((s) => ({ ...s })), [
+    { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" },
+    { provider: "navidrome", id: "rowan", displayName: "rowan", serverUrl: "http://127.0.0.1:4533" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(serversSettingsView(config)), /credentialRef/);
+  const { config: one, text } = applyServerRemoval(config, { provider: "jellyfin", id: "u1" });
+  assert.deepEqual(one.servers.map((s) => s.provider), ["navidrome"]);
+  assert.equal(one.provider, "navidrome", "the remaining server becomes the first");
+  assert.deepEqual(JSON.parse(text).servers[0].credentialRef, { provider: "navidrome", identityId: "rowan" });
+  assert.deepEqual({ ...one.discord }, { ...config.discord });
+  assert.throws(() => applyServerRemoval(one, { provider: "navidrome", id: "rowan" }), /at least one server/);
+  assert.throws(() => applyServerRemoval(config, { provider: "plex", id: "x" }), /isn't in the config/);
 });

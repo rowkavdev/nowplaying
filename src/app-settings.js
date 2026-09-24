@@ -61,10 +61,10 @@ function checkChanges(changes, allowed, name) {
 }
 
 // serializeSetupConfig validates every value the same way setup does.
-function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card } = {}) {
+function rewrite(config, { servers = config.servers, discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card } = {}) {
   const text = serializeSetupConfig({
     // Every server is kept; settings changes never drop one (#252).
-    servers: config.servers.map(({ provider, serverUrl, identity }) => ({ provider, ...(serverUrl ? { serverUrl } : {}), identity })),
+    servers: servers.map(({ provider, serverUrl, identity }) => ({ provider, ...(serverUrl ? { serverUrl } : {}), identity })),
     credentialStored: true,
     discordEnabled: discord.enabled,
     discordIdleBehavior: discord.idleBehavior,
@@ -104,6 +104,27 @@ export function applyPrivacyChanges(config, changes) {
 export function applyCardChanges(config, changes) {
   checkChanges(changes, CARD_KEYS, "card");
   return rewrite(config, { card: normalizeCard({ ...cardSettingsView(config), ...changes }) });
+}
+
+// Media servers for the settings page (#252): who is signed in where. No
+// credentials; those stay in the credential store.
+export function serversSettingsView(config) {
+  return Object.freeze(config.servers.map((server) => Object.freeze({
+    provider: server.provider,
+    id: server.identity.id,
+    displayName: server.identity.displayName,
+    ...(server.serverUrl ? { serverUrl: server.serverUrl } : {}),
+  })));
+}
+
+// Drops one server from config.json. The last server can't be removed (the
+// app needs one to run). Deleting its saved sign-in from the credential store
+// is left to the caller, which owns the store.
+export function applyServerRemoval(config, { provider, id } = {}) {
+  const servers = config.servers.filter((server) => !(server.provider === provider && server.identity.id === id));
+  if (servers.length === config.servers.length) throw new TypeError("servers settings: that server isn't in the config");
+  if (servers.length === 0) throw new TypeError("servers settings: keep at least one server");
+  return rewrite(config, { servers });
 }
 
 export function createAppSettingsStore({ file } = {}) {
