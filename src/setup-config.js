@@ -32,7 +32,9 @@ function normalizePrivacy(value) {
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
 const CARD_NUMBERS = Object.freeze({ width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] });
 const ARTWORK_POSITIONS = new Set(["left", "right"]);
-const LAYOUT_KEYS = Object.freeze(["padding", "radius", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight"]);
+const TEXT_ALIGNS = new Set(["start", "middle", "end"]);
+const CARD_FIELDS = Object.freeze(["state", "title", "subtitle"]);
+const LAYOUT_KEYS = Object.freeze(["padding", "radius", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign"]);
 export function normalizeCard(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.card must be an object");
   const card = {};
@@ -42,6 +44,10 @@ export function normalizeCard(value) {
       if (!CARD_THEMES.has(item)) throw new TypeError("setup config.card.theme must be midnight-blue, paper or compact");
     } else if (key === "artworkPosition") {
       if (!ARTWORK_POSITIONS.has(item)) throw new TypeError("setup config.card.artworkPosition must be left or right");
+    } else if (key === "textAlign") {
+      if (!TEXT_ALIGNS.has(item)) throw new TypeError("setup config.card.textAlign must be start, middle or end");
+    } else if (key === "fieldOrder") {
+      if (!Array.isArray(item) || item.length !== 3 || new Set(item).size !== 3 || !item.every((field) => CARD_FIELDS.includes(field))) throw new TypeError("setup config.card.fieldOrder must list state, title and subtitle once each");
     } else if (key === "showProgress") {
       if (typeof item !== "boolean") throw new TypeError("setup config.card.showProgress must be a boolean");
     } else if (Object.hasOwn(CARD_NUMBERS, key)) {
@@ -50,7 +56,7 @@ export function normalizeCard(value) {
     } else {
       throw new TypeError(`setup config.card.${key} is not a setting`);
     }
-    card[key] = item;
+    card[key] = key === "fieldOrder" ? Object.freeze([...item]) : item;
   }
   return Object.freeze(card);
 }
