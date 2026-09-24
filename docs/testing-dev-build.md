@@ -54,6 +54,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Quit and reopen nowplaying. Settings > Card still shows Light and 520, and the card still looks the same.
 - [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
 - [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
+- [ ] With artwork showing, the card background picks up the cover's colour. Set `card.artworkTint` to `false` in `config.json`: the background goes back to the plain theme colour.
 - [ ] The status page lists every connected server, each with its own connection state.
 - [ ] Settings > Servers lists every server. "Add or remove servers" opens setup; remove one there, Finish, and nowplaying restarts with it gone - the other servers keep feeding the card and Discord.
 - [ ] Re-run setup and Finish without changing anything: your servers, Spotify sign-in and card, privacy and hosted settings all survive.

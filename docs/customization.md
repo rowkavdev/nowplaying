@@ -24,6 +24,8 @@ Templates support documented named presence fields. Missing values remove their 
 - `show`: booleans for artwork, media type, progress, state and subtitle;
 - `artworkDataUri`: validated, sanitized PNG/JPEG/WebP data.
 
+`card.artworkTint` (config.json only, default `true`): the card background takes a tint from the cover's dominant colour, kept in a safe lightness range so text stays readable on white or black covers. Set it to `false` in `config.json` to turn it off; settings saves keep your choice.
+
 The hosted endpoint exposes a deliberately smaller public allowlist: `theme`, `width` and comma-separated `show`. Secrets, arbitrary colors and templates never enter public query strings.
 
 Built-in palettes use color combinations selected to remain distinguishable for deuteranopia. Accessible title/description text is always emitted.
