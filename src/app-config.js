@@ -247,6 +247,8 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
     },
+    // Drops cached album art and updates Discord straight away (#154).
+    refreshArtwork: () => discord.refreshArtwork(),
     async updateHosted(changes) {
       const next = await settingsStore.updateHosted(changes);
       current = next;

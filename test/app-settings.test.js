@@ -73,6 +73,8 @@ test("the running app saves Discord settings from its own page only", async () =
     assert.equal(saved.status, 200);
     assert.deepEqual((await saved.json()).discord, { enabled: false, timestamps: "elapsed", artworkLookup: "musicbrainz" });
     assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "elapsed");
+    const refresh = await fetch(`${app.url}/api/settings/discord/refresh-artwork`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: "{}" });
+    assert.deepEqual([refresh.status, await refresh.json()], [200, { dropped: 0 }]);
     // Applied without a restart: Discord is now off.
     assert.equal(app.discord, "off");
     assert.equal((await (await fetch(`${app.url}/api/status`)).json()).discord.enabled, false);
