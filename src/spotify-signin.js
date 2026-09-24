@@ -2,13 +2,26 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { buildAuthorizeUrl, createPkcePair, exchangeCode, readCallback } from "./spotify-auth.js";
 
-// Runs one Spotify sign-in (#135): listens on 127.0.0.1 on a free port,
+// Runs one Spotify sign-in (#135) and resolves { refreshToken, identity }: listens on 127.0.0.1 on a free port,
 // opens Spotify's consent page, waits for the redirect, swaps the code for
 // tokens and closes. Spotify allows a loopback redirect registered without a
 // port, so users register http://127.0.0.1/spotify/callback once and any port
 // works. Nothing listens beyond this one sign-in, and only on loopback.
 
 const CALLBACK_PATH = "/spotify/callback";
+const PROFILE_URL = "https://api.spotify.com/v1/me";
+
+// Who signed in: id and display name need no extra scope. Setup uses this
+// for config.spotify.identity and the credential store key.
+export async function getSpotifyProfile({ accessToken, fetchImpl = fetch }) {
+  const response = await fetchImpl(PROFILE_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw Object.assign(new Error(`Spotify profile request failed: ${response.status}`), { code: "profile_failed" });
+  const body = await response.json();
+  const id = typeof body?.id === "string" && body.id.trim() ? body.id.trim() : null;
+  if (!id) throw Object.assign(new Error("Spotify returned no account ID"), { code: "profile_failed" });
+  const displayName = typeof body.display_name === "string" && body.display_name.trim() ? body.display_name.trim() : id;
+  return Object.freeze({ id, displayName });
+}
 
 function page(title, text) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head>`
@@ -43,10 +56,14 @@ export function signInToSpotify({ clientId, openUrl, fetchImpl = fetch, timeoutM
         return;
       }
       const redirectUri = `http://${host}:${server.address().port}${CALLBACK_PATH}`;
-      exchangeCode({ clientId, code, redirectUri, verifier, fetchImpl }).then((tokens) => {
+      exchangeCode({ clientId, code, redirectUri, verifier, fetchImpl }).then(async (tokens) => {
+        if (!tokens.refreshToken) throw Object.assign(new Error("Spotify returned no refresh token"), { code: "token_failed" });
+        const identity = await getSpotifyProfile({ accessToken: tokens.accessToken, fetchImpl });
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(page("Spotify connected", "You can close this tab and go back to NowPlaying."));
-        finish(null, tokens);
-      }, (error) => {
+        // Setup only needs the refresh token (for the credential store) and
+        // who signed in; the short-lived access token stays here.
+        finish(null, Object.freeze({ refreshToken: tokens.refreshToken, identity }));
+      }).catch((error) => {
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(page("Spotify not connected", "Something went wrong. Go back to NowPlaying and try again."));
         finish(error);
       });
