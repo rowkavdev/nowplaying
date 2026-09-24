@@ -8,6 +8,7 @@ import { createHttpServer } from "./http-server.js";
 import { createAppStatus } from "./app-status.js";
 import { createStatusPageHandler } from "./status-page-handler.js";
 import { createSettingsPageHandler } from "./settings-page-handler.js";
+import { createHostedDevicesClient, createHostedDevicesHandler } from "./hosted-devices.js";
 import { createLogsPageHandler } from "./logs-page-handler.js";
 import { readLogTail } from "./log-tail.js";
 import { createResilientCardResolver } from "./resilient-card.js";
@@ -427,7 +428,13 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
   const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
-  const pageHandler = createSettingsPageHandler({ settings, fallback: logsHandler });
+  // Hosted card devices on the settings page (#140).
+  const devicesHandler = createHostedDevicesHandler({
+    getClient: () => (typeof hostedCredentials?.load === "function" ? createHostedDevicesClient({ baseUrl: current.hosted?.url ?? DEFAULT_HOSTED_URL, credentials: hostedCredentials, fetchImpl }) : null),
+    onSignedOut: () => settings.disconnectHosted(),
+    fallback: logsHandler,
+  });
+  const pageHandler = createSettingsPageHandler({ settings, fallback: devicesHandler });
   const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.

@@ -5,6 +5,7 @@
 // sets, from the app's own origin.
 
 import { normalizeCard } from "./setup-config.js";
+import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -136,6 +137,13 @@ const PAGE = `<!doctype html>
 <p><button type="submit" id="hosted-save">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+<!-- Hosted card devices (#140): markup only; script and route live in src/hosted-devices.js. -->
+<section id="hosted-devices" aria-labelledby="h-hosted-devices" hidden><h2 id="h-hosted-devices">Hosted card devices</h2>
+<p class="hint">PCs signed in as <strong id="hosted-devices-login">-</strong> that update your card. The one playing shows on the card.</p>
+<ul id="hosted-devices-list" class="plain"></ul>
+<p><button type="button" id="hosted-devices-everywhere">Sign out everywhere</button> <span id="hosted-devices-result" role="status" aria-live="polite"></span></p>
+</section>
+<!-- /Hosted card devices -->
 </main><script src="/settings.js"></script></body></html>
 `;
 
@@ -540,7 +548,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   const assets = {
     "/settings": { body: PAGE, type: "text/html; charset=utf-8", page: true },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
-    "/settings.js": { body: SCRIPT, type: "text/javascript; charset=utf-8" },
+    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}`, type: "text/javascript; charset=utf-8" },
   };
   const read = async () => {
     const value = await settings.read();
