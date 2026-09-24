@@ -112,7 +112,7 @@ const JS = `"use strict";
   // Provider-specific sign-in help (#141) for the username and password providers.
   var SIGNIN_HELP = {
     emby: "Sign in as the Emby user whose playback you want to show, with the username and password you use in the Emby app. NowPlaying saves the sign-in Emby hands back, not your password.",
-    navidrome: "Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted hash of it, not your password.",
+    navidrome: "Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted token made from it, not your password.",
   };
   var IDLE = [["clear", "Clear my status"], ["grace", "Keep it for a short grace period"], ["show", "Show that nothing is playing"], ["recent", "Show what I played last"]];
   var draft = null;

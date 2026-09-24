@@ -76,7 +76,7 @@ $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; na
 # Provider-specific sign-in help (#141), same wording as the browser page.
 $SignInHelp = @{
   emby = 'Sign in as the Emby user whose playback you want to show, with the username and password you use in the Emby app. NowPlaying saves the sign-in Emby hands back, not your password.'
-  navidrome = 'Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted hash of it, not your password.'
+  navidrome = 'Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted token made from it, not your password.'
 }
 # Card hosting step (#140), same choices and wording as the browser page.
 $Hosting = [ordered]@{ off = 'Not now'; hosted = "NowPlaying's hosted service"; self = 'My own card service (self-hosted)' }
