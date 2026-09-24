@@ -20,7 +20,8 @@ const PAGE = `<!doctype html>
 <p><img id="card" src="/card.svg" alt="Your now playing card" width="480"></p></section>
 <section aria-labelledby="h-help"><h2 id="h-help">Reporting a problem</h2>
 <p>Copies a short report with your version, server type and connection state. It leaves out your server address, user name, what you're playing and any sign-in details.</p>
-<p><button type="button" id="copy-diagnostics">Copy diagnostics</button> <a href="/api/diagnostics" download="nowplaying-diagnostics.json">Download</a> <span id="copy-result" role="status" aria-live="polite"></span></p></section>
+<p><button type="button" id="copy-diagnostics">Copy diagnostics</button> <a href="/api/diagnostics" download="nowplaying-diagnostics.json">Download</a> <span id="copy-result" role="status" aria-live="polite"></span></p>
+<details id="diagnostics-details"><summary>See exactly what's in the report</summary><pre id="diagnostics-preview">Loading...</pre></details></section>
 <footer><p>Version <span id="version">-</span><span id="build"></span></p></footer>
 </main><script src="/status.js"></script></body></html>
 `;
@@ -29,6 +30,7 @@ const PAGE = `<!doctype html>
 // the owner is deuteranopic. The words carry the meaning; colour only helps.
 const CSS = `body{font:15px/1.5 "Segoe UI",system-ui,sans-serif;margin:0;background:#f6f6f8;color:#1b1b1f}
 main{max-width:640px;margin:0 auto;padding:24px}
+pre{background:#fff;border:1px solid #d0d0d7;padding:8px;overflow:auto;font-size:13px;max-height:320px}
 nav{display:flex;gap:16px;margin-bottom:8px}nav a{color:inherit}nav [aria-current]{font-weight:600}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}
 section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;margin:16px 0}
@@ -94,6 +96,18 @@ document.getElementById("copy-diagnostics").addEventListener("click", async () =
     set("copy-result", "Copied. Paste it into your bug report.", "ok");
   } catch {
     set("copy-result", "Couldn't copy. Use Download instead.", "bad");
+  }
+});
+// Shows the exact report before anyone copies or downloads it (#141).
+document.getElementById("diagnostics-details").addEventListener("toggle", async (event) => {
+  if (!event.target.open) return;
+  const out = document.getElementById("diagnostics-preview");
+  try {
+    const res = await fetch("/api/diagnostics", { cache: "no-store", headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(String(res.status));
+    out.textContent = JSON.stringify(await res.json(), null, 2);
+  } catch {
+    out.textContent = "Couldn't load the report. Reload this page and try again.";
   }
 });
 load();
