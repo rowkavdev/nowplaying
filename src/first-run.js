@@ -24,3 +24,22 @@ export function parseStartArgs(args = []) {
   if (positional.length > 1) throw new TypeError("start takes at most one config module");
   return Object.freeze({ module: positional[0] ?? null, setup: !flags.has("--no-setup"), tray: !flags.has("--no-tray") });
 }
+
+// First launch in the browser (#271): open the local setup page once in the
+// default browser, then wait until setup writes the config (or give up after
+// timeoutMs). Resolves true once the page was opened, like runSetup above;
+// ensureConfigured then checks whether the config exists. The short grace
+// period lets the page show its "done" state before the setup server closes.
+export async function runBrowserSetup({ url, openUrl, configExists, timeoutMs = 30 * 60_000, pollMs = 1000, graceMs = 2000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now } = {}) {
+  if (typeof url !== "string" || typeof openUrl !== "function" || typeof configExists !== "function") throw new TypeError("url, openUrl and configExists are required");
+  openUrl(url);
+  const deadline = now() + timeoutMs;
+  while (now() < deadline) {
+    if (await configExists()) {
+      await sleep(graceMs);
+      return true;
+    }
+    await sleep(pollMs);
+  }
+  return true;
+}

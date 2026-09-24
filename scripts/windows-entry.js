@@ -9,7 +9,7 @@ import { createHostedCredentials } from "../src/hosted-credentials.js";
 import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
-import { ensureConfigured, parseStartArgs } from "../src/first-run.js";
+import { ensureConfigured, parseStartArgs, runBrowserSetup } from "../src/first-run.js";
 import { runTraySession } from "../src/tray-session.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
@@ -39,7 +39,9 @@ if (command === "--version" || command === "version") {
     // --no-setup` (scripts, CI) keeps the plain "run setup" message.
     if (!legacyModule && startArgs.setup && process.platform === "win32" && !existsSync(configFile)) {
       console.log("NowPlaying isn't set up yet. Opening setup...");
-      const outcome = await ensureConfigured({ configExists: () => existsSync(configFile), runSetup: () => openSetupWindow() });
+      // The setup page opens in the default browser; the native window is the
+      // fallback if the browser can't be started.
+      const outcome = await ensureConfigured({ configExists: () => existsSync(configFile), runSetup: () => openSetupInBrowser(configFile).catch(() => openSetupWindow()) });
       await logger.event("startup", "first_run_setup", { code: outcome });
     }
     if (legacyModule) {
@@ -127,6 +129,17 @@ async function startSetup() {
     ? createWindowsStartup({ appData: process.env.APPDATA, exePath: launcher })
     : undefined;
   return startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup });
+}
+
+// First launch: opens the setup page in the default browser and resolves
+// once setup has written the config (or timed out waiting).
+async function openSetupInBrowser(configFile) {
+  const setup = await startSetup();
+  try {
+    return await runBrowserSetup({ url: setup.url, openUrl: (url) => openSetupUrl(url), configExists: () => existsSync(configFile) });
+  } finally {
+    await setup.close();
+  }
 }
 
 // Shows the native setup window and resolves true once it closes normally.
