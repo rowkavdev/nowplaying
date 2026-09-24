@@ -1,6 +1,6 @@
 # Testing a dev build
 
-Every merge to `main` updates one moving pre-release, [`dev`](https://github.com/rowkav09/nowplaying/releases/tag/dev). Use this checklist to test it on a clean Windows machine (a fresh VM or Windows Sandbox works) before a release.
+Every merge to `main` updates one moving pre-release, [`dev`](https://github.com/rowkavdev/nowplaying/releases/tag/dev). Use this checklist to test it on a clean Windows machine (a fresh VM or Windows Sandbox works) before a release.
 
 Write down the build number and version from the release title, for example `dev build #77 (0.1.1-dev+c2a6b9e)`.
 

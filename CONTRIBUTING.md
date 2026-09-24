@@ -4,7 +4,7 @@ Thanks for helping build `nowplaying`. The project is in private early developme
 
 ## Before you start
 
-- Search [existing issues](https://github.com/rowkav09/nowplaying/issues) before opening another.
+- Search [existing issues](https://github.com/rowkavdev/nowplaying/issues) before opening another.
 - Use a focused issue for a behavior change or sizable documentation task.
 - Keep pull requests small. One provider, output behavior, validation rule or document is usually enough.
 - Discuss large architecture changes before writing them.
@@ -21,7 +21,7 @@ Requirements:
 - Git
 
 ```bash
-git clone https://github.com/rowkav09/nowplaying.git
+git clone https://github.com/rowkavdev/nowplaying.git
 cd nowplaying
 npm install
 npm run check

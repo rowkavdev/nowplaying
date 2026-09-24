@@ -38,7 +38,7 @@ curl --head 'https://cards.example/card.svg'
 
 The current response includes `ETag` and `Cache-Control`. A `304 Not Modified` response means the client revalidated the same card. A `200 OK` with a new `ETag` means the origin changed. GitHub fetches README images through its Camo proxy, so an origin change may still take time to appear in a README.
 
-Do not add tokens, usernames, media titles, private URLs or random cache-busting values to a public card URL. Query strings are logged by browsers, proxies and hosting platforms. Keep the documented card URL stable and wait for GitHub's cache to revalidate. Planned privacy-safe cache-state and data-age headers are tracked in [#118](https://github.com/rowkav09/nowplaying/issues/118).
+Do not add tokens, usernames, media titles, private URLs or random cache-busting values to a public card URL. Query strings are logged by browsers, proxies and hosting platforms. Keep the documented card URL stable and wait for GitHub's cache to revalidate. Planned privacy-safe cache-state and data-age headers are tracked in [#118](https://github.com/rowkavdev/nowplaying/issues/118).
 
 ## No active session appears
 

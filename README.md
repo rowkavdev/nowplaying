@@ -50,7 +50,7 @@ Never expose media-server credentials in README URLs, browser code, logs or publ
 ## Development
 
 ```sh
-git clone https://github.com/rowkav09/nowplaying.git
+git clone https://github.com/rowkavdev/nowplaying.git
 cd nowplaying
 npm ci
 npm test
@@ -129,7 +129,7 @@ Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
 Once the repository is public, builds also get GitHub build provenance, a signed record of which workflow and commit produced each file. Check it with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
-gh attestation verify nowplaying-dev-windows-x64-setup.exe --repo rowkav09/nowplaying
+gh attestation verify nowplaying-dev-windows-x64-setup.exe --repo rowkavdev/nowplaying
 ```
 
 The builds are not code-signed yet, so Windows may still show a SmartScreen warning.

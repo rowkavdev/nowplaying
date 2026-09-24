@@ -13,7 +13,7 @@ Requirements:
 - a least-privilege provider credential
 
 ```bash
-git clone https://github.com/rowkav09/nowplaying.git
+git clone https://github.com/rowkavdev/nowplaying.git
 cd nowplaying
 npm install
 npm run check
@@ -169,7 +169,7 @@ Alert on repeated authentication failure, sustained polling failure, stale card 
 
 ## Upgrades and rollback
 
-Versioned deployment begins after issue [#28](https://github.com/rowkav09/nowplaying/issues/28) lands.
+Versioned deployment begins after issue [#28](https://github.com/rowkavdev/nowplaying/issues/28) lands.
 
 The release flow should produce immutable artifacts and checksums. A deployment should:
 
