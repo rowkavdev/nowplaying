@@ -8,6 +8,7 @@ import { serializeSetupConfig } from "./setup-config.js";
 // step (temp file + rename) so a crash never leaves half a file.
 
 const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup"]);
+const HOSTED_KEYS = new Set(["enabled"]);
 
 export function discordSettingsView(config) {
   return Object.freeze({
@@ -17,33 +18,49 @@ export function discordSettingsView(config) {
   });
 }
 
-export function applyDiscordChanges(config, changes) {
-  if (!changes || typeof changes !== "object" || Array.isArray(changes)) throw new TypeError("discord settings: expected an object");
+export function hostedSettingsView(config) {
+  return Object.freeze({ enabled: config.hosted?.enabled === true });
+}
+
+function checkChanges(changes, allowed, name) {
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)) throw new TypeError(`${name} settings: expected an object`);
   const keys = Object.keys(changes);
-  if (!keys.length || keys.some((key) => !DISCORD_KEYS.has(key))) throw new TypeError("discord settings: unknown setting");
-  const current = discordSettingsView(config);
-  const next = { ...current, ...changes };
-  // serializeSetupConfig validates every value the same way setup does.
+  if (!keys.length || keys.some((key) => !allowed.has(key))) throw new TypeError(`${name} settings: unknown setting`);
+}
+
+// serializeSetupConfig validates every value the same way setup does.
+function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted } = {}) {
   const text = serializeSetupConfig({
     provider: config.provider,
     ...(config.serverUrl ? { serverUrl: config.serverUrl } : {}),
     identity: config.identity,
     credentialStored: true,
-    discordEnabled: next.enabled,
+    discordEnabled: discord.enabled,
     discordIdleBehavior: config.discord?.idleBehavior,
-    discordArtworkLookup: next.artworkLookup,
-    discordTimestamps: next.timestamps,
-    ...(config.hosted ? { hostedEnabled: config.hosted.enabled, ...(config.hosted.url ? { hostedUrl: config.hosted.url } : {}) } : {}),
+    discordArtworkLookup: discord.artworkLookup,
+    discordTimestamps: discord.timestamps,
+    ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
+}
+
+export function applyDiscordChanges(config, changes) {
+  checkChanges(changes, DISCORD_KEYS, "discord");
+  return rewrite(config, { discord: { ...discordSettingsView(config), ...changes } });
+}
+
+// Only on/off: the service address stays whatever setup or config.json says.
+export function applyHostedChanges(config, changes) {
+  checkChanges(changes, HOSTED_KEYS, "hosted");
+  return rewrite(config, { hosted: { ...(config.hosted ?? {}), enabled: changes.enabled } });
 }
 
 export function createAppSettingsStore({ file } = {}) {
   if (typeof file !== "string" || !file) throw new TypeError("file is required");
   let queue = Promise.resolve();
-  async function updateDiscord(changes) {
+  async function update(apply, changes) {
     const current = parseAppConfig(await readFile(file, "utf8"));
-    const { text, config } = applyDiscordChanges(current, changes);
+    const { text, config } = apply(current, changes);
     const temporary = `${file}.${randomBytes(6).toString("hex")}.tmp`;
     try {
       await writeFile(temporary, text, { encoding: "utf8", mode: 0o600, flag: "wx" });
@@ -54,12 +71,14 @@ export function createAppSettingsStore({ file } = {}) {
     }
     return config;
   }
+  function queued(task) {
+    const run = queue.then(task);
+    queue = run.catch(() => {});
+    return run;
+  }
   return Object.freeze({
     // One write at a time: two quick saves never race each other.
-    updateDiscord(changes) {
-      const run = queue.then(() => updateDiscord(changes));
-      queue = run.catch(() => {});
-      return run;
-    },
+    updateDiscord: (changes) => queued(() => update(applyDiscordChanges, changes)),
+    updateHosted: (changes) => queued(() => update(applyHostedChanges, changes)),
   });
 }

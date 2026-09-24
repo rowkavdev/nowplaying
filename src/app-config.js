@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createAppSettingsStore, discordSettingsView } from "./app-settings.js";
+import { createAppSettingsStore, discordSettingsView, hostedSettingsView } from "./app-settings.js";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
@@ -174,7 +174,7 @@ export function startHostedFromConfig(config, provider, { credentials, fetchImpl
   const uploader = createUploader({ baseUrl: config.hosted.url ?? DEFAULT_HOSTED_URL, credentials, fetchImpl, settings });
   const loop = createHostedLoop({ getPresence: () => provider.getPresence(), uploader, ...(intervalMs ? { intervalMs } : {}) });
   loop.start();
-  return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status() });
+  return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status(), disconnect: () => uploader.disconnect() });
 }
 
 // 3000 clashes with most dev servers, so the local app uses a rarely used port.
@@ -208,6 +208,13 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // stay off until the user retries a normal start, even if Discord settings
   // are changed from the settings page meanwhile.
   const paused = Object.freeze({ status: "safe_mode", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  const offHosted = Object.freeze({ status: "off", stop: async () => {}, cardUrl: async () => null, connection: () => null });
+  let hosted = offHosted;
+  const launchHosted = (settings) => {
+    if (safeMode) return paused;
+    try { return startHostedFromConfig(settings, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions }); }
+    catch { return Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null }); }
+  };
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
     try { return startDiscordFromConfig(settings, provider, discordOptions); }
@@ -216,13 +223,37 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // Discord changes from the settings page are saved to config.json first,
   // then the Discord loop restarts with them; no app restart needed.
   const settingsStore = createAppSettingsStore({ file: configFile });
+  // Hosted card on/off works the same way. Disconnect revokes this PC's device
+  // key on the service, deletes it from Credential Manager and turns upload off.
+  const hostedView = async () => {
+    const view = { ...hostedSettingsView(current), state: hosted.status, lastSuccessAt: null, error: null, cardUrl: null };
+    if (hosted.status !== "on") return view;
+    const connection = hosted.connection() ?? {};
+    let cardUrl = null;
+    try { cardUrl = await hosted.cardUrl(); } catch { cardUrl = null; }
+    return { ...view, state: connection.state ?? "idle", lastSuccessAt: connection.lastSuccessAt ? new Date(connection.lastSuccessAt).toISOString() : null, error: connection.lastError ?? null, cardUrl };
+  };
   const settings = Object.freeze({
-    read: () => ({ discord: discordSettingsView(current) }),
+    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView() }),
     async updateDiscord(changes) {
       const next = await settingsStore.updateDiscord(changes);
       current = next;
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
+    },
+    async updateHosted(changes) {
+      const next = await settingsStore.updateHosted(changes);
+      current = next;
+      await hosted.stop().catch(() => {});
+      hosted = launchHosted(next);
+    },
+    async disconnectHosted() {
+      const running = hosted;
+      await running.stop().catch(() => {});
+      hosted = offHosted;
+      if (typeof running.disconnect === "function") await running.disconnect();
+      else if (typeof hostedCredentials?.load === "function") await createHostedUploader({ baseUrl: current.hosted?.url ?? DEFAULT_HOSTED_URL, credentials: hostedCredentials, fetchImpl }).disconnect();
+      if (current.hosted?.enabled) current = await settingsStore.updateHosted({ enabled: false });
     },
   });
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
@@ -244,12 +275,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   status.setDiscord(() => discord.status === "on"
     ? { enabled: true, ...discord.connection() }
     : { enabled: discord.status !== "off", state: discord.status });
-  let hosted;
-  try {
-    hosted = safeMode ? paused : startHostedFromConfig(config, provider, { credentials: hostedCredentials, fetchImpl, ...hostedOptions });
-  } catch {
-    hosted = Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null });
-  }
+  hosted = launchHosted(config);
   status.setHosted(() => hosted.status === "on"
     ? { enabled: true, ...hosted.connection() }
     : { enabled: hosted.status !== "off", state: hosted.status });
@@ -258,7 +284,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, hosted: hosted.status, hostedCardUrl: () => hosted.cardUrl(), safeMode, status, close });
+  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), safeMode, status, close });
 }
 
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
