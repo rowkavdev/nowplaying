@@ -31,6 +31,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Play something. `http://127.0.0.1:47832/card.svg` shows it.
 - [ ] With the Discord desktop app open, your status shows NowPlaying with what's playing.
 - [ ] With Spotify signed in, play music or a podcast in any Spotify app: the card and hosted card show it and Discord does not. "Disconnect Spotify" in setup unlinks it.
+- [ ] With a media server and Spotify both playing, the card shows whichever started most recently, and Discord keeps showing the media server.
 - [ ] Stop playback. The status follows the idle behaviour you picked (clear, clear after a short wait, "Nothing playing", or the last item).
 - [ ] Quit and reopen Discord. The status comes back without restarting nowplaying.
 

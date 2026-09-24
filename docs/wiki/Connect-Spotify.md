@@ -36,6 +36,7 @@ To unlink later, use **Disconnect Spotify** in the same section.
 
 - The permission is read-only: what's playing right now, nothing else. nowplaying can't control playback, see your library or change anything.
 - Podcast episodes show as Listening with the show name.
+- When a media server and Spotify are both playing, the card shows whichever started most recently. Discord only ever shows the media server, never Spotify.
 - Spotify doesn't report TV or movies, and a private session counts as nothing playing.
 
 ## Common problems
