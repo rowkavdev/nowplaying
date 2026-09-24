@@ -94,3 +94,12 @@ test("runNativeSetup launches hidden PowerShell with the probe flags only when a
   assert.ok(calls[1].args.includes("-VisibilityProbe") && !calls[1].args.includes("-ProbeWithoutShowFix"));
   assert.ok(!calls[2].args.includes("-ProbeWithoutShowFix"), "the unfixed probe needs visibilityProbe too");
 });
+
+test("the native window scales every size with the display DPI and keeps red out of its palette (#141)", async () => {
+  const ps1 = await readFile(new URL("../scripts/windows-setup.ps1", import.meta.url), "utf8");
+  assert.match(ps1, /SetProcessDPIAware\(\)/);
+  assert.match(ps1, /\$form\.AutoScaleMode = 'None'/);
+  assert.doesNotMatch(ps1, /(SetBounds|Size\]::new|Padding\]::new)\(\s*\d/, "every size goes through Px");
+  assert.doesNotMatch(ps1, /\.Width = \d/);
+  assert.doesNotMatch(ps1, /Color\]::(Red|Firebrick|DarkRed|Crimson|Green|LimeGreen|DarkGreen|ForestGreen)\b/);
+});
