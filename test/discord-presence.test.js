@@ -141,3 +141,21 @@ test("uses the saved timer setting", async () => {
   assert.equal(client.calls[0].endTimestamp, undefined);
   assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => playing, timestamps: "forever" }), TypeError);
 });
+
+test("refreshArtwork drops cached covers and republishes straight away", async () => {
+  const sets = [];
+  let clears = 0;
+  let resolves = 0;
+  const artwork = { resolve: async () => { resolves += 1; return { image: "https://images.example.com/cover.jpg", strategy: "lookup" }; }, clear: () => { clears += 1; return 3; } };
+  const transport = { connect: async () => {}, setActivity: async (a) => sets.push(a), clearActivity: async () => {}, close: async () => {} };
+  const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, { getPresence: async () => playing }, {
+    env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport, createArtwork: () => artwork, intervalMs: 60_000,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const before = resolves;
+  assert.equal(await d.refreshArtwork(), 3);
+  assert.equal(clears, 1);
+  assert.equal(resolves, before + 1);
+  await d.stop();
+  assert.equal(await startDiscordFromConfig({ discord: { enabled: false } }, { getPresence: async () => playing }, { env: {} }).refreshArtwork(), 0);
+});

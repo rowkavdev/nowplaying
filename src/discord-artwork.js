@@ -151,7 +151,16 @@ export function createDiscordArtworkResolver({
     return finish({ ...entry, cached: false });
   }
 
-  return Object.freeze({ resolve, status: () => last, size: () => cache.size });
+  // Manual refresh (#154): drop every cached cover and miss so the next
+  // update looks artwork up again. Returns how many entries were dropped.
+  function clear() {
+    const dropped = cache.size;
+    cache.clear();
+    last = Object.freeze({ strategy: "none", failure: null });
+    return dropped;
+  }
+
+  return Object.freeze({ resolve, clear, status: () => last, size: () => cache.size });
 }
 
 

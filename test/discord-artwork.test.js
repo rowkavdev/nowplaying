@@ -117,3 +117,17 @@ test("video and motion artwork is never sent to Discord", async () => {
   const result = await createDiscordArtworkResolver().resolve({ title: "Song", artworkUrl: "https://cdn.example.com/cover.m3u8" });
   assert.deepEqual([result.image, result.strategy, result.failure], [FALLBACK_ARTWORK_URL, "fallback", "unsupported_format"]);
 });
+
+test("clear() forgets cached covers and misses so the next update looks again", async () => {
+  let calls = 0;
+  const resolver = createDiscordArtworkResolver({ metadataLookup: true, lookup: async () => { calls += 1; return null; } });
+  const track = { kind: "track", title: "Song", artist: "Band" };
+  await resolver.resolve(track);
+  assert.equal((await resolver.resolve(track)).cached, true);
+  assert.equal(calls, 1);
+  assert.equal(resolver.clear(), 1);
+  assert.equal(resolver.size(), 0);
+  assert.deepEqual(resolver.status(), { strategy: "none", failure: null });
+  assert.equal((await resolver.resolve(track)).cached, false);
+  assert.equal(calls, 2);
+});
