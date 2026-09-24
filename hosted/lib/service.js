@@ -127,5 +127,14 @@ export function createService({ redis, now = () => Date.now() } = {}) {
     return { state: stored.state, kind: stored.kind, title: stored.title, subtitle: stored.subtitle, positionMs, durationMs: stored.durationMs };
   }
 
-  return { register, ingest, revoke, readCardState };
+  // Public total for the README badge: how many card requests the service has
+  // answered. One aggregate number, nothing per card or per device.
+  async function readRequestCount() {
+    const raw = await cmd("GET", "np:stats:cards_rendered");
+    const count = raw === null ? 0 : Number(raw);
+    if (!Number.isSafeInteger(count) || count < 0) throw new ServiceError(503, "unavailable");
+    return count;
+  }
+
+  return { register, ingest, revoke, readCardState, readRequestCount };
 }
