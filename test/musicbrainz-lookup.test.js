@@ -74,3 +74,16 @@ test("never guesses from a title alone", async () => {
   for (const artist of [undefined, "", "   ", 5]) assert.equal(await lookup({ title: "Teardrop", artist }), null);
   assert.equal(calls, 0);
 });
+
+test("a MusicBrainz reply that stalls mid-body fails at the deadline instead of hanging", async () => {
+  const fetchImpl = async (url, init) => ({
+    ok: true, status: 200,
+    // Headers arrived; the body never finishes until the request is aborted.
+    json: () => new Promise((_, reject) => {
+      const alive = setTimeout(() => {}, 5_000);
+      init.signal.addEventListener("abort", () => { clearTimeout(alive); reject(new Error("aborted")); });
+    }),
+  });
+  const lookup = createMusicBrainzLookup({ fetchImpl, timeoutMs: 30, minIntervalMs: 0 });
+  await assert.rejects(lookup({ title: "Song", artist: "Band" }), /aborted/);
+});

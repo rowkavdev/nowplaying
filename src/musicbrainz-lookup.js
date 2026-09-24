@@ -25,10 +25,12 @@ export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgen
       const wait = lastRequestAt + minIntervalMs - now();
       if (wait > 0) await sleep(wait);
       lastRequestAt = now();
+      // The deadline covers reading the body too: clearing it once headers
+      // arrive let a reply that stalls mid-body hang the lookup, and with it
+      // Discord artwork for that track. Aborting a finished request is a no-op.
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try { return await fetchImpl(url, { ...init, signal: controller.signal, headers: { "User-Agent": userAgent, Accept: "application/json" } }); }
-      finally { clearTimeout(timer); }
+      setTimeout(() => controller.abort(), timeoutMs).unref?.();
+      return fetchImpl(url, { ...init, signal: controller.signal, headers: { "User-Agent": userAgent, Accept: "application/json" } });
     });
     queue = run.catch(() => {});
     return run;
