@@ -28,6 +28,7 @@ nowplaying's privacy-safe Windows log lives at `%LOCALAPPDATA%\nowplaying\logs\n
 - Confirm `/healthz` responds before testing `/card.svg`.
 - Open the card URL directly. A fresh card there means the origin is working, even if a README still shows an older image.
 - Check provider connectivity and credentials. The card can serve the last known good state during a short provider outage.
+- If the media server is down or refuses the sign-in, nowplaying waits before asking again: 5 seconds, then doubling up to 2 minutes, with a little random spread. The status page shows `unreachable` or `authentication_failed` in the meantime. It picks up again on the first poll after the server is back, so allow up to 2 minutes.
 - Confirm the process can write its local state directory.
 - Inspect the card response without saving private data:
 
