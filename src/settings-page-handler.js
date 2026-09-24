@@ -109,6 +109,13 @@ const PAGE = `<!doctype html>
 <p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+<section id="youtube-section" aria-labelledby="h-youtube" hidden><h2 id="h-youtube">YouTube</h2>
+<p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
+<dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
+<dt>Port</dt><dd><code id="youtube-port">-</code></dd></dl>
+<p class="row"><button type="button" id="youtube-show" aria-pressed="false">Show code</button> <button type="button" id="youtube-copy">Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
+<p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
+</section>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
@@ -134,6 +141,7 @@ fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color
 input[type=number]{font:inherit;width:6em;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 input[type=range]{width:180px;accent-color:#0b5cad}output{min-width:3.5em;font-variant-numeric:tabular-nums;color:#555}.unit{color:#555;font-size:13px}
 .preview{margin:4px 0 12px;padding:12px;border:1px dashed #bbb;border-radius:6px;overflow-x:auto}.preview-label{margin:0 0 8px;color:#555;font-size:13px}.preview img{display:block;max-width:100%;height:auto}
+code.secret{letter-spacing:.05em}
 dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}button[disabled]{opacity:.6;cursor:default}
 @media (max-width:520px){.row label[for]{flex-basis:100%;min-width:0}}
 @media (prefers-color-scheme:dark){select,input[type=number]{background:#2c2c31;border-color:#555}.row label[for],.hint,legend,output,.unit,.preview-label{color:#aaa}input[type=range]{accent-color:#7ab8ff}.preview{border-color:#555}}
@@ -286,6 +294,62 @@ card.form.addEventListener("submit", async (event) => {
     card.save.disabled = false;
   }
 });
+// YouTube extension pairing (#136). The code is fetched with POST so the
+// session check applies; it stays hidden until "Show code".
+const youtube = { section: document.getElementById("youtube-section"), code: document.getElementById("youtube-token"), show: document.getElementById("youtube-show"), token: "", shown: false };
+function youtubeSay(text, tone) { const el = document.getElementById("youtube-result"); el.textContent = text; el.className = tone || ""; }
+function youtubeRender() {
+  youtube.code.textContent = youtube.shown ? youtube.token : "\u2022".repeat(16);
+  youtube.code.className = youtube.shown ? "" : "secret";
+  youtube.show.textContent = youtube.shown ? "Hide code" : "Show code";
+  youtube.show.setAttribute("aria-pressed", String(youtube.shown));
+}
+async function youtubeFetch(path) {
+  const res = await fetch(path, { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: "{}" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(String(res.status));
+  const body = await res.json();
+  if (typeof body.token !== "string" || !body.token) throw new Error("no token");
+  return body.token;
+}
+async function loadYouTube() {
+  try {
+    const token = await youtubeFetch("/api/settings/youtube/pairing");
+    // 404: the bridge is off (safe mode), so there's nothing to pair with.
+    if (token === null) { youtube.section.hidden = true; return; }
+    youtube.token = token;
+    document.getElementById("youtube-port").textContent = location.port || (location.protocol === "https:" ? "443" : "80");
+    youtube.section.hidden = false;
+    youtubeRender();
+  } catch {
+    youtube.section.hidden = false;
+    youtubeSay("Can't load the pairing code. Reload the page to try again.", "bad");
+  }
+}
+youtube.show.addEventListener("click", () => { youtube.shown = !youtube.shown; youtubeRender(); });
+document.getElementById("youtube-copy").addEventListener("click", async () => {
+  if (!youtube.token) return;
+  try { await navigator.clipboard.writeText(youtube.token); youtubeSay("Copied. Paste it into the extension's options page.", "ok"); }
+  catch { youtubeSay("Couldn't copy. Press Show code and copy it by hand.", "bad"); }
+});
+document.getElementById("youtube-reset").addEventListener("click", async (event) => {
+  if (!confirm("Make a new pairing code? The old code stops working straight away, and the extension stops sending until you paste the new one.")) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  youtubeSay("Making a new code...", "warn");
+  try {
+    const token = await youtubeFetch("/api/settings/youtube/pairing/reset");
+    if (token === null) throw new Error("off");
+    youtube.token = token;
+    youtubeRender();
+    youtubeSay("New code made. The old one no longer works. Paste this one into the extension.", "ok");
+  } catch {
+    youtubeSay("Couldn't make a new code. Reload the page to see which code is current.", "bad");
+  } finally {
+    button.disabled = false;
+  }
+});
+loadYouTube();
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
 function startupSay(text, tone) { const el = document.getElementById("startup-result"); el.textContent = text; el.className = tone || ""; }
 function showStartup(s) { startup.form.hidden = !s || !s.available; if (s) startup.enabled.checked = s.startWithWindows; }
