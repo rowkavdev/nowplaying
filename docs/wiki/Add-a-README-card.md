@@ -7,7 +7,7 @@ It's off until you turn it on.
 ## Steps
 
 1. Open the nowplaying **Settings** page (tray icon, **Settings**) and find the **hosted card** section.
-2. Turn it on. Sign in with GitHub to get one card for all your PCs at `https://nowplaying-hosted.vercel.app/u/<your-github-username>.svg`, or skip sign-in for a per-PC link with a random ID that can't be traced to you. Either way you get a ready-made Markdown snippet.
+2. Turn it on. You get a per-PC card link with a random ID that can't be traced to you, plus a ready-made Markdown snippet. Want one card shared by all your PCs? Sign in with GitHub from setup's **Card hosting** step - see below.
 3. Paste the snippet into your README, for example:
 
    ```markdown
@@ -17,6 +17,16 @@ It's off until you turn it on.
 4. Play something on your media server. Your card updates within a few seconds.
 
 Success looks like: the card image on your README shows what's playing.
+
+## One card for all your PCs (optional GitHub sign-in)
+
+By default each PC gets its own card link with a random ID. If you have more than one PC, sign in to share one card:
+
+1. In setup, on the **Card hosting** step (choose **Run setup again** from the tray if you're past setup), pick **NowPlaying's hosted service** and choose **Sign in with GitHub**.
+2. Open the GitHub link shown and enter the code. GitHub only tells nowplaying your username - no other permissions.
+3. Your card link becomes `https://nowplaying-hosted.vercel.app/u/<your-username>.svg`. Sign in on each PC; whichever is playing updates the card.
+
+**Settings > Hosted card devices** lists the PCs signed in as you. You can rename one, sign one out, or **Sign out everywhere** (the card stops updating until you sign in again).
 
 ## What the card shows
 
