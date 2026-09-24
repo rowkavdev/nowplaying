@@ -59,7 +59,45 @@ export function parseCardOptions(searchParams) {
     for (const field of picked) if (!SHOW_FIELDS.has(field)) throw new ServiceError(400, "invalid_show");
     show = Object.fromEntries([...SHOW_FIELDS].map((field) => [field, picked.includes(field)]));
   }
-  return { theme, width, show };
+  const layout = parseLayoutOptions(searchParams);
+  return { theme, width, show, ...(Object.keys(layout).length ? { layout } : {}) };
+}
+
+// Card layout from the URL only (#94). Nothing here comes from the PC's
+// ingest payload. Numeric ranges match settings.js card.layout; the choices
+// match what the renderer accepts. Artwork options are left out because the
+// hosted card never draws artwork.
+const LAYOUT_NUMBERS = Object.freeze({ padding: [12, 48], radius: [0, 24], titleSize: [14, 30], subtitleSize: [10, 20], progressHeight: [2, 12] });
+const LAYOUT_CHOICES = Object.freeze({ textAlign: ["start", "middle", "end"], progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"] });
+const CARD_FIELDS = Object.freeze(["state", "title", "subtitle"]);
+function parseLayoutOptions(searchParams) {
+  const layout = {};
+  for (const [key, [min, max]] of Object.entries(LAYOUT_NUMBERS)) {
+    const raw = single(searchParams, key);
+    if (raw === null) continue;
+    const value = /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isInteger(value) || value < min || value > max) throw new ServiceError(400, "invalid_layout");
+    layout[key] = value;
+  }
+  for (const [key, allowed] of Object.entries(LAYOUT_CHOICES)) {
+    const raw = single(searchParams, key);
+    if (raw === null) continue;
+    if (!allowed.includes(raw)) throw new ServiceError(400, "invalid_layout");
+    layout[key] = raw;
+  }
+  const order = single(searchParams, "fieldOrder");
+  if (order !== null) {
+    const fields = order.split(",");
+    if (fields.length !== 3 || new Set(fields).size !== 3 || !fields.every((field) => CARD_FIELDS.includes(field))) throw new ServiceError(400, "invalid_layout");
+    layout.fieldOrder = fields;
+  }
+  return layout;
+}
+
+function single(searchParams, key) {
+  const values = searchParams.getAll(key);
+  if (values.length > 1) throw new ServiceError(400, "invalid_layout");
+  return values.length ? values[0] : null;
 }
 
 export function sendCard(req, res, presence, options) {
