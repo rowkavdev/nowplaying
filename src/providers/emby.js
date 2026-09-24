@@ -1,6 +1,6 @@
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear } from "./fields.js";
+import { optionalCount, optionalText, optionalYear, playbackTimes } from "./fields.js";
 
 const TICKS_PER_MILLISECOND = 10_000;
 
@@ -55,7 +55,7 @@ function mapSession(session) {
     state: session.PlayState?.IsPaused ? "paused" : "playing", kind, title: item.Name, subtitle,
     artwork: imageTag ? { provider: "emby", itemId: item.Id, imageTag, type: "primary" } : null,
     artworkUrl: null,
-    positionMs: ticksToMilliseconds(session.PlayState?.PositionTicks), durationMs: ticksToMilliseconds(item.RunTimeTicks),
+    ...playbackTimes(ticksToMilliseconds(session.PlayState?.PositionTicks), ticksToMilliseconds(item.RunTimeTicks)),
     // Episode and movie details (#143): ParentIndexNumber is the season,
     // IndexNumber the episode.
     series: kind === "episode" ? optionalText(item.SeriesName) : null,

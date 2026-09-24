@@ -7,7 +7,7 @@
 
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear } from "./fields.js";
+import { optionalCount, optionalText, optionalYear, playbackTimes } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
 
@@ -69,7 +69,7 @@ function mapSession(session) {
     state, kind, title: session.title, subtitle,
     artwork: imageId ? { provider: "plex", imageId, type: "thumb" } : null,
     artworkUrl: null,
-    positionMs: session.viewOffset, durationMs: session.duration,
+    ...playbackTimes(session.viewOffset, session.duration),
     // Episode and movie details (#143). Plex sends parentIndex/index for the
     // season and episode number.
     series: kind === "episode" ? optionalText(session.grandparentTitle) : null,

@@ -20,3 +20,14 @@ export function optionalYear(value) {
   const n = whole(value);
   return n !== null && n >= 1800 && n <= 2200 ? n : null;
 }
+
+// Position and length as the presence model accepts them. Servers report a
+// position a little past the end at the end of a track, a length of 0 for
+// live TV and internet radio, and seeks past a wrong length. None of that
+// should turn the whole poll into an error (and a backoff), so a 0 length is
+// unknown and a position past the end is held at the end.
+export function playbackTimes(positionMs, durationMs) {
+  const position = Number.isFinite(positionMs) && positionMs >= 0 ? positionMs : null;
+  const duration = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null;
+  return { positionMs: position !== null && duration !== null ? Math.min(position, duration) : position, durationMs: duration };
+}
