@@ -77,13 +77,17 @@ export function createService({ redis, now = () => Date.now() } = {}) {
     } catch { /* ignore */ }
   }
 
-  // Unique devices per day as a HyperLogLog of a hash of the device ID. It can
-  // only answer "about how many", never which devices.
+  // Unique devices per day. A HyperLogLog of a hash of the device ID spots
+  // first-time devices without storing anything readable; when it changes,
+  // a plain per-day counter goes up. The dashboard's read-only Redis token
+  // can't run PFCOUNT, so it reads that counter. HyperLogLog is approximate:
+  // treat the number as an estimate.
   async function markDeviceActive(deviceId) {
     try {
-      const key = dayKey("devices");
-      await cmd("PFADD", key, hashToken(`device:${deviceId}`).slice(0, 32));
-      await cmd("EXPIRE", key, DAY_STATS_TTL_SECONDS);
+      const hllKey = dayKey("devices");
+      const changed = await cmd("PFADD", hllKey, hashToken(`device:${deviceId}`).slice(0, 32));
+      await cmd("EXPIRE", hllKey, DAY_STATS_TTL_SECONDS);
+      if (changed === 1) await countToday("active_devices");
     } catch { /* ignore */ }
   }
 

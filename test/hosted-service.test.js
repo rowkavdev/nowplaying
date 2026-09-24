@@ -109,7 +109,8 @@ test("daily counters are aggregate, expire, and never hold device ids", async ()
   assert.equal(redis.data.get(`np:stats:day:${day}:renders`).value, "3");
   assert.equal(redis.data.get(`np:stats:day:${day}:registrations`).value, "2");
   assert.equal(await redis.command(["PFCOUNT", `np:stats:day:${day}:devices`]), 2);
-  for (const metric of ["renders", "registrations", "devices"]) {
+  assert.equal(redis.data.get(`np:stats:day:${day}:active_devices`).value, "2");
+  for (const metric of ["renders", "registrations", "devices", "active_devices"]) {
     assert.equal(redis.data.get(`np:stats:day:${day}:${metric}`).expiresAt, now() + DAY_STATS_TTL_SECONDS * 1000);
   }
   const members = [...redis.data.get(`np:stats:day:${day}:devices`).value];
