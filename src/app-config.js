@@ -449,6 +449,9 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     address = await server.listen();
   } catch (error) {
     if (error?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use. Close the other program using it and try again.`);
+    // Windows reserves port ranges for Hyper-V, WSL and Docker; binding one of
+    // those (or a port the OS won't allow) fails with EACCES, not EADDRINUSE.
+    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `Windows won't let NowPlaying use port ${port}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
     throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
   }
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
