@@ -71,8 +71,9 @@ export function parseYouTubeEvent(body) {
   });
 }
 
-export function createYouTubeBridge({ token, ttlMs = 30_000, now = Date.now } = {}) {
-  if (typeof token !== "string" || token.length < 32) throw new TypeError("token must be at least 32 characters");
+export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now = Date.now } = {}) {
+  const checkToken = (value) => { if (typeof value !== "string" || value.length < 32) throw new TypeError("token must be at least 32 characters"); return value; };
+  let token = checkToken(initialToken);
   if (!Number.isInteger(ttlMs) || ttlMs < 5_000) throw new RangeError("ttlMs must be at least 5000");
   const tabs = new Map();
 
@@ -127,7 +128,13 @@ export function createYouTubeBridge({ token, ttlMs = 30_000, now = Date.now } = 
     },
   });
 
-  return Object.freeze({ receive, provider, tabCount: () => { prune(); return tabs.size; } });
+  // A new pairing token (reset on the settings page) cuts off the old
+  // extension straight away, along with anything it was showing.
+  function setToken(next) {
+    token = checkToken(next);
+    tabs.clear();
+  }
+  return Object.freeze({ receive, provider, setToken, tabCount: () => { prune(); return tabs.size; } });
 }
 
 export const YOUTUBE_BRIDGE_PATH = "/bridge/youtube";
@@ -136,6 +143,12 @@ export const YOUTUBE_PAIRING = Object.freeze({ provider: "youtube", identityId: 
 // The pairing token lives in the credential store. The first start makes
 // one; the settings page shows it so the user can paste it into the
 // extension.
+export async function resetYouTubePairingToken(credentialStore) {
+  const token = randomBytes(32).toString("base64url");
+  await credentialStore.save(YOUTUBE_PAIRING, token);
+  return token;
+}
+
 export async function loadYouTubePairingToken(credentialStore) {
   const saved = await credentialStore.read(YOUTUBE_PAIRING);
   if (typeof saved === "string" && saved.length >= 32) return saved;

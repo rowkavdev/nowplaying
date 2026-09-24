@@ -358,6 +358,18 @@ test("the YouTube extension bridge feeds the card, with a stored pairing token (
     assert.equal((await post({ Origin: "https://evil.example", Authorization: `Bearer ${token}` }, event)).status, 403);
     assert.equal((await post({ Origin: origin, Authorization: `Bearer ${token}` }, event)).status, 204);
     assert.match(await (await fetch(`${app.url}/card.svg`)).text(), /Bridge Video/);
+    // Settings page reads and resets the token; other callers can't.
+    assert.equal((await fetch(`${app.url}/api/settings/youtube/pairing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 403);
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const own = { Cookie: cookie, Origin: app.url, "Content-Type": "application/json" };
+    const read = await fetch(`${app.url}/api/settings/youtube/pairing`, { method: "POST", headers: own, body: "{}" });
+    assert.deepEqual(await read.json(), { token });
+    const reset = await (await fetch(`${app.url}/api/settings/youtube/pairing/reset`, { method: "POST", headers: own, body: "{}" })).json();
+    assert.ok(reset.token.length >= 32 && reset.token !== token);
+    assert.equal(secrets["youtube:extension"], reset.token);
+    assert.equal((await post({ Origin: origin, Authorization: `Bearer ${token}` }, event)).status, 401);
+    assert.doesNotMatch(await (await fetch(`${app.url}/card.svg`)).text(), /Bridge Video/);
+    assert.equal((await post({ Origin: origin, Authorization: `Bearer ${reset.token}` }, event)).status, 204);
   } finally {
     await app.close();
   }
