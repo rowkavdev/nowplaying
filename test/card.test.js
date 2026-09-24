@@ -61,3 +61,24 @@ test("rejects unknown or invalid visibility settings", () => {
     { message: "card.show.progress must be a boolean" },
   );
 });
+
+test("episodes and films read like TV and films, not music (#143)", async () => {
+  const { cardText } = await import("../src/card.js");
+  const { createPresence } = await import("../src/presence.js");
+  const episode = createPresence({ state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost", series: "Lost", season: 4, episode: 5 });
+  assert.deepEqual(cardText(episode), { title: "Lost", subtitle: "S04E05 · The Constant" });
+  const svg = renderCard(episode);
+  assert.match(svg, /<title id="title">NOW PLAYING: Lost<\/title><desc id="desc">S04E05 · The Constant<\/desc>/);
+  assert.doesNotMatch(svg, /undefined|null/);
+  // Missing numbers or a hidden series fall back cleanly.
+  assert.deepEqual(cardText(createPresence({ state: "playing", kind: "episode", title: "Pilot", series: "Show", episode: 1 })), { title: "Show", subtitle: "E01 · Pilot" });
+  assert.deepEqual(cardText(createPresence({ state: "playing", kind: "episode", title: "Pilot", series: "Show" })), { title: "Show", subtitle: "Pilot" });
+  assert.deepEqual(cardText(createPresence({ state: "paused", kind: "episode", title: "Pilot", subtitle: "Show" })), { title: "Pilot", subtitle: "Show" });
+  // Films: year in the title, not repeated underneath.
+  const film = createPresence({ state: "playing", kind: "movie", title: "Dune: Part Two", subtitle: "2024", year: 2024 });
+  assert.deepEqual(cardText(film), { title: "Dune: Part Two (2024)", subtitle: null });
+  assert.match(renderCard(film), /<title id="title">NOW PLAYING: Dune: Part Two \(2024\)<\/title><desc id="desc">Movie<\/desc>/);
+  assert.deepEqual(cardText(createPresence({ state: "playing", kind: "movie", title: "Heat" })), { title: "Heat", subtitle: null });
+  // Music is untouched.
+  assert.deepEqual(cardText(createPresence({ state: "playing", kind: "track", title: "Song", subtitle: "Artist" })), { title: "Song", subtitle: "Artist" });
+});
