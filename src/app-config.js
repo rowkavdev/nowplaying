@@ -10,7 +10,7 @@ import { createSettingsPageHandler } from "./settings-page-handler.js";
 import { createLogsPageHandler } from "./logs-page-handler.js";
 import { readLogTail } from "./log-tail.js";
 import { createResilientCardResolver } from "./resilient-card.js";
-import { createSetupConfig } from "./setup-config.js";
+import { cardRenderOptions, createSetupConfig } from "./setup-config.js";
 import { createConfigMigrationStore } from "./config-migration-store.js";
 import { createEmbyProvider } from "./providers/emby.js";
 import { createJellyfinProvider } from "./providers/jellyfin.js";
@@ -32,7 +32,7 @@ import { applyPrivacy } from "./privacy.js";
 // credentialRef at start-up.
 
 const MAX_CONFIG_BYTES = 16 * 1024;
-const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted", "privacy"]);
+const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted", "privacy", "card"]);
 const HOSTED_KEYS = new Set(["enabled", "url"]);
 
 export class StartupError extends Error {
@@ -69,6 +69,7 @@ export function parseAppConfig(text) {
       discordTimestamps: parsed.discord?.timestamps,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
+      ...(parsed.card !== undefined ? { card: parsed.card } : {}),
     });
   } catch {
     throw invalidConfig();
@@ -249,7 +250,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // The status page (local only) sees what's really playing; the card,
   // Discord and hosted uploads get the privacy-filtered version.
   const provider = withPrivacy(tracked, () => current);
-  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
+  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
   // status page run. Discord and hosted uploads, which poll in the background,
