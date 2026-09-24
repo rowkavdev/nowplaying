@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createAppSettingsStore, discordSettingsView, hostedSettingsView, privacySettingsView } from "./app-settings.js";
+import { cardSettingsView, createAppSettingsStore, discordSettingsView, hostedSettingsView, privacySettingsView } from "./app-settings.js";
+import { renderCard } from "./card.js";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
@@ -288,7 +289,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     catch { return { available: false, startWithWindows: false }; }
   };
   const settings = Object.freeze({
-    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current) }),
+    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current), card: cardSettingsView(current) }),
     // Start with Windows is the Startup-folder shortcut, not config.json:
     // setup and this page change the same shortcut.
     async updateStartup(changes) {
@@ -309,6 +310,19 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       current = next;
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
+    },
+    // Card appearance (#94): the local card reads config.card on every
+    // render, so a save shows on the next /card.svg request.
+    async updateCard(changes) {
+      current = await settingsStore.updateCard(changes);
+    },
+    // Preview for the settings page: what's playing now (privacy applied),
+    // or a sample track when nothing is, so layout changes are visible.
+    async previewCard(card) {
+      let presence = null;
+      try { presence = await provider.getPresence(); } catch { presence = null; }
+      if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
+      return renderCard(presence, cardRenderOptions(card));
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),
@@ -358,6 +372,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }
 
+const PREVIEW_SAMPLE = Object.freeze({ state: "playing", kind: "track", title: "Sample track", subtitle: "Sample artist", positionMs: 83_000, durationMs: 214_000 });
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
 
 async function createSignedInProvider(config, credentialStore, fetchImpl) {

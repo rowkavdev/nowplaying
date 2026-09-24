@@ -1,0 +1,84 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { applyCardChanges, cardSettingsView } from "../src/app-settings.js";
+import { parseAppConfig, startAppFromConfig } from "../src/app-config.js";
+import { serializeSetupConfig } from "../src/setup-config.js";
+import { createSettingsPageHandler } from "../src/settings-page-handler.js";
+
+const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true };
+
+test("the card view shows renderer defaults for configs without a card section", () => {
+  assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
+  const compact = parseAppConfig(serializeSetupConfig({ ...BASE, card: { theme: "compact" } }));
+  assert.equal(cardSettingsView(compact).showProgress, false);
+});
+
+test("card changes are saved in full and bad ones are refused", () => {
+  const before = parseAppConfig(serializeSetupConfig(BASE));
+  const { config } = applyCardChanges(before, { theme: "paper", radius: 0 });
+  assert.deepEqual({ ...config.card }, { ...DEFAULTS, theme: "paper", radius: 0 });
+  assert.deepEqual({ ...config.discord }, { ...before.discord });
+  for (const bad of [{}, { colors: {} }, { radius: 99 }, { theme: "neon" }, { showProgress: 1 }]) assert.throws(() => applyCardChanges(before, bad), TypeError, JSON.stringify(bad));
+});
+
+function handler(previewCard = async (card) => `<svg data-card='${JSON.stringify(card)}'></svg>`) {
+  let card = { ...DEFAULTS };
+  const settings = { read: () => ({ discord: {}, card }), updateDiscord: async () => {}, updateCard: async (changes) => { card = { ...card, ...changes }; }, previewCard };
+  return createSettingsPageHandler({ settings, fallback: async () => ({ status: 299 }) });
+}
+const PREVIEW = "/api/settings/card/preview.svg";
+
+test("the settings API reads and saves the card section", async () => {
+  const h = handler();
+  assert.deepEqual(JSON.parse((await h({ url: "/api/settings" })).body).card, DEFAULTS);
+  const saved = await h({ method: "PUT", url: "/api/settings", body: JSON.stringify({ card: { theme: "paper" } }) });
+  assert.equal(JSON.parse(saved.body).card.theme, "paper");
+});
+
+test("the preview renders draft settings and refuses bad ones", async () => {
+  const h = handler();
+  const ok = await h({ url: `${PREVIEW}?theme=paper&width=500&padding=16&radius=0&progressHeight=8&showProgress=0` });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers["Content-Type"], "image/svg+xml; charset=utf-8");
+  assert.equal(ok.headers["Cache-Control"], "no-store");
+  assert.deepEqual(JSON.parse(ok.body.match(/data-card='(.*)'/)[1]), { theme: "paper", width: 500, padding: 16, radius: 0, progressHeight: 8, showProgress: false });
+  for (const query of ["theme=neon", "width=9999", "radius=-1", "radius=1.5", "showProgress=yes", "colors=red", "theme=paper&theme=paper"]) {
+    assert.equal((await h({ url: `${PREVIEW}?${query}` })).status, 400, query);
+  }
+  assert.equal((await h({ method: "POST", url: PREVIEW })).status, 405);
+  assert.equal((await h({ url: PREVIEW, headers: { "Sec-Fetch-Site": "cross-site" } })).status, 403);
+  const broken = handler(async () => { throw new Error("C:\\\\secret"); });
+  const failed = await broken({ url: PREVIEW });
+  assert.deepEqual([failed.status, failed.body], [503, "Preview unavailable"]);
+});
+
+test("the running app applies a card save to /card.svg without a restart", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-card-settings-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false }));
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" } });
+  try {
+    const page = await fetch(`${app.url}/settings`);
+    const cookie = page.headers.get("set-cookie").split(";")[0];
+    assert.match(await (await fetch(`${app.url}/card.svg`)).text(), /#0d1117/);
+    const saved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ card: { theme: "paper", width: 520 } }) });
+    assert.equal(saved.status, 200);
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).card.theme, "paper");
+    const card = await (await fetch(`${app.url}/card.svg`)).text();
+    assert.match(card, /#ffffff/);
+    assert.match(card, /width="520"/);
+    // Preview of a draft (nothing playing, so a sample track) doesn't save it.
+    const preview = await fetch(`${app.url}/api/settings/card/preview.svg?theme=midnight-blue&radius=0`);
+    assert.equal(preview.status, 200);
+    const svg = await preview.text();
+    assert.match(svg, /Sample track/);
+    assert.match(svg, /#0d1117/);
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).card.theme, "paper");
+  } finally {
+    await app.close();
+  }
+});

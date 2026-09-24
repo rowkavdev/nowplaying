@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { parseAppConfig } from "./app-config.js";
-import { serializeSetupConfig } from "./setup-config.js";
+import { normalizeCard, serializeSetupConfig } from "./setup-config.js";
 import { IDLE_BEHAVIORS } from "./discord-presence.js";
 
 // Settings the web UI can change while the app runs (#253). Each change is
@@ -37,6 +37,23 @@ export function privacySettingsView(config) {
   });
 }
 
+// Card appearance (#94). Defaults are the renderer's own, so a page that
+// shows them draws the same card as a config without a card section.
+const CARD_KEYS = new Set(["theme", "width", "padding", "radius", "progressHeight", "showProgress"]);
+export function cardSettingsView(config) {
+  const card = config.card ?? {};
+  const theme = card.theme ?? "midnight-blue";
+  return Object.freeze({
+    theme,
+    width: card.width ?? 440,
+    padding: card.padding ?? 24,
+    radius: card.radius ?? 10,
+    progressHeight: card.progressHeight ?? 4,
+    // The compact theme hides progress unless it's turned on.
+    showProgress: card.showProgress ?? theme !== "compact",
+  });
+}
+
 function checkChanges(changes, allowed, name) {
   if (!changes || typeof changes !== "object" || Array.isArray(changes)) throw new TypeError(`${name} settings: expected an object`);
   const keys = Object.keys(changes);
@@ -44,7 +61,7 @@ function checkChanges(changes, allowed, name) {
 }
 
 // serializeSetupConfig validates every value the same way setup does.
-function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy } = {}) {
+function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card } = {}) {
   const text = serializeSetupConfig({
     provider: config.provider,
     ...(config.serverUrl ? { serverUrl: config.serverUrl } : {}),
@@ -56,7 +73,7 @@ function rewrite(config, { discord = { ...discordSettingsView(config), timestamp
     discordTimestamps: discord.timestamps,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
-    ...(config.card ? { card: config.card } : {}),
+    ...(card ? { card } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
 }
@@ -85,6 +102,11 @@ export function applyPrivacyChanges(config, changes) {
   } });
 }
 
+export function applyCardChanges(config, changes) {
+  checkChanges(changes, CARD_KEYS, "card");
+  return rewrite(config, { card: normalizeCard({ ...cardSettingsView(config), ...changes }) });
+}
+
 export function createAppSettingsStore({ file } = {}) {
   if (typeof file !== "string" || !file) throw new TypeError("file is required");
   let queue = Promise.resolve();
@@ -111,5 +133,6 @@ export function createAppSettingsStore({ file } = {}) {
     updateDiscord: (changes) => queued(() => update(applyDiscordChanges, changes)),
     updateHosted: (changes) => queued(() => update(applyHostedChanges, changes)),
     updatePrivacy: (changes) => queued(() => update(applyPrivacyChanges, changes)),
+    updateCard: (changes) => queued(() => update(applyCardChanges, changes)),
   });
 }

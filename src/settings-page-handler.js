@@ -4,6 +4,8 @@
 // the HTTP server only lets them through with the session cookie this page
 // sets, from the app's own origin.
 
+import { normalizeCard } from "./setup-config.js";
+
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"></head>
@@ -229,8 +231,24 @@ load();
 
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 const MAX_BODY = 4096;
+const PREVIEW_PATH = "/api/settings/card/preview.svg";
+const PREVIEW_NUMBERS = new Set(["width", "padding", "radius", "progressHeight"]);
 
-const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup", privacy: "updatePrivacy" };
+// Draft card settings from the preview URL. Values are checked again by
+// normalizeCard, the same rules as a save.
+function parsePreviewQuery(searchParams) {
+  const card = {};
+  for (const [key, value] of searchParams) {
+    if (Object.hasOwn(card, key)) throw new TypeError("repeated");
+    if (key === "theme") card.theme = value;
+    else if (key === "showProgress" && (value === "1" || value === "0")) card.showProgress = value === "1";
+    else if (PREVIEW_NUMBERS.has(key) && /^\d{1,3}$/.test(value)) card[key] = Number(value);
+    else throw new TypeError("bad preview query");
+  }
+  return normalizeCard(card);
+}
+
+const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup", privacy: "updatePrivacy", card: "updateCard" };
 
 export function createSettingsPageHandler({ settings, fallback } = {}) {
   if (!settings || typeof settings.read !== "function" || typeof settings.updateDiscord !== "function") throw new TypeError("settings: expected read() and updateDiscord()");
@@ -242,14 +260,27 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   };
   const read = async () => {
     const value = await settings.read();
-    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}) };
+    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}) };
   };
+  async function preview(request, method, url) {
+    if (typeof settings.previewCard !== "function") return response(404, "Not Found");
+    if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
+    const site = header(request?.headers, "sec-fetch-site");
+    if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
+    let card;
+    try { card = parsePreviewQuery(url.searchParams); } catch { return response(400, "Invalid preview"); }
+    let svg;
+    try { svg = await settings.previewCard(card); } catch { svg = null; }
+    if (typeof svg !== "string" || !svg.includes("<svg")) return response(503, "Preview unavailable", { "Cache-Control": "no-store" });
+    return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+  }
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
     const asset = assets[url.pathname];
     const disconnect = url.pathname === "/api/settings/hosted/disconnect";
     const refresh = url.pathname === "/api/settings/discord/refresh-artwork";
+    if (url.pathname === PREVIEW_PATH) return preview(request, method, url);
     if (!asset && url.pathname !== "/api/settings" && !disconnect && !refresh) return fallback(request);
     if (asset) {
       if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
