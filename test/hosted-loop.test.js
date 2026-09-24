@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createHostedLoop } from "../src/hosted-loop.js";
+import { createPresence } from "../src/presence.js";
 import { createHostedCredentials } from "../src/hosted-credentials.js";
 
 function memoryAdapter() {
@@ -69,4 +70,102 @@ test("loop validates its inputs", () => {
   assert.throws(() => createHostedLoop({ uploader: { push() {} } }), TypeError);
   assert.throws(() => createHostedLoop({ getPresence() {} }), TypeError);
   assert.throws(() => createHostedLoop({ getPresence() {}, uploader: { push() {} }, intervalMs: 10 }), RangeError);
+});
+
+// #343: stale state on the hosted card.
+function staleSetup({ presence }) {
+  let clock = 1_800_000_000_000;
+  const pushed = [];
+  let next = presence;
+  let result = { sent: true };
+  const loop = createHostedLoop({
+    getPresence: async () => { if (next instanceof Error) throw next; return next; },
+    uploader: { push: async (p) => { pushed.push(p); return result; } },
+    failAfterMs: 60_000, stuckAfterMs: 300_000, now: () => clock,
+  });
+  return {
+    loop, pushed,
+    set: (value) => { next = value; },
+    setResult: (value) => { result = value; },
+    advance: (ms) => { clock += ms; },
+  };
+}
+
+const playingAt = (positionMs) => createPresence({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs, durationMs: 600_000 });
+
+test("a provider failing past the timeout pushes idle once, not every poll", async () => {
+  const env = staleSetup({ presence: playingAt(1000) });
+  await env.loop.tick();
+  env.set(new Error("down"));
+  assert.equal((await env.loop.tick()).reason, "provider_error");
+  env.advance(30_000);
+  assert.equal((await env.loop.tick()).reason, "provider_error");
+  env.advance(30_000);
+  assert.equal((await env.loop.tick()).cleared, "provider_error");
+  env.advance(15_000);
+  await env.loop.tick();
+  env.advance(15_000);
+  await env.loop.tick();
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle"]);
+});
+
+test("the failure idle is retried until it reaches the host", async () => {
+  const env = staleSetup({ presence: new Error("down") });
+  await env.loop.tick();
+  env.advance(60_000);
+  env.setResult({ sent: false, reason: "network_error" });
+  await env.loop.tick();
+  env.advance(15_000);
+  env.setResult({ sent: true });
+  await env.loop.tick();
+  env.advance(15_000);
+  await env.loop.tick();
+  assert.deepEqual(env.pushed.map((p) => p.state), ["idle", "idle"]);
+});
+
+test("a recovered provider pushes real state again", async () => {
+  const env = staleSetup({ presence: new Error("down") });
+  await env.loop.tick();
+  env.advance(60_000);
+  await env.loop.tick();
+  env.set(playingAt(5000));
+  env.advance(15_000);
+  await env.loop.tick();
+  assert.deepEqual(env.pushed.map((p) => p.state), ["idle", "playing"]);
+  // A later failure starts a fresh timeout.
+  env.set(new Error("down again"));
+  await env.loop.tick();
+  env.advance(59_000);
+  await env.loop.tick();
+  assert.equal(env.pushed.length, 2);
+  env.advance(1_000);
+  await env.loop.tick();
+  assert.equal(env.pushed.at(-1).state, "idle");
+});
+
+test("a playing session frozen at one position is uploaded as idle after the Discord timeout", async () => {
+  const env = staleSetup({ presence: playingAt(42_000) });
+  await env.loop.tick();
+  env.advance(299_000);
+  await env.loop.tick();
+  assert.equal(env.pushed.at(-1).state, "playing");
+  env.advance(1_000);
+  assert.equal((await env.loop.tick()).cleared, "stuck");
+  assert.equal(env.pushed.at(-1).state, "idle");
+  env.set(playingAt(43_000));
+  env.advance(15_000);
+  await env.loop.tick();
+  assert.equal(env.pushed.at(-1).state, "playing");
+});
+
+test("normal playback and paused sessions are never treated as stuck", async () => {
+  const env = staleSetup({ presence: playingAt(0) });
+  for (let i = 1; i <= 30; i += 1) {
+    env.advance(15_000);
+    env.set(playingAt(i * 15_000));
+    await env.loop.tick();
+  }
+  env.set(createPresence({ state: "paused", kind: "track", title: "Song", positionMs: 1000, durationMs: 600_000 }));
+  for (let i = 0; i < 30; i += 1) { env.advance(15_000); await env.loop.tick(); }
+  assert.equal(env.pushed.some((p) => p.state === "idle"), false);
 });
