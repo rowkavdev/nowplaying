@@ -29,10 +29,24 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 
 ## How it's stored
 
-- The service keeps only the latest update for your card, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
-- Your card link uses a random ID. It can't be traced to your email, server or username.
-- Your PC gets a device key the first time it connects. It's kept in Windows Credential Manager, not in `config.json`. The service only stores a hash of it.
-- The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown and devices registered.
+- The service keeps only the latest update from each of your PCs, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
+- The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown, PCs registered and people signed in.
+
+### Signed in with GitHub (one card for all your PCs)
+
+- Setup's "Sign in with GitHub" shows a short code. You approve it on github.com. The app asks GitHub for no permissions beyond your public profile.
+- The app hands GitHub's sign-in to the card service once. The service asks GitHub who you are, then throws it away. Neither your PC nor the service keeps it.
+- The service stores your GitHub user ID and username, and the names of the PCs you've signed in (you can rename them). That's all it knows about you.
+- Your card link is `https://nowplaying-hosted.vercel.app/u/<your-github-username>.svg`. It's public, like the README it sits in, so anyone can see that you have a card. Only your signed-in PCs can change it.
+- If you rename your GitHub account, sign in again and the link moves to the new name.
+- Several PCs can update the same card, up to 10. The card shows the PC that's playing; if two are playing, the one that started most recently. A paused PC never replaces one that's playing.
+
+### Without signing in
+
+- Your card link uses a random ID. It can't be traced to your email, server or username. Each PC gets its own card.
+- If you sign in with GitHub later, the old random link keeps working and shows your new card.
+
+In both cases, each PC gets its own device key. It's kept in the system's credential store (Windows Credential Manager on Windows), not in `config.json`, and the service only stores a hash of it.
 
 ## How often it sends
 
@@ -40,10 +54,10 @@ When something changes (new track, pause, skip, seek), plus a check-in every 4 m
 
 ## Turning it off
 
-Disconnecting deletes your card's state and the device key on the service, and removes the key from your PC. The old card link stops showing anything.
+Disconnecting a PC deletes that PC's state and device key on the service, and removes the key from the PC. With GitHub sign-in, your other PCs keep updating the card; "sign out everywhere" removes every PC. Without sign-in, the card link stops showing anything.
 
 ## For developers
 
 - Config: `hosted: { "enabled": true, "url": "https://..." }` in `config.json`. `url` is optional and must be HTTPS.
 - Payload: built by `projectHostedState` in `src/hosted-projection.js`; tests in `test/hosted-projection.test.js` check that fields turned off for the card never reach the wire.
-- Client: `src/hosted-uploader.js`. Service and schema: [hosted/README.md](../hosted/README.md). Design: #140.
+- Client: `src/hosted-uploader.js`; GitHub sign-in (device flow): `src/hosted-signin.js`. Service and schema: [hosted/README.md](../hosted/README.md). Design: #140.
