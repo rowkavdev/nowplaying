@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content" };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
@@ -52,7 +52,9 @@ test("the preview renders draft settings and refuses bad ones", async () => {
   assert.deepEqual(JSON.parse(text.body.match(/data-card='(.*)'/)[1]), { fieldOrder: ["title", "subtitle", "state"], textAlign: "middle" });
   const bar = await h({ url: `${PREVIEW}?progressPosition=text&progressWidth=full` });
   assert.deepEqual(JSON.parse(bar.body.match(/data-card='(.*)'/)[1]), { progressPosition: "text", progressWidth: "full" });
-  for (const query of ["progressPosition=top", "progressWidth=half", "fieldOrder=title,title,state", "fieldOrder=title", "textAlign=center", "artworkPosition=top", "artworkWidth=40", "artworkHeight=200",
+  const dir = await h({ url: `${PREVIEW}?direction=auto` });
+  assert.deepEqual(JSON.parse(dir.body.match(/data-card='(.*)'/)[1]), { direction: "auto" });
+  for (const query of ["direction=RTL", "progressPosition=top", "progressWidth=half", "fieldOrder=title,title,state", "fieldOrder=title", "textAlign=center", "artworkPosition=top", "artworkWidth=40", "artworkHeight=200",
     "theme=neon", "width=9999", "radius=-1", "radius=1.5", "showProgress=yes", "colors=red", "theme=paper&theme=paper"]) {
     assert.equal((await h({ url: `${PREVIEW}?${query}` })).status, 400, query);
   }
@@ -100,7 +102,7 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-progressWidth", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-progressWidth", "card-direction", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
   assert.equal(page.match(/<option value="(?:state|title|subtitle),(?:state|title|subtitle),(?:state|title|subtitle)">/g).length, 6);

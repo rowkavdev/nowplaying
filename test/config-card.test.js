@@ -45,8 +45,8 @@ test("field order and text alignment are saved and reach the renderer", () => {
   assert.equal(next.card.textAlign, "end");
 });
 
-test("progress bar position and width are saved and reach the renderer", () => {
-  const card = { progressPosition: "text", progressWidth: "full" };
+test("progress bar and text direction settings are saved and reach the renderer", () => {
+  const card = { progressPosition: "text", progressWidth: "full", direction: "auto" };
   const config = parseAppConfig(serializeSetupConfig({ ...BASE, card }));
   assert.deepEqual({ ...config.card }, card);
   assert.deepEqual(JSON.parse(JSON.stringify(cardRenderOptions(config.card))), { layout: card });
@@ -57,7 +57,7 @@ test("an empty card section is left out of the file", () => {
 });
 
 test("bad card values are rejected", () => {
-  for (const card of [[], "paper", { theme: "neon" }, { width: 100 }, { width: 500.5 }, { padding: 60 }, { radius: -1 }, { progressHeight: 20 }, { showProgress: "no" }, { colors: {} }, { artworkPosition: "top" }, { artworkWidth: 40 }, { artworkWidth: 200 }, { artworkHeight: 181 }, { artworkHeight: 90.5 }, { textAlign: "center" }, { progressPosition: "top" }, { progressWidth: "half" }, { fieldOrder: ["title"] }, { fieldOrder: ["title", "title", "state"] }, { fieldOrder: "title,state,subtitle" }]) {
+  for (const card of [[], "paper", { theme: "neon" }, { width: 100 }, { width: 500.5 }, { padding: 60 }, { radius: -1 }, { progressHeight: 20 }, { showProgress: "no" }, { colors: {} }, { artworkPosition: "top" }, { artworkWidth: 40 }, { artworkWidth: 200 }, { artworkHeight: 181 }, { artworkHeight: 90.5 }, { textAlign: "center" }, { progressPosition: "top" }, { progressWidth: "half" }, { direction: "sideways" }, { fieldOrder: ["title"] }, { fieldOrder: ["title", "title", "state"] }, { fieldOrder: "title,state,subtitle" }]) {
     assert.throws(() => createSetupConfig({ ...BASE, card }), TypeError, JSON.stringify(card));
   }
   const text = JSON.stringify({ ...JSON.parse(serializeSetupConfig(BASE)), card: { theme: "neon" } });
