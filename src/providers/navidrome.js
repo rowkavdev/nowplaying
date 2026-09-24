@@ -1,4 +1,5 @@
 import { defineProvider } from "../provider.js";
+import { fetchWithTimeout } from "./request.js";
 
 export function createNavidromeProvider({ baseUrl, username, token, salt, fetchImpl = fetch }) {
   const origin = normalizeBaseUrl(baseUrl);
@@ -12,7 +13,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
     // Navidrome is a music server: it never reports films or TV.
     mediaKinds: ["track"],
     async getPresence({ username: playingUser } = {}) {
-      const response = await fetchImpl(`${origin}/rest/getNowPlaying.view?${auth}`);
+      const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getNowPlaying.view?${auth}`);
       if (!response.ok) throw new Error(`Navidrome now-playing request failed: ${response.status} ${response.statusText}`);
       const payload = await response.json();
       const root = payload["subsonic-response"];
@@ -24,7 +25,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
     async whoami() {
       const query = new URLSearchParams(auth);
       query.set("username", username);
-      const response = await fetchImpl(`${origin}/rest/getUser.view?${query}`);
+      const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getUser.view?${query}`);
       if (!response.ok) throw new Error(`Navidrome user request failed: ${response.status} ${response.statusText}`);
       const root = (await response.json())["subsonic-response"];
       if (root?.status === "failed") throw new Error(`Navidrome API error: ${root.error?.code === 40 ? "request failed: 401" : "user lookup failed"}`);
