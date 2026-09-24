@@ -56,6 +56,7 @@ function rewrite(config, { discord = { ...discordSettingsView(config), timestamp
     discordTimestamps: discord.timestamps,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
+    ...(config.card ? { card: config.card } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
 }
