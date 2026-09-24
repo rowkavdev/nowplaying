@@ -338,7 +338,9 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       let presence = null;
       try { presence = await provider.getPresence(); } catch { presence = null; }
       if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
-      return renderCard(presence, cardRenderOptions(card));
+      // A plain grey square stands in for artwork so placement and size
+      // show in the preview; real art is only fetched for /card.svg.
+      return renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),
@@ -388,6 +390,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   return Object.freeze({ config, servers: () => (multi ? multi.servers() : Object.freeze([])), url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }
 
+const PREVIEW_ARTWORK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC";
 const PREVIEW_SAMPLE = Object.freeze({ state: "playing", kind: "track", title: "Sample track", subtitle: "Sample artist", positionMs: 83_000, durationMs: 214_000 });
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
 

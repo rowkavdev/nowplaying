@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100 };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
@@ -46,7 +46,10 @@ test("the preview renders draft settings and refuses bad ones", async () => {
   assert.equal(ok.headers["Content-Type"], "image/svg+xml; charset=utf-8");
   assert.equal(ok.headers["Cache-Control"], "no-store");
   assert.deepEqual(JSON.parse(ok.body.match(/data-card='(.*)'/)[1]), { theme: "paper", width: 500, padding: 16, radius: 0, progressHeight: 8, showProgress: false });
-  for (const query of ["theme=neon", "width=9999", "radius=-1", "radius=1.5", "showProgress=yes", "colors=red", "theme=paper&theme=paper"]) {
+  const art = await h({ url: `${PREVIEW}?artworkPosition=right&artworkWidth=120&artworkHeight=90` });
+  assert.deepEqual(JSON.parse(art.body.match(/data-card='(.*)'/)[1]), { artworkPosition: "right", artworkWidth: 120, artworkHeight: 90 });
+  for (const query of ["artworkPosition=top", "artworkWidth=40", "artworkHeight=200",
+    "theme=neon", "width=9999", "radius=-1", "radius=1.5", "showProgress=yes", "colors=red", "theme=paper&theme=paper"]) {
     assert.equal((await h({ url: `${PREVIEW}?${query}` })).status, 400, query);
   }
   assert.equal((await h({ method: "POST", url: PREVIEW })).status, 405);
@@ -78,6 +81,13 @@ test("the running app applies a card save to /card.svg without a restart", async
     assert.match(svg, /Sample track/);
     assert.match(svg, /#0d1117/);
     assert.equal(parseAppConfig(await readFile(file, "utf8")).card.theme, "paper");
+    // The preview draws a placeholder so artwork placement is visible.
+    const right = await (await fetch(`${app.url}/api/settings/card/preview.svg?width=440&padding=24&artworkPosition=right&artworkWidth=100&artworkHeight=100`)).text();
+    assert.match(right, /<image href="data:image\/png;base64,[^"]+" x="316" y="24" width="100" height="100"/);
+    const artSaved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ card: { artworkPosition: "right", artworkWidth: 100 } }) });
+    assert.equal(artSaved.status, 200);
+    const onDisk = parseAppConfig(await readFile(file, "utf8")).card;
+    assert.deepEqual([onDisk.artworkPosition, onDisk.artworkWidth, onDisk.theme], ["right", 100, "paper"]);
   } finally {
     await app.close();
   }
@@ -86,7 +96,7 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
   assert.equal(page.toLowerCase().split("<script").length, 2);
