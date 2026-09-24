@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100 };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start" };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);

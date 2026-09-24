@@ -35,12 +35,22 @@ test("saving from the settings page keeps artwork placement", () => {
   assert.equal(next.card.radius, 4);
 });
 
+test("field order and text alignment are saved and reach the renderer", () => {
+  const card = { fieldOrder: ["title", "subtitle", "state"], textAlign: "middle" };
+  const config = parseAppConfig(serializeSetupConfig({ ...BASE, card }));
+  assert.deepEqual(JSON.parse(JSON.stringify(config.card)), card);
+  assert.deepEqual(JSON.parse(JSON.stringify(cardRenderOptions(config.card))), { layout: card });
+  const next = applyCardChanges(config, { textAlign: "end" }).config;
+  assert.deepEqual([...next.card.fieldOrder], ["title", "subtitle", "state"]);
+  assert.equal(next.card.textAlign, "end");
+});
+
 test("an empty card section is left out of the file", () => {
   assert.equal(JSON.parse(serializeSetupConfig({ ...BASE, card: {} })).card, undefined);
 });
 
 test("bad card values are rejected", () => {
-  for (const card of [[], "paper", { theme: "neon" }, { width: 100 }, { width: 500.5 }, { padding: 60 }, { radius: -1 }, { progressHeight: 20 }, { showProgress: "no" }, { colors: {} }, { artworkPosition: "top" }, { artworkWidth: 40 }, { artworkWidth: 200 }, { artworkHeight: 181 }, { artworkHeight: 90.5 }]) {
+  for (const card of [[], "paper", { theme: "neon" }, { width: 100 }, { width: 500.5 }, { padding: 60 }, { radius: -1 }, { progressHeight: 20 }, { showProgress: "no" }, { colors: {} }, { artworkPosition: "top" }, { artworkWidth: 40 }, { artworkWidth: 200 }, { artworkHeight: 181 }, { artworkHeight: 90.5 }, { textAlign: "center" }, { fieldOrder: ["title"] }, { fieldOrder: ["title", "title", "state"] }, { fieldOrder: "title,state,subtitle" }]) {
     assert.throws(() => createSetupConfig({ ...BASE, card }), TypeError, JSON.stringify(card));
   }
   const text = JSON.stringify({ ...JSON.parse(serializeSetupConfig(BASE)), card: { theme: "neon" } });
