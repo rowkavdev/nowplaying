@@ -21,5 +21,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Documentation for deployment, providers, privacy, customization, architecture and releases.
 - Multi-version CI, build smoke artifacts and tag-driven release automation.
 
-[Unreleased]: https://github.com/rowkav09/nowplaying/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rowkav09/nowplaying/releases/tag/v0.1.0
+[Unreleased]: https://github.com/rowkavdev/nowplaying/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rowkavdev/nowplaying/releases/tag/v0.1.0

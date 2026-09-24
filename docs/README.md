@@ -23,7 +23,7 @@ Use this index to find the current reference or the design target for work that 
 ## Project references
 
 - [Main README](../README.md): project overview, status and quick start
-- [Roadmap issues](https://github.com/rowkav09/nowplaying/issues): implementation work and acceptance notes
+- [Roadmap issues](https://github.com/rowkavdev/nowplaying/issues): implementation work and acceptance notes
 - [NOTICE](../NOTICE): adapted-code sources and attribution
 - [AGPL-3.0 license](../LICENSE): project license
 
