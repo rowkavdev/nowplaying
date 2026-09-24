@@ -70,3 +70,11 @@ test("the page offers adding, cancelling and removing servers through the draft 
   assert.match(js, /action: "remove-server", server: \{ provider: event\.target\.dataset\.provider, id: event\.target\.dataset\.id \}/);
   assert.doesNotMatch(js, /innerHTML/);
 });
+
+test("the page offers an optional Spotify sign-in and opens only Spotify's accounts site (#135)", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  assert.match(js, /"\/api\/setup\/spotify"/);
+  assert.match(js, /indexOf\("https:\/\/accounts\.spotify\.com\/"\) === 0/);
+  assert.match(js, /action: "clear-spotify"/);
+  assert.match(js, /never on Discord/);
+});
