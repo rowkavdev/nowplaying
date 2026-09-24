@@ -16,13 +16,13 @@ function response({ status = 200, type = "image/png", bytes = png, length } = {}
   };
 }
 
-test("fetches validated raster bytes with no redirects", async () => {
+test("fetches validated raster bytes and handles redirects itself", async () => {
   let init;
   const artwork = await fetchArtwork(
     { url: "https://media.example.test/image", headers: { Authorization: "secret" } },
     { fetchImpl: async (_url, options) => { init = options; return response(); } },
   );
-  assert.equal(init.redirect, "error");
+  assert.equal(init.redirect, "manual");
   assert.equal(init.headers.Authorization, "secret");
   assert.equal(artwork.contentType, "image/png");
   assert.deepEqual(artwork.bytes, png);
@@ -100,4 +100,42 @@ test("reads a streamed body under the cap", async () => {
   const ok = new Response(new ReadableStream({ start(c) { c.enqueue(png.slice(0, 10)); c.enqueue(png.slice(10)); c.close(); } }), { headers: { "content-type": "image/png" } });
   const artwork = await fetchArtwork({ url: "https://media.example.test/ok" }, { fetchImpl: async () => ok });
   assert.deepEqual(artwork.bytes, png);
+});
+
+function redirect(location, status = 302) {
+  return { ok: false, status, statusText: "Found", headers: { get(name) { return name === "location" ? location : null; } } };
+}
+
+test("follows same-host redirects, including a port change and http to https", async () => {
+  const seen = [];
+  const hops = { "http://media.example.test:8096/image": redirect("https://media.example.test/image", 301), "https://media.example.test/image": redirect("/jellyfin/image", 307) };
+  const artwork = await fetchArtwork(
+    { url: "http://media.example.test:8096/image", headers: { "X-Emby-Token": "secret" } },
+    { fetchImpl: async (url, options) => { seen.push([url, options.headers["X-Emby-Token"], options.redirect]); return hops[url] ?? response(); } },
+  );
+  assert.equal(artwork.contentType, "image/png");
+  assert.deepEqual(seen, [
+    ["http://media.example.test:8096/image", "secret", "manual"],
+    ["https://media.example.test/image", "secret", "manual"],
+    ["https://media.example.test/jellyfin/image", "secret", "manual"],
+  ]);
+});
+
+test("refuses redirects to another host, https to http, a missing location or a loop", async () => {
+  for (const [start, location, pattern] of [
+    ["https://media.example.test/image", "https://other.example.test/image", /different host/],
+    ["https://media.example.test/image", "https://media.example.test.evil.test/image", /different host/],
+    ["https://media.example.test/image", "http://media.example.test/image", /different host/],
+    ["https://media.example.test/image", null, /without a location/],
+  ]) {
+    const urls = [];
+    await assert.rejects(fetchArtwork({ url: start, headers: { "X-Plex-Token": "secret" } }, { fetchImpl: async (url) => { urls.push(url); return redirect(location); } }), pattern);
+    assert.deepEqual(urls, [start], "the token header is only ever sent to the original URL");
+  }
+  let calls = 0;
+  await assert.rejects(
+    fetchArtwork({ url: "https://media.example.test/a" }, { fetchImpl: async () => { calls += 1; return redirect("/a"); } }),
+    /too many times/,
+  );
+  assert.equal(calls, 4);
 });
