@@ -160,3 +160,39 @@ test("refreshArtwork drops cached covers and republishes straight away", async (
   await d.stop();
   assert.equal(await startDiscordFromConfig({ discord: { enabled: false } }, { getPresence: async () => playing }, { env: {} }).refreshArtwork(), 0);
 });
+
+test("a playing session whose position stops moving is cleared after stuckAfterMs", async () => {
+  let time = Date.parse("2026-09-23T12:00:00.000Z");
+  const client = fakeClient();
+  let position = 1000;
+  const l = createDiscordPresenceLoop({ client, now: () => time, stuckAfterMs: 60_000,
+    getPresence: async () => ({ ...playing, positionMs: position, updatedAt: new Date(time).toISOString() }) });
+  assert.equal((await l.tick()).action, "publish");
+  time += 30_000; position += 30_000;
+  assert.equal((await l.tick()).action, "publish");
+  time += 30_000;
+  assert.equal((await l.tick()).action, "publish");
+  time += 29_000;
+  assert.equal((await l.tick()).action, "publish");
+  time += 1_000;
+  assert.equal((await l.tick()).action, "clear");
+  assert.equal(client.calls.at(-1), null);
+  time += 15_000; position += 15_000;
+  assert.equal((await l.tick()).action, "publish");
+});
+
+test("paused sessions and sessions without a position are never stuck", async () => {
+  let time = Date.parse("2026-09-23T12:00:00.000Z");
+  for (const extra of [{ state: "paused" }, { positionMs: undefined }]) {
+    const l = createDiscordPresenceLoop({ client: fakeClient(), now: () => time, stuckAfterMs: 1_000,
+      getPresence: async () => ({ ...playing, ...extra, updatedAt: new Date(time).toISOString() }) });
+    await l.tick(); time += 10_000;
+    assert.equal((await l.tick()).action, "publish");
+  }
+});
+
+test("rejects bad stale settings", () => {
+  const client = fakeClient();
+  assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => idle, stuckAfterMs: 10 }), RangeError);
+  assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => idle, stuckAfterMs: 1.5 }), RangeError);
+});
