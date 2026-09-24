@@ -30,6 +30,7 @@ const HTML = `<!doctype html>
 
 const CSS = `body{font:16px/1.5 system-ui,sans-serif;margin:0;background:#111;color:#eee}
 main{max-width:34rem;margin:3rem auto;padding:0 1rem}
+figure{margin:0 0 1rem}figure img{display:block;max-width:100%;height:auto}figcaption{font-size:.875rem;color:#bbb}
 h1{font-size:1.5rem}
 ol{display:flex;gap:.75rem;padding:0;list-style:none;font-size:.85rem;color:#888}
 ol li[aria-current=step]{color:#fff;font-weight:600}
@@ -72,6 +73,7 @@ const JS = `"use strict";
   };
   var connectionTest = null;
   var STEPS = ["welcome", "provider", "signin", "discord", "review", "complete"];
+  var PREVIEWS = [["music", "Music"], ["episode", "TV episode"], ["film", "Film"]];
   var LABELS = { welcome: "Welcome", provider: "Media server", signin: "Sign in", discord: "Discord", review: "Review", complete: "Done" };
   var DEFAULT_URLS = { plex: "http://127.0.0.1:32400", jellyfin: "http://127.0.0.1:8096", emby: "http://127.0.0.1:8096", navidrome: "http://127.0.0.1:4533" };
   var SIGNIN_ERRORS = {
@@ -378,7 +380,12 @@ const JS = `"use strict";
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
           el("p", { textContent: "Album art lookup: " + (draft.discordArtworkLookup !== false ? "On" : "Off") }),
           el("p", { textContent: "Spotify on your card: " + (draft.spotify ? "On (signed in as " + draft.spotify.identity.displayName + ")" : "Off") }),
-        ]).concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]);
+        ]).concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]).concat([
+          el("h3", { textContent: "How your card will look" }),
+          el("p", { textContent: "Made-up examples. You can change the look later on the settings page." }),
+        ], PREVIEWS.map(function (item) {
+          return el("figure", {}, [el("img", { src: "/api/setup/preview/" + item[0] + ".svg", alt: "Example card for " + item[1] }), el("figcaption", { textContent: item[1] })]);
+        }));
       default:
         if (draft.account && draft.servers && draft.servers.length) return [el("h2", { textContent: "All set" }), el("p", { textContent: "You're signed in to " + (draft.servers.length + 1) + " media servers, and your choices are saved." })];
         return [el("h2", { textContent: "All set" }), el("p", { textContent: draft.account ? "You're signed in to " + nameOf(PROVIDERS, draft.provider) + " as " + draft.account.displayName + ", and your choices are saved." : "Your choices are saved." })];
