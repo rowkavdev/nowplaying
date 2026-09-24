@@ -53,9 +53,17 @@ Do not add tokens, usernames, media titles, private URLs or random cache-busting
 - Start the normal Discord desktop client before nowplaying.
 - Check whether privacy or idle settings suppress the current activity.
 - Confirm the Discord application ID and asset names match the configured application.
-- Restart the tray app after changing Discord settings.
+- Discord settings saved from the settings page apply straight away. Restart the tray app only after editing `config.json` by hand.
 
 Discord Rich Presence is local. A server process running without a desktop session cannot publish activity to a Discord client on another machine.
+
+## Discord shows the default image or old album art
+
+Discord fetches images itself, so it can only show public HTTPS artwork. Covers from a private media server can't be used there. See [Discord artwork](artwork.md#discord-artwork) for the order nowplaying tries.
+
+- Check `discord.artwork` in the app status or diagnostics. `source` says where the image came from, and `reason` says why it fell back, for example `private_host` (the server's own URL isn't public) or `lookup_miss` (no public cover found for this track).
+- Films and TV episodes never use the public cover lookup, so they show the default image unless an artwork proxy is set up.
+- Covers are cached for six hours, and misses for ten minutes. After fixing tags or adding artwork, use **Refresh album art** in the Discord settings to look again now.
 
 ## Windows app or tray does not start
 
