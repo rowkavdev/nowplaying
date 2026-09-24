@@ -9,6 +9,7 @@ import { createSetupPageHandler } from "./setup-page-handler.js";
 import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
 import { createSetupTestHandler } from "./setup-test-handler.js";
+import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
 import { serializeSetupConfig } from "./setup-config.js";
 import { setupAccounts } from "./setup.js";
 
@@ -38,6 +39,7 @@ export async function writeSetupConfig(file, draft) {
     discordEnabled: draft.discordEnabled,
     discordIdleBehavior: draft.discordIdleBehavior,
     discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
+    ...(draft.spotify ? { spotify: { clientId: draft.spotify.clientId, identity: draft.spotify.identity } } : {}),
   });
   await mkdir(dirname(file), { recursive: true });
   const temporary = `${file}.tmp`;
@@ -65,7 +67,7 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 // Port 0 lets the OS pick a free port so a busy app port never blocks setup.
 // `startup` (optional) manages "Start with Windows": { isEnabled(), setEnabled(bool) }.
 // Without it the wizard doesn't offer the choice.
-export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, startup, fetchImpl } = {}) {
+export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, spotifySignIn, startup, fetchImpl } = {}) {
   if (startup !== undefined && (typeof startup?.isEnabled !== "function" || typeof startup?.setEnabled !== "function")) throw new TypeError("startup is invalid");
   const page = createSetupPageHandler();
   const store = withStartupState(createSetupDraftStore({ file: draftFile }), startup);
@@ -89,6 +91,15 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const signIn = credentialStore
     ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })
     : async () => null;
+  // Optional Spotify sign-in for the card (#135); like the media server
+  // sign-in it needs somewhere safe to keep the refresh token.
+  const onSpotifySignedIn = async ({ clientId, identity }) => {
+    const { draft: current } = await store.load();
+    await store.save({ ...current, spotify: { clientId, identity } });
+  };
+  const spotify = credentialStore
+    ? createSetupSpotifyHandler({ credentialStore, onSignedIn: onSpotifySignedIn, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) })
+    : async () => null;
   // "Test connection" needs the saved sign-in, so it exists only with a credential store.
   const connectionTest = credentialStore?.read
     ? createSetupTestHandler({ store, credentialStore, ...(fetchImpl ? { fetchImpl } : {}) })
@@ -96,7 +107,7 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   // Per-run secret: the browser page gets it as a SameSite=Strict cookie, the
   // native window gets it through its environment. Other local sites get neither.
   const sessionSecret = randomBytes(32).toString("base64url");
-  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
+  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await spotify(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, sessionSecret, close: () => app.close() });
