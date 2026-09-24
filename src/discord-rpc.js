@@ -2,12 +2,21 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
   if (typeof clientId !== "string" || !/^\d{17,20}$/.test(clientId)) throw new TypeError("clientId: expected a Discord application ID");
   if (typeof createClient !== "function") throw new TypeError("createClient: expected an RPC client factory");
   let client;
+  let connecting;
 
   // An RPC client whose socket Discord closed (Discord quit or restarted) is
   // dropped so the next connect logs in again.
   function dead() { return Boolean(client) && client.connected === false; }
 
-  async function connect() {
+  // Two publishes at once (a Refresh artwork tick during a scheduled tick)
+  // share one login. Without this each opened its own Discord connection and
+  // the extra one was never closed, so its status could outlive a clear/stop.
+  function connect() {
+    connecting ??= open().finally(() => { connecting = undefined; });
+    return connecting;
+  }
+
+  async function open() {
     if (dead()) await close().catch(() => {});
     if (client) return;
     const next = await createClient();

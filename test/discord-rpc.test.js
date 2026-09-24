@@ -42,3 +42,24 @@ test("logs in again after the RPC client loses Discord", async () => {
   assert.equal(made[1].logins, 1);
   assert.equal(transport.connected, true);
 });
+
+test("concurrent connects share one Discord login", async () => {
+  const made = [];
+  const transport = createDiscordRpcTransport({ clientId: "1552301957299839116", createClient: async () => {
+    const client = { login: async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }, setActivity: async () => {}, clearActivity: async () => {}, destroy: async () => {} };
+    made.push(client);
+    return client;
+  } });
+  await Promise.all([transport.connect(), transport.connect()]);
+  assert.equal(made.length, 1);
+  await transport.connect();
+  assert.equal(made.length, 1);
+});
+
+test("a failed connect can be retried", async () => {
+  let attempts = 0;
+  const transport = createDiscordRpcTransport({ clientId: "1552301957299839116", createClient: async () => ({ login: async () => { attempts += 1; if (attempts === 1) throw new Error("Discord is not running"); }, setActivity: async () => {}, clearActivity: async () => {} }) });
+  await assert.rejects(transport.connect(), /not running/);
+  await transport.connect();
+  assert.equal(transport.connected, true);
+});
