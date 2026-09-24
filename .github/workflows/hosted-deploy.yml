@@ -1,12 +1,11 @@
 name: Hosted card deploy
 
+# Runs on every push to main so every main commit shows a hosted card check.
+# It only deploys when hosted code changed (or on manual dispatch); otherwise
+# it just smoke-tests the live site. That keeps Vercel Hobby deploys rare.
 on:
   push:
     branches: [main]
-    paths:
-      - hosted/**
-      - src/card.js
-      - .github/workflows/hosted-deploy.yml
   workflow_dispatch:
 
 permissions:
@@ -17,10 +16,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  changes:
+    name: Hosted card changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.diff.outputs.deploy }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Did hosted code change?
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "push" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$AFTER" | grep -qE '^(hosted/|src/card\.js$|\.github/workflows/hosted-deploy\.yml$)'; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "No hosted changes in this push; skipping the deploy and checking the live site only." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   deploy:
     name: Deploy hosted card service to Vercel
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.HOSTED_BASE_URL }}
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -58,6 +95,18 @@ jobs:
           set -euo pipefail
           rm -rf .git
           npx --yes vercel@59.25.4 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+  live:
+    name: Hosted card live check
+    needs: [changes, deploy]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.deploy.result != 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Smoke test production domain
         env:
           BASE_URL: ${{ vars.HOSTED_BASE_URL }}
