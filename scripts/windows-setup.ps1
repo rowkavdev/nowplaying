@@ -22,8 +22,8 @@ Add-Type -Namespace NowPlaying -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 '@
 
-$Steps = @('welcome', 'provider', 'signin', 'discord', 'review', 'complete')
-$StepLabels = @{ welcome = 'Welcome'; provider = 'Media server'; signin = 'Sign in'; discord = 'Discord'; review = 'Review'; complete = 'Done' }
+$Steps = @('welcome', 'provider', 'signin', 'discord', 'hosting', 'review', 'complete')
+$StepLabels = @{ welcome = 'Welcome'; provider = 'Media server'; signin = 'Sign in'; discord = 'Discord'; hosting = 'Card hosting'; review = 'Review'; complete = 'Done' }
 $DefaultUrls = @{ plex = 'http://127.0.0.1:32400'; jellyfin = 'http://127.0.0.1:8096'; emby = 'http://127.0.0.1:8096'; navidrome = 'http://127.0.0.1:4533' }
 $SignInErrors = @{
   authentication_failed = "That username or password didn't work."
@@ -77,6 +77,16 @@ $Providers = [ordered]@{ plex = 'Plex'; jellyfin = 'Jellyfin'; emby = 'Emby'; na
 $SignInHelp = @{
   emby = 'Sign in as the Emby user whose playback you want to show, with the username and password you use in the Emby app. NowPlaying saves the sign-in Emby hands back, not your password.'
   navidrome = 'Use the username and password you sign in to Navidrome with. The address is usually your server on port 4533. NowPlaying saves a salted hash of it, not your password.'
+}
+# Card hosting step (#140), same choices and wording as the browser page.
+$Hosting = [ordered]@{ off = 'Not now'; hosted = "NowPlaying's hosted service"; self = 'My own card service (self-hosted)' }
+$HostedCheck = @{
+  ok = "That's a NowPlaying card service."
+  invalid_url = 'Enter the service address, starting with https://.'
+  bad_status = 'That address answered, but not like a NowPlaying card service.'
+  not_nowplaying = 'That address answered, but not like a NowPlaying card service.'
+  timeout = 'That address took too long to answer.'
+  unreachable = "Couldn't reach that address. Check it and that the service is running."
 }
 $Idle = [ordered]@{ clear = 'Clear my status'; grace = 'Keep it for a short grace period'; show = 'Show that nothing is playing'; recent = 'Show what I played last' }
 
@@ -298,7 +308,12 @@ $pollTimer.add_Tick({
 function Get-Changes {
   $changes = @{}
   foreach ($control in $panel.Controls) {
-    if ($control -is [System.Windows.Forms.RadioButton] -and $control.Checked) { $changes.provider = [string]$control.Tag }
+    if ($control -is [System.Windows.Forms.RadioButton] -and $control.Checked -and $control.Name -ne 'hosting') { $changes.provider = [string]$control.Tag }
+    if ($control -is [System.Windows.Forms.RadioButton] -and $control.Checked -and $control.Name -eq 'hosting') {
+      $changes.hostedEnabled = [string]$control.Tag -ne 'off'
+      $url = (Get-Field 'hostedUrl')
+      $changes.hostedUrl = if ([string]$control.Tag -eq 'self' -and $url) { $url } else { $null }
+    }
     if ($control.Name -eq 'discordEnabled') { $changes.discordEnabled = [bool]$control.Checked }
     if ($control.Name -eq 'discordIdleBehavior' -and $control.SelectedItem) { $changes.discordIdleBehavior = [string]$control.SelectedItem.Key }
     if ($control.Name -eq 'discordArtworkLookup') { $changes.discordArtworkLookup = [bool]$control.Checked }
@@ -311,7 +326,10 @@ function Update-Buttons {
   $index = [array]::IndexOf($Steps, $script:Draft.step)
   $back.Enabled = $index -gt 0 -and $index -lt ($Steps.Count - 1)
   $picked = @($panel.Controls | Where-Object { $_ -is [System.Windows.Forms.RadioButton] -and $_.Checked }).Count -gt 0
-  $next.Enabled = (($script:Draft.step -ne 'provider') -or $picked) -and (($script:Draft.step -ne 'signin') -or [bool]$script:Draft.account)
+  $selfHosted = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' -and $_.Checked -and [string]$_.Tag -eq 'self' }).Count -gt 0
+  foreach ($control in @($panel.Controls | Where-Object { $_.Name -eq 'hostedUrl' -or $_.Name -eq 'hostedCheck' })) { $control.Enabled = $selfHosted }
+  $needsUrl = $script:Draft.step -eq 'hosting' -and $selfHosted -and -not (Get-Field 'hostedUrl')
+  $next.Enabled = (($script:Draft.step -ne 'provider') -or $picked) -and (($script:Draft.step -ne 'signin') -or [bool]$script:Draft.account) -and -not $needsUrl
   $next.Text = switch ($script:Draft.step) { 'review' { 'Finish' } 'complete' { 'Close' } default { 'Next' } }
 }
 
@@ -458,6 +476,34 @@ function Show-Step {
       $discordResult.Name = 'discordTestResult'
       $panel.Controls.Add($discordResult)
     }
+    'hosting' {
+      $title.Text = 'Card hosting'
+      $panel.Controls.Add((New-Text 'Put your card online so a GitHub README can show it, without opening your media server to the internet. You can change this later in Settings.'))
+      $choice = if ($script:Draft.hostedEnabled -eq $true) { if ($script:Draft.hostedUrl) { 'self' } else { 'hosted' } } else { 'off' }
+      foreach ($key in $Hosting.Keys) {
+        $radio = [System.Windows.Forms.RadioButton]::new()
+        $radio.Name = 'hosting'; $radio.Tag = $key; $radio.Text = $Hosting[$key]; $radio.AutoSize = $true; $radio.Checked = ($key -eq $choice)
+        $radio.add_CheckedChanged({ Update-Buttons })
+        $panel.Controls.Add($radio)
+      }
+      $urlBox = New-Field 'hostedUrl' 'Card service address (for your own service)' ([string]$script:Draft.hostedUrl)
+      $urlBox.add_TextChanged({ Update-Buttons })
+      $panel.Controls.Add((New-ActionButton 'hostedCheck' 'Check this address' $onHostedCheck))
+      $checkResult = New-Text ''
+      $checkResult.Name = 'hostedCheckResult'
+      $panel.Controls.Add($checkResult)
+      # Signing this PC in to the hosted service (GitHub sign-in) goes here once it lands.
+      try {
+        $preview = Invoke-Setup 'GET' '/api/setup/hosted/preview'
+        $sent = @($preview.sent | ForEach-Object { "- $($_.label)" }) + @($preview.alwaysSent | ForEach-Object { "- $_" })
+        $never = @($preview.neverSent | ForEach-Object { "- $_" })
+        $list = New-Text ("With hosting on, this leaves your PC:`r`n" + ($sent -join "`r`n") + "`r`n`r`nNever sent:`r`n" + ($never -join "`r`n"))
+        $list.Name = 'hostedPreview'
+        $panel.Controls.Add($list)
+      } catch {
+        $panel.Controls.Add((New-Text "Couldn't load the list of what leaves your PC. Check NowPlaying is still running."))
+      }
+    }
     'review' {
       $title.Text = 'Check your choices'
       $provider = if ($script:Draft.provider) { $Providers[[string]$script:Draft.provider] } else { 'Not chosen' }
@@ -477,6 +523,7 @@ function Show-Step {
         $panel.Controls.Add((New-Text "Media server: $provider$who"))
       }
       $panel.Controls.Add((New-Text "Discord status: $status - when idle: $($Idle[[string]$script:Draft.discordIdleBehavior])"))
+      $panel.Controls.Add((New-Text "Card hosting: $(if ($script:Draft.hostedEnabled -eq $true) { if ($script:Draft.hostedUrl) { "Your own service at $($script:Draft.hostedUrl)" } else { "NowPlaying's hosted service" } } else { 'Off' })"))
       $panel.Controls.Add((New-Text "Spotify on your card: $(if ($script:Draft.spotify) { "On (signed in as $($script:Draft.spotify.identity.displayName))" } else { 'Off' })"))
       $panel.Controls.Add((New-Text "Album art lookup: $(if ($script:Draft.discordArtworkLookup -ne $false) { 'On' } else { 'Off' })"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
@@ -537,6 +584,17 @@ $onDiscordTest = {
     }
     $status = [string]$reply.status
     $out.Text = if ($DiscordTestMessages.ContainsKey($status)) { $DiscordTestMessages[$status] } else { "Couldn't test Discord. Try again." }
+  } finally { $form.UseWaitCursor = $false }
+}
+
+$onHostedCheck = {
+  $out = @($panel.Controls | Where-Object { $_.Name -eq 'hostedCheckResult' })[0]
+  $out.Text = 'Checking...'
+  $form.UseWaitCursor = $true
+  try {
+    $reply = try { Invoke-Setup 'POST' '/api/setup/hosted/check' @{ url = (Get-Field 'hostedUrl') } } catch { $null }
+    $reason = if ($reply.ok) { 'ok' } else { [string]$reply.reason }
+    $out.Text = if ($HostedCheck.ContainsKey($reason)) { $HostedCheck[$reason] } else { $HostedCheck['invalid_url'] }
   } finally { $form.UseWaitCursor = $false }
 }
 
@@ -604,6 +662,15 @@ if ($SelfTest) {
     if (-not $startupBox) { throw 'discord step has no Start with Windows choice' }
     $startupBox.Checked = $true
   } elseif ($startupBox) { throw 'Start with Windows must be hidden when it is not offered' }
+  & $onNext; $seen += $script:Draft.step
+  # Card hosting (#140): Not now is the default; self-hosted needs an address before Next.
+  $hostRadios = @($panel.Controls | Where-Object { $_.Name -eq 'hosting' })
+  if ($hostRadios.Count -ne 3 -or -not ($hostRadios | Where-Object { $_.Checked -and $_.Tag -eq 'off' })) { throw 'hosting step must offer three choices with Not now picked' }
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'hostedPreview' })[0]) { throw 'hosting step has no upload preview' }
+  ($hostRadios | Where-Object { $_.Tag -eq 'self' }).Checked = $true
+  if ($next.Enabled) { throw 'Next must wait for a self-hosted address' }
+  ($hostRadios | Where-Object { $_.Tag -eq 'off' }).Checked = $true
+  if (-not $next.Enabled) { throw 'Next must allow Not now' }
   & $onNext; $seen += $script:Draft.step
   if (-not @($panel.Controls | Where-Object { $_.Name -eq 'cardPreview' })[0]) { throw 'review step has no card preview link' }
   & $onNext; $seen += $script:Draft.step

@@ -1,6 +1,6 @@
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 
-const STEPS = Object.freeze(["welcome", "provider", "signin", "discord", "review", "complete"]);
+const STEPS = Object.freeze(["welcome", "provider", "signin", "discord", "hosting", "review", "complete"]);
 const MAX_ACCOUNT_FIELD = 200;
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const IDLE_BEHAVIORS = new Set(["clear", "grace", "show", "recent"]);

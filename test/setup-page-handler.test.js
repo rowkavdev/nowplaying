@@ -90,3 +90,11 @@ test("Emby and Navidrome sign-in shows provider help, the same in the browser an
     assert.ok(ps1.includes(`${provider} = '${text}'`), `${provider} wording matches the native window`);
   }
 });
+
+test("the card hosting step uses the hosted setup API and leaves room for GitHub sign-in (#140)", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  assert.match(js, /"\/api\/setup\/hosted\/"/);
+  assert.match(js, /"hosting"/);
+  assert.match(js, /id: "hostedSignIn"/);
+  for (const choice of ["Not now", "NowPlaying's hosted service", "My own card service (self-hosted)"]) assert.ok(js.includes(choice), choice);
+});

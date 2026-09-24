@@ -55,6 +55,7 @@ test("a sign-in saves the secret to the credential store and only the account to
     assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "discord");
     await assert.rejects(readFile(configFile), { code: "ENOENT" });
     await api("/api/setup/draft", "POST", { action: "next", changes: { discordEnabled: false } });
+    assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "review", "card hosting left as Not now");
     assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "complete");
     const configText = await readFile(configFile, "utf8");
     assert.deepEqual(JSON.parse(configText), {
@@ -142,7 +143,8 @@ test("Start with Windows shows the current state and Finish applies the choice",
     assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.startWithWindows, true);
     await post({ action: "next" });
     await post({ action: "next", changes: { provider: "plex" } });
-    assert.equal((await post({ action: "next", changes: { startWithWindows: false } })).draft.step, "review");
+    assert.equal((await post({ action: "next", changes: { startWithWindows: false } })).draft.step, "hosting");
+    assert.equal((await post({ action: "next" })).draft.step, "review");
     assert.deepEqual(applied, []);
     assert.equal((await post({ action: "next" })).draft.step, "complete");
     assert.deepEqual(applied, [false]);
@@ -162,6 +164,7 @@ test("a failed startup change keeps the wizard on review", async () => {
     await post({ action: "next" });
     await post({ action: "next", changes: { provider: "plex" } });
     await post({ action: "next", changes: { startWithWindows: true } });
+    await post({ action: "next" });
     assert.deepEqual(await post({ action: "next" }), [500, { error: "finish_failed" }]);
     assert.equal((await (await fetch(new URL("/api/setup/draft", app.url))).json()).draft.step, "review");
   } finally {
