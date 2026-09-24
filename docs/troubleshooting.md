@@ -17,7 +17,7 @@ Then check, in order:
 
 ## Windows logs
 
-nowplaying's privacy-safe Windows log lives at `%LOCALAPPDATA%\nowplaying\logs\nowplaying.log`. Right-click the tray icon and choose **Open log folder** to open it in File Explorer, or open the **Logs** page from the status page to see recent events. `nowplaying.exe start` records startup, successful start, stop and startup failures (with a short code such as `CONFIG_LOAD_FAILED` or `CONFIG_INVALID`). Provider and updater events are still being connected for v0.2.
+nowplaying's privacy-safe Windows log lives at `%LOCALAPPDATA%\nowplaying\logs\nowplaying.log`. Right-click the tray icon and choose **Open log folder** to open it in File Explorer, or open the **Logs** page from the status page to see recent events. `nowplaying.exe start` records startup, successful start, stop and startup failures (with a short code such as `CONFIG_LOAD_FAILED` or `CONFIG_INVALID`). Provider and updater events are still being connected for v0.2; until then a provider or updater failure that stops startup shows as a `SAFE_MODE_PROVIDER` or `SAFE_MODE_UPDATER` code on the startup entries.
 
 - Each entry records only the time, level, component (`startup`, `provider`, `discord`, `updater`, `tray`), a status and an optional short error code. Titles, usernames, provider URLs and credentials are never written.
 - When the file reaches 1 MB it rotates to `nowplaying.log.1`, and older files shift up. Three rotated files are kept, so the folder stays around 4 MB at most.
