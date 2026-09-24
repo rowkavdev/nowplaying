@@ -40,6 +40,7 @@ export function privacySettingsView(config) {
 // Card appearance (#94). Defaults are the renderer's own, so a page that
 // shows them draws the same card as a config without a card section.
 const CARD_KEYS = new Set(["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "artworkTint"]);
+const AUTO_CARD_KEYS = ["artworkWidth", "artworkHeight"];
 export function cardSettingsView(config) {
   const card = config.card ?? {};
   const theme = card.theme ?? "midnight-blue";
@@ -52,8 +53,10 @@ export function cardSettingsView(config) {
     // The compact theme hides progress unless it's turned on.
     showProgress: card.showProgress ?? theme !== "compact",
     artworkPosition: card.artworkPosition ?? "left",
-    artworkWidth: card.artworkWidth ?? 68,
-    artworkHeight: card.artworkHeight ?? 100,
+    // null means automatic: the renderer picks by media kind (square for
+    // music since #445), so a save never pins the old 68x100 default.
+    artworkWidth: card.artworkWidth ?? null,
+    artworkHeight: card.artworkHeight ?? null,
     fieldOrder: card.fieldOrder ?? ["state", "title", "subtitle"],
     textAlign: card.textAlign ?? "start",
     progressPosition: card.progressPosition ?? "bottom",
@@ -114,7 +117,10 @@ export function applyPrivacyChanges(config, changes) {
 
 export function applyCardChanges(config, changes) {
   checkChanges(changes, CARD_KEYS, "card");
-  return rewrite(config, { card: normalizeCard({ ...cardSettingsView(config), ...changes }) });
+  const card = { ...cardSettingsView(config), ...changes };
+  // Artwork size is only written once the user sets it; null clears it.
+  for (const key of AUTO_CARD_KEYS) if (card[key] === null) delete card[key];
+  return rewrite(config, { card: normalizeCard(card) });
 }
 
 // Media servers for the settings page (#252): who is signed in where. No

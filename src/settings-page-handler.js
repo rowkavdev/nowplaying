@@ -240,22 +240,25 @@ privacy.form.addEventListener("submit", async (event) => {
     privacy.save.disabled = false;
   }
 });
-const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
+const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
 const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note") };
 const cardField = (key) => document.getElementById("card-" + key);
+// Artwork size stays automatic (picked by media kind) until a slider moves.
+const ART_AUTO = { artworkWidth: true, artworkHeight: true };
+const ART_SHOWN = { artworkWidth: 100, artworkHeight: 100 };
 function cardSay(text, tone) { const el = document.getElementById("card-result"); el.textContent = text; el.className = tone || ""; }
 function cardValues() {
   const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value, progressPosition: cardField("progressPosition").value, progressWidth: cardField("progressWidth").value, direction: cardField("direction").value };
-  for (const key of Object.keys(CARD_NUMBERS)) values[key] = Number(cardField(key).value);
+  for (const key of Object.keys(CARD_NUMBERS)) values[key] = ART_AUTO[key] ? null : Number(cardField(key).value);
   return values;
 }
 function cardValid(values) {
-  return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => Number.isInteger(values[key]) && values[key] >= min && values[key] <= max);
+  return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => (ART_AUTO[key] && values[key] === null) || (Number.isInteger(values[key]) && values[key] >= min && values[key] <= max));
 }
 let previewTimer;
 function cardChanged() {
-  for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = cardField(key).value + " px";
+  for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = ART_AUTO[key] ? "Auto" : cardField(key).value + " px";
   for (const key of ["progressHeight", "progressPosition", "progressWidth"]) cardField(key).disabled = !cardField("showProgress").checked;
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
@@ -264,6 +267,7 @@ function cardChanged() {
     card.save.disabled = false;
     if (document.getElementById("card-result").className === "bad") cardSay("");
     const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0", fieldOrder: values.fieldOrder.join(",") });
+    for (const key of Object.keys(ART_AUTO)) if (values[key] === null) query.delete(key);
     card.preview.src = "/api/settings/card/preview.svg?" + query;
   }, 200);
 }
@@ -280,9 +284,15 @@ function showCard(c) {
   cardField("progressPosition").value = c.progressPosition;
   cardField("progressWidth").value = c.progressWidth;
   cardField("direction").value = c.direction;
-  for (const key of Object.keys(CARD_NUMBERS)) cardField(key).value = c[key];
+  for (const key of Object.keys(CARD_NUMBERS)) {
+    if (Object.hasOwn(ART_AUTO, key)) ART_AUTO[key] = c[key] === null;
+    cardField(key).value = c[key] ?? ART_SHOWN[key];
+  }
   cardChanged();
 }
+// Registered before cardChanged so a single click or arrow key leaves Auto
+// before the size is read, without relying on capture order (#480 review).
+for (const key of Object.keys(ART_AUTO)) cardField(key).addEventListener("input", () => { ART_AUTO[key] = false; });
 for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction"]) cardField(key).addEventListener("input", cardChanged);
 cardField("theme").addEventListener("change", () => {
   // Compact hides the bar by default; the others show it.
