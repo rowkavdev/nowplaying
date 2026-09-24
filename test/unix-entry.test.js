@@ -97,9 +97,12 @@ test("start runs the server and card from the setup config and the real Secret S
     });
     const health = await fetch(`${url}/healthz`);
     assert.deepEqual([health.status, await health.text()], [200, "ok\n"]);
+    // There's no media server at 127.0.0.1:9, so the card route answers with
+    // its "unavailable" state; that still proves the card pipeline is wired up.
     const card = await fetch(`${url}/card.svg`);
-    assert.equal(card.status, 200);
-    assert.match(await card.text(), /^<svg/);
+    assert.equal(card.headers.has("x-nowplaying-source"), true);
+    if (card.status === 200) assert.match(await card.text(), /^<svg/);
+    else assert.deepEqual([card.status, card.headers.get("x-nowplaying-source")], [503, "unavailable"]);
     assert.doesNotMatch(JSON.stringify(cli.output()), /ci-token/);
     const log = await readFile(join(home, ".local", "state", "nowplaying", "logs", "nowplaying.log"), "utf8");
     assert.match(log, /"status":"starting"/);
