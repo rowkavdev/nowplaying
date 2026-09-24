@@ -18,6 +18,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - id: release
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
@@ -55,3 +58,49 @@ jobs:
           if [ "$(node main/scripts/dedupe-changelog.js body.md)" = "deduped" ]; then
             gh pr edit "$number" -R "$GITHUB_REPOSITORY" --body-file body.md
           fi
+
+  # Release Please writes the whole changelog section into the GitHub release.
+  # Keep CHANGELOG.md complete, but cap the release page at the same ten ranked
+  # changes the development build shows (#145).
+  stable-release-notes:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Rewrite the stable release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected tag: $TAG"; exit 1; }
+          git fetch --quiet --tags origin
+          previous=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$TAG" | head -1 || true)
+          if [[ -z "$previous" ]]; then
+            previous=$(git rev-list --max-parents=0 "$TAG" | tail -1)
+          fi
+          git log --reverse --no-merges --pretty=format:'%H%x09%s' "$previous..$TAG" > all-changes.tsv
+          : > changes.tsv
+          while IFS=$'\t' read -r sha subject || [[ -n "${sha:-}" ]]; do
+            [[ -z "${sha:-}" ]] && continue
+            # Release Please's own version bump is not a change worth listing.
+            [[ "$subject" == "chore(main): release "* ]] && continue
+            # shellcheck disable=SC2016 # awk field references must remain literal.
+            size=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {print a+d+f+0}')
+            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null | grep -m1 -E '^[0-9]+$' || true)
+            printf '%s\t%s\t%s\t%s\n' "$sha" "$pr" "$size" "$subject" >> changes.tsv
+          done < all-changes.tsv
+          {
+            printf "## What's Changed\n\n"
+            node scripts/release-notes.js changes.tsv "$GITHUB_REPOSITORY"
+            printf '\nEvery change is listed in [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md).\n' "$GITHUB_REPOSITORY" "$TAG"
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$previous" "$TAG"
+          } > release-notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
