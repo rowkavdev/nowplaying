@@ -27,6 +27,7 @@ nowplaying clears sessions that sit at the same position too long. If Discord it
 ## The media server connection failed in setup
 
 - **Unreachable:** the server address must open in a browser on the same PC. Check the port and that it's `http://` or `https://` with no extra path.
+- **YouTube extension not reporting:** check the pairing code and port in the extension's options match the settings page, and that you're not watching a Short. After **Make a new code**, paste the new code into the extension.
 - **Authentication failed:** check the sign-in on the server's own web interface, then try again. See your provider's page: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify).
 
 ## Still stuck

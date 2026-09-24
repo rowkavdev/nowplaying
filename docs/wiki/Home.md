@@ -14,6 +14,7 @@ Everything runs on your own machine or server. Your server address, sign-in deta
 3. Running it on a server instead: [Run as a hosted service](Run-as-a-hosted-service)
 4. Connecting your media server: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify)
 5. Setting up the outputs: [README card](Add-a-README-card) · [Discord Rich Presence](Enable-Discord-Rich-Presence)
+6. Watching in the browser: [YouTube](Connect-YouTube) (extension)
 
 ## After setup
 
