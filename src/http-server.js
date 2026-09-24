@@ -20,13 +20,19 @@ const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 export const SESSION_COOKIE = "nowplaying_session";
 export const SESSION_HEADER = "x-nowplaying-session";
 
-export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024, sessionSecret } = {}) {
+// openWritePaths (#136): exact paths whose writes skip the same-origin and
+// session checks because the handler authenticates them itself (the YouTube
+// extension bridge sends a pairing token from a browser-extension origin).
+// They still must be JSON and within the body limit.
+export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024, sessionSecret, openWritePaths = [] } = {}) {
   if (typeof handler !== "function") throw new TypeError("handler: expected a function");
   if (!isLoopbackHost(host)) throw new TypeError("host: expected a loopback address");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("port must be an integer from 0 to 65535");
   if (!Number.isInteger(shutdownMs) || shutdownMs < 1 || shutdownMs > 30000) throw new RangeError("shutdownMs must be an integer from 1 to 30000");
   if (!Number.isInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 1024 * 1024) throw new RangeError("maxBodyBytes must be an integer from 1 to 1048576");
   if (sessionSecret !== undefined && (typeof sessionSecret !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(sessionSecret))) throw new TypeError("sessionSecret: expected 32+ URL-safe characters");
+  if (!Array.isArray(openWritePaths) || openWritePaths.some((path) => typeof path !== "string" || !/^\/[a-z0-9/_-]+$/.test(path))) throw new TypeError("openWritePaths: expected exact paths");
+  const openPaths = new Set(openWritePaths);
   const sessionCookie = sessionSecret ? `${SESSION_COOKIE}=${sessionSecret}; Path=/; HttpOnly; SameSite=Strict` : undefined;
   const server = createServer(async (request, response) => {
     if (!isLoopbackAuthority(request.headers.host)) {
@@ -36,7 +42,9 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
     }
     let body;
     if (BODY_METHODS.has(request.method)) {
-      const rejection = rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
+      const rejection = openPaths.has(pathOf(request.url))
+        ? requireJson(request.headers)
+        : rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
       if (rejection) {
         request.resume();
         response.writeHead(rejection.status, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8", Connection: "close" });
@@ -107,9 +115,17 @@ function rejectUnsafeWrite(headers) {
     try { url = new URL(origin); } catch { return { status: 403, message: "Forbidden" }; }
     if (url.protocol !== "http:" || url.host !== String(headers.host).toLowerCase() || !isLoopbackAuthority(url.host)) return { status: 403, message: "Forbidden" };
   }
+  return requireJson(headers);
+}
+
+function requireJson(headers) {
   const type = String(headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
   if (type !== "application/json") return { status: 415, message: "Unsupported Media Type" };
   return null;
+}
+
+function pathOf(url) {
+  try { return new URL(url, "http://127.0.0.1").pathname; } catch { return null; }
 }
 
 function readBody(request, limit) {
