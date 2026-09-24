@@ -38,6 +38,14 @@ Write down the build number and version from the release title, for example `dev
 - [ ] "Hide album art": Discord shows the NowPlaying icon instead of the cover.
 - [ ] "Hide progress and timer": no progress bar on the card and no timer on Discord.
 - [ ] "Don't show" Music (or Movies / TV episodes): playing that kind clears Discord and the card shows nothing playing. Untick it and it comes back.
+- [ ] Settings > Discord > "When nothing is playing": pick "Show what I played last", Save, stop playback. Discord keeps the last item instead of clearing.
+- [ ] Settings > Card: move Corners, Padding and Width, and switch Style. The preview redraws within a second each time. With nothing playing it shows "Sample track".
+- [ ] Untick "Show progress bar". Bar thickness greys out and the bar goes from the preview. Pick Compact: the bar box unticks on its own.
+- [ ] Type 90 in Width. A message says 280 to 800 and Save is greyed out. Put 520 back.
+- [ ] Pick Light, 520 px, press Save. Open the card link from the Status page: the card is light and wider. Nothing restarted.
+- [ ] Quit and reopen nowplaying. Settings > Card still shows Light and 520, and the card still looks the same.
+- [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
+- [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
