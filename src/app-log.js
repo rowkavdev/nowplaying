@@ -50,9 +50,14 @@ export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } =
 }
 
 
-export function createAppLogger({ env = process.env, platform = process.platform, now = () => new Date(), createLog = createRotatingLog } = {}) {
+// `file` picks the log explicitly (the Linux/macOS entry passes appPaths().logFile);
+// without it only Windows logs, to %LOCALAPPDATA%.
+export function createAppLogger({ env = process.env, platform = process.platform, now = () => new Date(), createLog = createRotatingLog, file = null } = {}) {
   let log = null;
-  if (platform === "win32" && typeof env?.LOCALAPPDATA === "string" && env.LOCALAPPDATA.trim()) {
+  if (typeof file === "string" && file) {
+    try { log = createLog({ file }); }
+    catch { log = null; }
+  } else if (platform === "win32" && typeof env?.LOCALAPPDATA === "string" && env.LOCALAPPDATA.trim()) {
     try { log = createLog({ file: windowsLogPath({ localAppData: env.LOCALAPPDATA }) }); }
     catch { log = null; }
   }
