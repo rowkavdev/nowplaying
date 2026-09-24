@@ -1,18 +1,148 @@
+# Area labels for pull requests (actions/labeler, see pull-request-labels.yml).
+# A PR can get several areas. test/labeler-config.test.js checks these globs
+# against sample file lists from real PRs (#391).
 area:server:
   - changed-files:
-      - any-glob-to-any-file: ["src/http-*.js", "src/*handler.js", "src/analytics*.js"]
+      - any-glob-to-any-file:
+          - "src/http-*.js"
+          - "src/*handler.js"
+          - "src/analytics*.js"
+          - "src/app-*.js"
+          - "src/settings*.js"
+          - "src/setup*.js"
+          - "src/config-*.js"
+          - "src/log-tail.js"
+          - "src/diagnostics.js"
+          - "src/first-run.js"
+          - "src/index.js"
+          - "src/multi-server.js"
+          - "src/startup-recovery*.js"
+          - "src/download-badge.js"
+          - "src/release-stats.js"
+          - "src/hosted-*.js"
+          - "hosted/**"
+          - "test/http-*.js"
+          - "test/analytics*.js"
+          - "test/app-*.js"
+          - "test/settings*.js"
+          - "test/setup*.js"
+          - "test/config-*.js"
+          - "test/logs-*.js"
+          - "test/diagnostics*.js"
+          - "test/first-run*.js"
+          - "test/multi-server*.js"
+          - "test/startup-recovery*.js"
+          - "test/hosted-*.js"
 area:cards:
   - changed-files:
-      - any-glob-to-any-file: ["src/card*.js", "src/artwork*.js", "src/providers/**", "test/card*.js", "test/artwork*.js"]
+      - any-glob-to-any-file:
+          - "src/card*.js"
+          - "src/resilient-card.js"
+          - "src/template.js"
+          - "test/card*.js"
+          - "test/resilient-card*.js"
+          - "test/template*.js"
+          - "test/fixtures/cards/**"
+          - "scripts/render-card-examples.js"
+area:artwork:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/artwork*.js"
+          - "src/raster-dimensions.js"
+          - "src/musicbrainz-lookup.js"
+          - "src/discord-artwork.js"
+          - "test/artwork*.js"
+          - "test/card-artwork*.js"
+          - "test/raster-dimensions*.js"
+          - "test/musicbrainz-lookup*.js"
+          - "test/discord-artwork*.js"
+          - "docs/artwork.md"
+area:providers:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/providers/**"
+          - "src/provider*.js"
+          - "src/spotify-*.js"
+          - "src/youtube-*.js"
+          - "extension/**"
+          - "src/presence*.js"
+          - "test/provider*.js"
+          - "test/plex*.js"
+          - "test/jellyfin*.js"
+          - "test/emby*.js"
+          - "test/navidrome*.js"
+          - "test/spotify*.js"
+          - "test/youtube*.js"
+          - "test/presence*.js"
+area:discord:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/discord*.js"
+          - "test/discord*.js"
+          - "test/settings-discord*.js"
+area:security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/credential-store.js"
+          - "src/windows-credential-adapter.js"
+          - "src/hosted-credentials.js"
+          - "src/privacy.js"
+          - "src/bounded-response.js"
+          - "src/artwork-sanitizer*.js"
+          - "test/credential-store*.js"
+          - "test/windows-credential-adapter*.js"
+          - "test/privacy*.js"
+          - "test/bounded-response*.js"
+          - "test/artwork-sanitizer*.js"
+          - "test/setup-hostile*.js"
+          - "SECURITY.md"
+          - ".github/workflows/codeql.yml"
+          - ".github/workflows/dependency-review.yml"
+          - ".github/workflows/workflow-security.yml"
+area:release:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/release*.yml"
+          - ".github/workflows/beta.yml"
+          - "release-please-config.json"
+          - ".release-please-manifest.json"
+          - "CHANGELOG.md"
+          - "scripts/release-notes.js"
+          - "scripts/dedupe-changelog.js"
+          - "src/build-provenance.js"
+          - "test/release-notes*.js"
+          - "test/dedupe-changelog*.js"
+          - "test/build-provenance*.js"
 area:installer:
   - changed-files:
-      - any-glob-to-any-file: ["scripts/build-windows.ps1", "scripts/windows-installer.iss", "scripts/windows-launcher.cs", "scripts/generate-windows-icon.ps1", "assets/**"]
+      - any-glob-to-any-file:
+          - "scripts/build-windows.ps1"
+          - "scripts/windows-installer.iss"
+          - "scripts/windows-launcher.cs"
+          - "scripts/windows-setup.ps1"
+          - "scripts/windows-entry.js"
+          - "scripts/generate-windows-icon.ps1"
+          - "assets/**"
+          - "test/windows-installer*.js"
+          - "test/windows-setup*.js"
+          - "test/windows-start-config*.js"
 area:tray:
   - changed-files:
-      - any-glob-to-any-file: ["scripts/windows-tray.ps1"]
+      - any-glob-to-any-file:
+          - "scripts/windows-tray.ps1"
+          - "src/tray-*.js"
+          - "src/windows-startup.js"
+          - "test/tray-*.js"
+          - "test/windows-tray*.js"
+          - "test/windows-startup*.js"
 area:updater:
   - changed-files:
-      - any-glob-to-any-file: ["src/update*.js", "docs/updates.md", "test/update*.js"]
+      - any-glob-to-any-file:
+          - "src/update*.js"
+          - "src/auto-updater.js"
+          - "docs/updates.md"
+          - "test/update*.js"
+          - "test/auto-updater*.js"
 area:ci:
   - changed-files:
       - any-glob-to-any-file: [".github/**", "scripts/build*.js", "package*.json"]
