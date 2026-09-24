@@ -6,10 +6,10 @@ const src = (value) => ({ getPresence: async () => { if (value instanceof Error)
 const serverSong = { state: "playing", title: "Server" };
 const spotifySong = { state: "playing", title: "Spotify" };
 
-test("whichever is playing wins, tie goes to prefer (#135)", async () => {
+test("whichever is playing wins, tie goes to prefer when set (#135)", async () => {
   assert.equal((await combinePresence({ primary: src(serverSong), secondary: src({ state: "idle" }) }).getPresence()).title, "Server");
   assert.equal((await combinePresence({ primary: src({ state: "idle" }), secondary: src(spotifySong) }).getPresence()).title, "Spotify");
-  assert.equal((await combinePresence({ primary: src(serverSong), secondary: src(spotifySong) }).getPresence()).title, "Server");
+  assert.equal((await combinePresence({ primary: src(serverSong), secondary: src(spotifySong), prefer: "server" }).getPresence()).title, "Server");
   assert.equal((await combinePresence({ primary: src(serverSong), secondary: src(spotifySong), prefer: "spotify" }).getPresence()).title, "Spotify");
   assert.equal((await combinePresence({ primary: src({ state: "paused", title: "P" }), secondary: src({ state: "paused", title: "S" }) }).getPresence()).title, "P");
 });
@@ -35,4 +35,21 @@ test("Spotify source reads and saves the refresh token through the credential st
   assert.equal((await source.getPresence()).title, "Song");
   assert.equal(saved.get("spotify:me"), "r2");
   assert.equal(typeof source.backoff, "function");
+});
+
+test("by default the most recently started side wins when both play (Rowan's call)", async () => {
+  let t = 0;
+  let server = { state: "playing", title: "Server A" };
+  let spotify = { state: "idle" };
+  const card = combinePresence({ primary: { getPresence: async () => server }, secondary: { getPresence: async () => spotify }, now: () => t });
+  assert.equal((await card.getPresence()).title, "Server A");
+  t = 10; spotify = { state: "playing", title: "Spotify B" };
+  assert.equal((await card.getPresence()).title, "Spotify B");
+  t = 20; assert.equal((await card.getPresence()).title, "Spotify B");
+  t = 30; server = { state: "playing", title: "Server C" };
+  assert.equal((await card.getPresence()).title, "Server C");
+  t = 40; spotify = { state: "paused", title: "Spotify B" };
+  assert.equal((await card.getPresence()).title, "Server C");
+  t = 50; spotify = { state: "playing", title: "Spotify B" };
+  assert.equal((await card.getPresence()).title, "Spotify B");
 });
