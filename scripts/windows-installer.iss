@@ -70,3 +70,17 @@ function NeedsSetup: Boolean;
 begin
   Result := not FileExists(ExpandConstant('{localappdata}\nowplaying\config.json'));
 end;
+
+procedure InitializeWizard();
+var
+  Index: Integer;
+begin
+  { An upgrade runs the previous uninstaller, which deletes the Startup
+    shortcut. UsePreviousTasks only restores the installer's own task
+    selection, so "Start with Windows" turned on from the app would be lost
+    (#520): pre-check the task whenever the shortcut already exists. }
+  if FileExists(ExpandConstant('{userstartup}\nowplaying.lnk')) then
+    for Index := 0 to WizardForm.TasksList.Items.Count - 1 do
+      if Pos('Start nowplaying when I sign in', WizardForm.TasksList.Items[Index]) = 1 then
+        WizardForm.TasksList.Checked[Index] := True;
+end;

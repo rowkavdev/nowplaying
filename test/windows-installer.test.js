@@ -34,3 +34,12 @@ test("the Windows build script runs on Windows PowerShell 5.1", async () => {
   assert.doesNotMatch(code, /-Encoding\s+utf8NoBOM/i);
   assert.match(code, /WriteAllText\([^\n]*build-info\.json[^\n]*UTF8Encoding\]::new\(\$false\)\)/);
 });
+
+test("upgrade pre-checks the startup task when the shortcut already exists (#520)", async () => {
+  const iss = await readFile(new URL("../scripts/windows-installer.iss", import.meta.url), "utf8");
+  const init = iss.split(/^procedure InitializeWizard\(\);?$/m)[1]?.split(/^end;$/m)[0] ?? "";
+  assert.notEqual(init, "", "InitializeWizard exists");
+  assert.match(init, /FileExists\(ExpandConstant\('\{userstartup\}\\nowplaying\.lnk'\)\)/);
+  assert.match(init, /TasksList\.Checked\[Index\] := True/);
+  assert.match(init, /Start nowplaying when I sign in/);
+});
