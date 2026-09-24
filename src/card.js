@@ -66,8 +66,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const contentX = hasArtwork && artworkPosition === "left" ? padding + artworkWidth + 24 : padding;
   const contentWidth = width - contentX - padding - (hasArtwork && artworkPosition === "right" ? artworkWidth + 24 : 0);
   const status = presence.state === "playing" ? "NOW PLAYING" : presence.state === "paused" ? "PAUSED" : "NOT PLAYING";
-  const title = presence.title || "Nothing playing";
-  const subtitle = presence.subtitle || (visibility.mediaType ? providerLabel(presence.kind) : "");
+  const text = cardText(presence);
+  const title = text.title || "Nothing playing";
+  const subtitle = text.subtitle || (visibility.mediaType ? providerLabel(presence.kind) : "");
   const hasSubtitle = visibility.subtitle && subtitle;
   const baseHeight = Math.max(hasArtwork ? padding * 2 + artworkHeight : 74, padding * 2 + titleSize + (visibility.state ? 22 : 0) + (hasSubtitle ? subtitleSize + 10 : 0) + (visibility.progress ? progressHeight + 16 : 0));
   // Text lines stack in fieldOrder. The default order gives the same
@@ -119,6 +120,25 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
 
 function bounded(value, fallback, min, max, path) { const resolved = value ?? fallback; if (!Number.isInteger(resolved) || resolved < min || resolved > max) throw new RangeError(`${path}: expected an integer from ${min} to ${max}`); return resolved; }
 function progressWidth(presence, available) { if (!presence.durationMs || presence.positionMs == null) return 0; return Math.round(available * Math.min(1, presence.positionMs / presence.durationMs)); }
+// TV and films (#143): an episode reads "Show Name" / "S02E05 · Episode
+// Title", a film "Film Title (2024)". Anything missing (or hidden by the
+// privacy settings) falls back to the provider's plain title and subtitle.
+export function cardText(presence) {
+  if (presence.kind === "episode" && presence.series) {
+    const season = presence.season ?? null;
+    const episode = presence.episode ?? null;
+    const code = season !== null && episode !== null ? `S${pad(season)}E${pad(episode)}` : episode !== null ? `E${pad(episode)}` : season !== null ? `Season ${season}` : null;
+    const name = presence.title && presence.title !== presence.series ? presence.title : null;
+    return { title: presence.series, subtitle: [code, name].filter(Boolean).join(" · ") || null };
+  }
+  if (presence.kind === "movie" && presence.title && presence.year) {
+    const year = String(presence.year);
+    const title = presence.title.endsWith(`(${year})`) ? presence.title : `${presence.title} (${year})`;
+    return { title, subtitle: presence.subtitle === year ? null : presence.subtitle || null };
+  }
+  return { title: presence.title || null, subtitle: presence.subtitle || null };
+}
+function pad(value) { return String(value).padStart(2, "0"); }
 function providerLabel(kind) { return kind === "track" ? "Music" : kind === "movie" ? "Movie" : kind === "episode" ? "Episode" : "Media"; }
 function truncate(value, length) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }
 function escapeXml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
