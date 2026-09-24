@@ -33,7 +33,7 @@ import { applyPrivacy } from "./privacy.js";
 // credentialRef at start-up.
 
 const MAX_CONFIG_BYTES = 16 * 1024;
-const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted", "privacy", "card"]);
+const CONFIG_KEYS = new Set(["version", "servers", "discord", "hosted", "privacy", "card"]);
 const HOSTED_KEYS = new Set(["enabled", "url"]);
 
 export class StartupError extends Error {
@@ -52,7 +52,7 @@ export function parseAppConfig(text) {
   } catch {
     throw invalidConfig();
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== 1) throw invalidConfig();
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== CONFIG_VERSION) throw invalidConfig();
   // Only the fields the wizard writes; anything else (a pasted token, say) means
   // the file was edited by hand and is not trusted.
   if (Object.keys(parsed).some((key) => !CONFIG_KEYS.has(key))) throw invalidConfig();
@@ -60,9 +60,7 @@ export function parseAppConfig(text) {
   let config;
   try {
     config = createSetupConfig({
-      provider: parsed.provider,
-      serverUrl: parsed.serverUrl,
-      identity: parsed.identity,
+      servers: parsed.servers,
       credentialStored: true,
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
@@ -75,22 +73,33 @@ export function parseAppConfig(text) {
   } catch {
     throw invalidConfig();
   }
-  // The credential reference must point at the signed-in identity, and the app
-  // needs a server to talk to.
-  if (parsed.credentialRef?.provider !== config.provider || parsed.credentialRef?.identityId !== config.identity.id || !config.serverUrl) {
-    throw invalidConfig();
-  }
+  // Each credential reference must point at that server's signed-in identity,
+  // and the app needs an address for every server.
+  const refsMatch = config.servers.every((server, index) => {
+    const ref = parsed.servers[index]?.credentialRef;
+    return ref?.provider === server.provider && ref?.identityId === server.identity.id && server.serverUrl;
+  });
+  if (!refsMatch) throw invalidConfig();
   return config;
 }
 
 // Config schema version this build writes and reads. When it goes up, add a
 // migration for the old version below; the store backs the file up first
 // (config.json.backup-<time>) and only replaces it with a validated result.
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
 const CONFIG_MIGRATIONS = Object.freeze([
   // 0 -> 1: no version-0 file was ever released.
   () => { throw new Error("unsupported"); },
+  // 1 -> 2 (#252): the single server moves into a one-item servers list.
+  migrateV1ToV2,
 ]);
+
+export function migrateV1ToV2(document) {
+  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("unsupported");
+  const { provider, serverUrl, identity, credentialRef, version: _version, ...rest } = document;
+  const server = { provider, ...(serverUrl !== undefined ? { serverUrl } : {}), identity, credentialRef };
+  return { ...rest, version: 2, servers: [server] };
+}
 
 /**
  * Upgrades config.json to CONFIG_VERSION if needed (backup first).

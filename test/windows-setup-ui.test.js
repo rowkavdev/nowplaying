@@ -50,7 +50,7 @@ test("native setup window walks every step, including sign-in, against the real 
     assert.deepEqual([draft.draft.step, draft.draft.provider, draft.draft.account.id], ["complete", "navidrome", "selftest"]);
     const configText = await readFile(join(dir, "config.json"), "utf8");
     const config = JSON.parse(configText);
-    assert.deepEqual([config.provider, config.serverUrl, config.credentialRef], ["navidrome", "http://127.0.0.1:4533", { provider: "navidrome", identityId: "selftest" }]);
+    assert.deepEqual([config.version, config.servers[0].provider, config.servers[0].serverUrl, config.servers[0].credentialRef], [2, "navidrome", "http://127.0.0.1:4533", { provider: "navidrome", identityId: "selftest" }]);
     assert.doesNotMatch(configText, /nd-secret|selftest-password/);
   } finally {
     await app.close();

@@ -9,13 +9,14 @@ const input = {
 };
 
 test("creates a versioned config with a stable OS credential reference", () => {
-  assert.deepEqual(createSetupConfig(input), {
-    version: 1,
-    provider: "plex",
-    identity: { id: "user-42", displayName: "Rowan" },
-    credentialRef: { provider: "plex", identityId: "user-42" },
+  const config = createSetupConfig(input);
+  assert.deepEqual(config, {
+    version: 2,
+    servers: [{ provider: "plex", identity: { id: "user-42", displayName: "Rowan" }, credentialRef: { provider: "plex", identityId: "user-42" } }],
     discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
   });
+  assert.equal(config.provider, "plex");
+  assert.deepEqual(config.credentialRef, { provider: "plex", identityId: "user-42" });
 });
 
 test("serializes review output without credentials", () => {
@@ -57,4 +58,15 @@ test("carries the server address and refuses one with credentials in it", () => 
   for (const bad of ["ftp://x", "http://u:p@x", "http://x/?token=1", "not a url", 5]) {
     assert.throws(() => createSetupConfig({ ...input, serverUrl: bad }), /serverUrl is invalid/);
   }
+});
+
+test("takes a list of servers, one sign-in per account, 1 to 8 of them (#252)", () => {
+  const jf = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" } };
+  const nd = { provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "u1", displayName: "R" } };
+  const config = createSetupConfig({ servers: [jf, nd], credentialStored: true });
+  assert.deepEqual(config.servers.map((s) => s.credentialRef), [{ provider: "jellyfin", identityId: "u1" }, { provider: "navidrome", identityId: "u1" }]);
+  assert.throws(() => createSetupConfig({ servers: [jf, jf], credentialStored: true }), /same account twice/);
+  assert.throws(() => createSetupConfig({ servers: [], credentialStored: true }), /1 to 8/);
+  assert.throws(() => createSetupConfig({ servers: [{ ...jf, token: "x" }], credentialStored: true }), /not a setting/);
+  assert.throws(() => createSetupConfig({ ...input, servers: [jf] }), /not both/);
 });

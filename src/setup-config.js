@@ -66,8 +66,6 @@ export function cardRenderOptions(card) {
 }
 
 export function createSetupConfig(input = {}) {
-  if (!PROVIDERS.has(input.provider)) throw new TypeError("setup config.provider is invalid");
-  const identity = createProviderIdentity(input.identity);
   if (input.credential !== undefined || input.token !== undefined || input.apiKey !== undefined) {
     throw new TypeError("setup config cannot contain credentials");
   }
@@ -90,13 +88,10 @@ export function createSetupConfig(input = {}) {
   }
   const privacy = input.privacy === undefined ? null : normalizePrivacy(input.privacy);
   const card = input.card === undefined ? null : normalizeCard(input.card);
-  if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
-  return Object.freeze({
-    version: 1,
-    provider: input.provider,
-    ...(input.serverUrl ? { serverUrl: input.serverUrl } : {}),
-    identity,
-    credentialRef: Object.freeze({ provider: input.provider, identityId: identity.id }),
+  const servers = normalizeServers(input);
+  const config = {
+    version: CONFIG_SCHEMA_VERSION,
+    servers,
     discord: Object.freeze({
       enabled: input.discordEnabled ?? true,
       idleBehavior: input.discordIdleBehavior ?? "clear",
@@ -113,7 +108,47 @@ export function createSetupConfig(input = {}) {
     } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card && Object.keys(card).length ? { card } : {}),
-  });
+  };
+  // Until presence can choose between servers (#252), the rest of the app
+  // runs from the first server. These mirror servers[0] and are not
+  // enumerable, so they never get written back into config.json.
+  const primary = servers[0];
+  for (const key of ["provider", "serverUrl", "identity", "credentialRef"]) {
+    Object.defineProperty(config, key, { value: primary[key], enumerable: false });
+  }
+  return Object.freeze(config);
+}
+
+// config.json schema version (v2: a list of servers, #252).
+export const CONFIG_SCHEMA_VERSION = 2;
+export const MAX_SERVERS = 8;
+
+function normalizeServers(input) {
+  const single = input.provider !== undefined || input.identity !== undefined || input.serverUrl !== undefined;
+  if (input.servers !== undefined && single) throw new TypeError("setup config takes servers or a single server, not both");
+  const list = input.servers ?? [{ provider: input.provider, serverUrl: input.serverUrl, identity: input.identity }];
+  if (!Array.isArray(list) || list.length < 1 || list.length > MAX_SERVERS) throw new TypeError(`setup config.servers must list 1 to ${MAX_SERVERS} servers`);
+  const seen = new Set();
+  return Object.freeze(list.map((server, index) => {
+    if (!server || typeof server !== "object" || Array.isArray(server)) throw new TypeError(`setup config.servers[${index}] is invalid`);
+    for (const key of Object.keys(server)) {
+      if (!["provider", "serverUrl", "identity", "credentialRef"].includes(key)) throw new TypeError(`setup config.servers[${index}].${key} is not a setting`);
+    }
+    if (!PROVIDERS.has(server.provider)) throw new TypeError("setup config.provider is invalid");
+    const identity = createProviderIdentity(server.identity);
+    if (server.serverUrl !== undefined && !isServerUrl(server.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
+    // One sign-in per account per server; the credential store is keyed by
+    // provider + identity, so a second copy would share and overwrite it.
+    const key = `${server.provider}\u0000${identity.id}`;
+    if (seen.has(key)) throw new TypeError("setup config.servers lists the same account twice");
+    seen.add(key);
+    return Object.freeze({
+      provider: server.provider,
+      ...(server.serverUrl ? { serverUrl: server.serverUrl } : {}),
+      identity,
+      credentialRef: Object.freeze({ provider: server.provider, identityId: identity.id }),
+    });
+  }));
 }
 
 export function serializeSetupConfig(input) {
