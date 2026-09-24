@@ -105,7 +105,8 @@ export function applyPrivacyChanges(config, changes) {
 
 export function applyCardChanges(config, changes) {
   checkChanges(changes, CARD_KEYS, "card");
-  return rewrite(config, { card: normalizeCard({ ...cardSettingsView(config), ...changes }) });
+  // Saved keys the page doesn't show yet (artwork placement) are kept.
+  return rewrite(config, { card: normalizeCard({ ...(config.card ?? {}), ...cardSettingsView(config), ...changes }) });
 }
 
 // Media servers for the settings page (#252): who is signed in where. No

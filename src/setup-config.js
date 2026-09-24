@@ -30,7 +30,9 @@ function normalizePrivacy(value) {
 // Card appearance (#94, set from the settings page). Left out means the
 // renderer defaults, so older configs draw the same card as before.
 const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
-const CARD_NUMBERS = Object.freeze({ width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12] });
+const CARD_NUMBERS = Object.freeze({ width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] });
+const ARTWORK_POSITIONS = new Set(["left", "right"]);
+const LAYOUT_KEYS = Object.freeze(["padding", "radius", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight"]);
 export function normalizeCard(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.card must be an object");
   const card = {};
@@ -38,6 +40,8 @@ export function normalizeCard(value) {
     const item = value[key];
     if (key === "theme") {
       if (!CARD_THEMES.has(item)) throw new TypeError("setup config.card.theme must be midnight-blue, paper or compact");
+    } else if (key === "artworkPosition") {
+      if (!ARTWORK_POSITIONS.has(item)) throw new TypeError("setup config.card.artworkPosition must be left or right");
     } else if (key === "showProgress") {
       if (typeof item !== "boolean") throw new TypeError("setup config.card.showProgress must be a boolean");
     } else if (Object.hasOwn(CARD_NUMBERS, key)) {
@@ -56,7 +60,7 @@ export function normalizeCard(value) {
 export function cardRenderOptions(card) {
   if (!card) return Object.freeze({});
   const layout = {};
-  for (const key of ["padding", "radius", "progressHeight"]) if (card[key] !== undefined) layout[key] = card[key];
+  for (const key of LAYOUT_KEYS) if (card[key] !== undefined) layout[key] = card[key];
   return Object.freeze({
     ...(card.theme ? { theme: card.theme } : {}),
     ...(card.width !== undefined ? { width: card.width } : {}),
