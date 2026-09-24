@@ -82,3 +82,20 @@ test("the running app applies a card save to /card.svg without a restart", async
     await app.close();
   }
 });
+
+test("the page has a Card section with a live preview and no inline script or style", async () => {
+  const h = handler();
+  const page = (await h({ url: "/settings" })).body;
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
+  assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
+  assert.equal(page.toLowerCase().split("<script").length, 2);
+  assert.doesNotMatch(page, /\sstyle=|\son[a-z]+=/i);
+  const script = (await h({ url: "/settings.js" })).body;
+  assert.match(script, /\/api\/settings\/card\/preview\.svg\?/);
+  assert.match(script, /send\("\/api\/settings", "PUT", \{ card: values \}\)/);
+  assert.doesNotThrow(() => new Function(script));
+  // State colours stay blue/orange: no red or green in the page styles.
+  const css = (await h({ url: "/settings.css" })).body;
+  assert.doesNotMatch(css, /#(?:f00|ff0000|0f0|00ff00|d73a49|28a745|2da44e|cf222e)\b/i);
+});

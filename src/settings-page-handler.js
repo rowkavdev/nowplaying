@@ -1,5 +1,5 @@
 // Local settings page (#253): Discord section (#272), including what
-// Discord shows when nothing is playing. Served on loopback by
+// Discord shows when nothing is playing, and card appearance (#94). Served on loopback by
 // the running app next to the status page. Saves go to /api/settings as JSON;
 // the HTTP server only lets them through with the session cookie this page
 // sets, from the app's own origin.
@@ -53,6 +53,24 @@ const PAGE = `<!doctype html>
 <p><button type="submit" id="privacy-save">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+<form id="card-form" hidden>
+<section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
+<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save.</p>
+<p class="row"><label for="card-theme">Style</label>
+<select id="card-theme">
+<option value="midnight-blue">Dark</option>
+<option value="paper">Light</option>
+<option value="compact">Compact (title only)</option>
+</select></p>
+<p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="10" inputmode="numeric"> <span class="unit">px, 280 to 800</span></p>
+<p class="row"><label for="card-padding">Padding</label><input type="range" id="card-padding" min="12" max="48" step="1"> <output id="card-padding-value" for="card-padding"></output></p>
+<p class="row"><label for="card-radius">Corners</label><input type="range" id="card-radius" min="0" max="24" step="1"> <output id="card-radius-value" for="card-radius"></output></p>
+<p class="row"><label><input type="checkbox" id="card-showProgress"> Show progress bar</label></p>
+<p class="row"><label for="card-progressHeight">Bar thickness</label><input type="range" id="card-progressHeight" min="2" max="12" step="1"> <output id="card-progressHeight-value" for="card-progressHeight"></output></p>
+<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings"><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p></div>
+<p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
+</section>
+</form>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
@@ -75,8 +93,12 @@ const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;ma
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}.hint a{color:inherit}
 fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color:#555}
+input[type=number]{font:inherit;width:6em;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
+input[type=range]{width:180px;accent-color:#0b5cad}output{min-width:3.5em;font-variant-numeric:tabular-nums;color:#555}.unit{color:#555;font-size:13px}
+.preview{margin:4px 0 12px;padding:12px;border:1px dashed #bbb;border-radius:6px;overflow-x:auto}.preview-label{margin:0 0 8px;color:#555;font-size:13px}.preview img{display:block;max-width:100%;height:auto}
 dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}button[disabled]{opacity:.6;cursor:default}
-@media (prefers-color-scheme:dark){select{background:#2c2c31;border-color:#555}.row label[for],.hint,legend{color:#aaa}}
+@media (max-width:520px){.row label[for]{flex-basis:100%;min-width:0}}
+@media (prefers-color-scheme:dark){select,input[type=number]{background:#2c2c31;border-color:#555}.row label[for],.hint,legend,output,.unit,.preview-label{color:#aaa}input[type=range]{accent-color:#7ab8ff}.preview{border-color:#555}}
 `;
 
 const SCRIPT = `"use strict";
@@ -96,6 +118,7 @@ async function load() {
     showHosted(all.hosted);
     showStartup(all.startup);
     showPrivacy(all.privacy);
+    showCard(all.card);
   } catch {
     say("Can't load settings. NowPlaying may have been closed.", "bad");
     save.disabled = true;
@@ -153,6 +176,65 @@ privacy.form.addEventListener("submit", async (event) => {
     privacySay("Couldn't save. Nothing was changed.", "bad");
   } finally {
     privacy.save.disabled = false;
+  }
+});
+const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true };
+const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12] };
+const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note") };
+const cardField = (key) => document.getElementById("card-" + key);
+function cardSay(text, tone) { const el = document.getElementById("card-result"); el.textContent = text; el.className = tone || ""; }
+function cardValues() {
+  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked };
+  for (const key of Object.keys(CARD_NUMBERS)) values[key] = Number(cardField(key).value);
+  return values;
+}
+function cardValid(values) {
+  return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => Number.isInteger(values[key]) && values[key] >= min && values[key] <= max);
+}
+let previewTimer;
+function cardChanged() {
+  for (const key of ["padding", "radius", "progressHeight"]) document.getElementById("card-" + key + "-value").textContent = cardField(key).value + " px";
+  cardField("progressHeight").disabled = !cardField("showProgress").checked;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    const values = cardValues();
+    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
+    card.save.disabled = false;
+    if (document.getElementById("card-result").className === "bad") cardSay("");
+    const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0" });
+    card.preview.src = "/api/settings/card/preview.svg?" + query;
+  }, 200);
+}
+card.preview.addEventListener("load", () => { card.preview.hidden = false; card.note.hidden = true; });
+card.preview.addEventListener("error", () => { card.preview.hidden = true; card.note.hidden = false; });
+function showCard(c) {
+  card.form.hidden = !c;
+  if (!c) return;
+  cardField("theme").value = c.theme;
+  cardField("showProgress").checked = c.showProgress;
+  for (const key of Object.keys(CARD_NUMBERS)) cardField(key).value = c[key];
+  cardChanged();
+}
+for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress"]) cardField(key).addEventListener("input", cardChanged);
+cardField("theme").addEventListener("change", () => {
+  // Compact hides the bar by default; the others show it.
+  cardField("showProgress").checked = cardField("theme").value !== "compact";
+  cardChanged();
+});
+document.getElementById("card-reset").addEventListener("click", () => { showCard(CARD_DEFAULTS); cardSay("Defaults shown. Press Save to keep them.", ""); });
+card.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const values = cardValues();
+  if (!cardValid(values)) return;
+  card.save.disabled = true;
+  cardSay("Saving...", "warn");
+  try {
+    showCard((await send("/api/settings", "PUT", { card: values })).card);
+    cardSay("Saved. Your card uses these settings now.", "ok");
+  } catch {
+    cardSay("Couldn't save. Nothing was changed.", "bad");
+  } finally {
+    card.save.disabled = false;
   }
 });
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
