@@ -21,6 +21,11 @@ function pngDimensions(bytes) {
 function webpDimensions(bytes) {
   if (bytes.length < 30) return null;
   const kind = text(bytes, 12, 4);
+  // Simple lossy WebP (what cwebp and most tools write): the key frame
+  // start code 9d 01 2a, then 14-bit width and height.
+  if (kind === "VP8 " && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+    return { width: (bytes[26] | (bytes[27] << 8)) & 0x3fff, height: (bytes[28] | (bytes[29] << 8)) & 0x3fff };
+  }
   if (kind === "VP8X") return { width: u24(bytes, 24) + 1, height: u24(bytes, 27) + 1 };
   if (kind === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
     return { width: 1 + (bytes[21] | ((bytes[22] & 0x3f) << 8)), height: 1 + ((bytes[22] >> 6) | (bytes[23] << 2) | ((bytes[24] & 0x0f) << 10)) };

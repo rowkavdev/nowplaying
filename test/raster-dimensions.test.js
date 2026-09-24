@@ -45,3 +45,17 @@ test("decodes lossless WebP (VP8L) dimensions", () => {
 test("walks past non-image JPEG segments to find the dimensions", () => {
   assert.deepEqual(validateRasterDimensions(jpegWithAppSegment(300, 200), "image/jpeg"), { width:300, height:200 });
 });
+
+// Header of a real 300x200 lossy WebP written by libwebp (sharp .webp()).
+function lossyWebp(width, height) {
+  const b = new Uint8Array(30); b.set(Buffer.from("RIFF"),0); b.set(Buffer.from("WEBP"),8); b.set(Buffer.from("VP8 "),12);
+  b.set([0x9d,0x01,0x2a],23); b[26]=width&255; b[27]=(width>>8)&0x3f; b[28]=height&255; b[29]=(height>>8)&0x3f; return b;
+}
+
+test("decodes simple lossy (VP8) WebP dimensions", () => {
+  assert.deepEqual(validateRasterDimensions(lossyWebp(300,200), "image/webp"), { width:300, height:200 });
+  assert.deepEqual(validateRasterDimensions(lossyWebp(16383,1), "image/webp"), { width:16383, height:1 });
+  assert.throws(() => validateRasterDimensions(lossyWebp(5000,5000), "image/webp"), /maximum pixel dimensions/);
+  const noStartCode = lossyWebp(300,200); noStartCode[23] = 0;
+  assert.throws(() => validateRasterDimensions(noStartCode, "image/webp"), /could not be decoded/);
+});
