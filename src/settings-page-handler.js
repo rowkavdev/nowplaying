@@ -30,6 +30,19 @@ const PAGE = `<!doctype html>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
 </form>
+<form id="privacy-form" hidden>
+<section aria-labelledby="h-privacy"><h2 id="h-privacy">Privacy</h2>
+<p class="hint">Applies to Discord, the hosted card and your local card.</p>
+<p class="row"><label><input type="checkbox" id="privacy-hideTitles"> Hide titles (shows "Private media")</label></p>
+<p class="row"><label><input type="checkbox" id="privacy-hideArtwork"> Hide album art</label></p>
+<p class="row"><label><input type="checkbox" id="privacy-hideProgress"> Hide progress and timer</label></p>
+<fieldset><legend>Don't show when I'm playing</legend>
+<p class="row"><label><input type="checkbox" id="privacy-hideMovies"> Movies</label> <label><input type="checkbox" id="privacy-hideEpisodes"> TV episodes</label> <label><input type="checkbox" id="privacy-hideMusic"> Music</label></p>
+</fieldset>
+<p class="hint">Hidden kinds show as nothing playing. With titles or album art hidden, covers are never looked up on MusicBrainz.</p>
+<p><button type="submit" id="privacy-save">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
+</section>
+</form>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
@@ -51,8 +64,9 @@ const PAGE = `<!doctype html>
 const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:96px;color:#555}
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}.hint a{color:inherit}
+fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color:#555}
 dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}button[disabled]{opacity:.6;cursor:default}
-@media (prefers-color-scheme:dark){select{background:#2c2c31;border-color:#555}.row label[for],.hint{color:#aaa}}
+@media (prefers-color-scheme:dark){select{background:#2c2c31;border-color:#555}.row label[for],.hint,legend{color:#aaa}}
 `;
 
 const SCRIPT = `"use strict";
@@ -71,6 +85,7 @@ async function load() {
     show(all.discord);
     showHosted(all.hosted);
     showStartup(all.startup);
+    showPrivacy(all.privacy);
   } catch {
     say("Can't load settings. NowPlaying may have been closed.", "bad");
     save.disabled = true;
@@ -108,6 +123,26 @@ document.getElementById("refresh-art").addEventListener("click", async (event) =
     result.className = "bad";
   } finally {
     button.disabled = false;
+  }
+});
+const PRIVACY_KEYS = ["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"];
+const privacy = { form: document.getElementById("privacy-form"), save: document.getElementById("privacy-save") };
+function privacySay(text, tone) { const el = document.getElementById("privacy-result"); el.textContent = text; el.className = tone || ""; }
+function showPrivacy(p) { privacy.form.hidden = !p; if (p) for (const key of PRIVACY_KEYS) document.getElementById("privacy-" + key).checked = p[key] === true; }
+privacy.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  privacy.save.disabled = true;
+  privacySay("Saving...", "warn");
+  try {
+    const body = { privacy: Object.fromEntries(PRIVACY_KEYS.map((key) => [key, document.getElementById("privacy-" + key).checked])) };
+    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(String(res.status));
+    showPrivacy((await res.json()).privacy);
+    privacySay("Saved. Applies from the next update.", "ok");
+  } catch {
+    privacySay("Couldn't save. Nothing was changed.", "bad");
+  } finally {
+    privacy.save.disabled = false;
   }
 });
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };

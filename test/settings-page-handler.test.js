@@ -99,3 +99,20 @@ test("refresh artwork: POST only, reports how many covers were dropped", async (
   const old = createSettingsPageHandler({ settings: { read: () => ({ discord: {} }), updateDiscord: async () => {} }, fallback: async () => null });
   assert.equal((await old({ method: "POST", url: "/api/settings/discord/refresh-artwork", body: "{}" })).status, 404);
 });
+
+test("privacy section: six choices, loaded from and saved to /api/settings (#253)", async () => {
+  const page = (await handler()({ url: "/settings" })).body;
+  const script = (await handler()({ url: "/settings.js" })).body;
+  for (const key of ["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]) {
+    assert.match(page, new RegExp(`id="privacy-${key}"`));
+    assert.match(script, new RegExp(`"${key}"`));
+  }
+  assert.match(script, /showPrivacy\(all\.privacy\)/);
+  assert.doesNotThrow(() => new Function(script));
+  let privacy = { hideTitles: false, hideArtwork: false, hideProgress: false, hideMovies: false, hideEpisodes: false, hideMusic: false };
+  const settings = { read: () => ({ discord: {}, privacy }), updateDiscord: async () => {}, updatePrivacy: async (changes) => { privacy = { ...privacy, ...changes }; } };
+  const h = createSettingsPageHandler({ settings, fallback: async () => ({ status: 299 }) });
+  const saved = await h(put({ privacy: { hideMusic: true } }));
+  assert.equal(saved.status, 200);
+  assert.equal(JSON.parse(saved.body).privacy.hideMusic, true);
+});
