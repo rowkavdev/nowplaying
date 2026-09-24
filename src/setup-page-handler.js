@@ -440,8 +440,31 @@ const JS = `"use strict";
 })();
 `;
 
+// Example cards on their own page, for the native setup window's review step
+// (WinForms can't draw SVG, so it opens this in the browser).
+const PREVIEW_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NowPlaying card examples</title>
+<link rel="stylesheet" href="/setup/app.css">
+</head>
+<body>
+<main>
+<h1>How your card will look</h1>
+<p>Made-up examples. You can change the look later on the settings page.</p>
+<figure><img src="/api/setup/preview/music.svg" alt="Example card for Music"><figcaption>Music</figcaption></figure>
+<figure><img src="/api/setup/preview/episode.svg" alt="Example card for TV episode"><figcaption>TV episode</figcaption></figure>
+<figure><img src="/api/setup/preview/film.svg" alt="Example card for Film"><figcaption>Film</figcaption></figure>
+</main>
+</body>
+</html>
+`;
+
 const ASSETS = Object.freeze({
   "/setup": { type: "text/html; charset=utf-8", body: HTML, page: true },
+  "/setup/preview": { type: "text/html; charset=utf-8", body: PREVIEW_HTML, page: true },
   "/setup/app.js": { type: "text/javascript; charset=utf-8", body: JS },
   "/setup/app.css": { type: "text/css; charset=utf-8", body: CSS },
 });

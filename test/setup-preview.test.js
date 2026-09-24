@@ -38,3 +38,17 @@ test("the wizard previews use the installed card look", async () => {
     await app.close();
   }
 });
+
+test("the card examples page shows all three examples", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-preview-"));
+  const app = await startSetupApp({ draftFile: join(dir, "draft.json") });
+  try {
+    const response = await fetch(new URL("/setup/preview", app.url));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-security-policy"), /img-src 'self'/);
+    const html = await response.text();
+    for (const kind of ["music", "episode", "film"]) assert.match(html, new RegExp(`/api/setup/preview/${kind}\\.svg`));
+  } finally {
+    await app.close();
+  }
+});
