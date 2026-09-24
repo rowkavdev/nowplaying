@@ -26,6 +26,7 @@ import { createDiscordRpcTransport } from "./discord-rpc.js";
 import { createHostedLoop } from "./hosted-loop.js";
 import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 import { withProviderBackoff } from "./provider-backoff.js";
+import { createMultiServerProvider } from "./multi-server.js";
 import { applyPrivacy } from "./privacy.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
@@ -253,7 +254,11 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // card shows idle; the status, settings and logs pages still work.
   // A failing server is retried with backoff (#153), shared by the card,
   // Discord, hosted uploads and the status page.
-  const provider0 = safeMode ? OFFLINE_PROVIDER : withProviderBackoff(await createSignedInProvider(config, credentialStore, fetchImpl), providerBackoff);
+  // Every signed-in server is polled (#252); the first one's sign-in must
+  // work as before, the others show as unavailable on the status page instead
+  // of stopping the start.
+  const multi = safeMode ? null : await createServersProvider(config, credentialStore, fetchImpl, providerBackoff);
+  const provider0 = safeMode ? OFFLINE_PROVIDER : multi;
   const status = createAppStatus({ config, version, build, packageType, safeMode });
   const tracked = safeMode ? provider0 : status.wrapProvider(provider0);
   let current = config;
@@ -378,11 +383,24 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await discord.stop().catch(() => {});
     await server.close();
   };
-  return Object.freeze({ config, url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
+  return Object.freeze({ config, servers: () => (multi ? multi.servers() : Object.freeze([])), url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }
 
 const PREVIEW_SAMPLE = Object.freeze({ state: "playing", kind: "track", title: "Sample track", subtitle: "Sample artist", positionMs: 83_000, durationMs: 214_000 });
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
+
+async function createServersProvider(config, credentialStore, fetchImpl, providerBackoff) {
+  const entries = [];
+  for (const [index, server] of config.servers.entries()) {
+    try {
+      entries.push({ server, provider: withProviderBackoff(await createSignedInProvider(server, credentialStore, fetchImpl), providerBackoff) });
+    } catch (error) {
+      if (index === 0) throw error;
+      entries.push({ server, unavailable: error instanceof StartupError ? error.startupCode : "CONFIG_INVALID" });
+    }
+  }
+  return createMultiServerProvider(entries);
+}
 
 async function createSignedInProvider(config, credentialStore, fetchImpl) {
   let secret;
