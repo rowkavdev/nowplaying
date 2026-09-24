@@ -10,6 +10,7 @@ Settings live at `%LOCALAPPDATA%\nowplaying\config.json`. It contains no passwor
 
 - Templates for the title, detail and state lines, with fields like `{title}`, `{series}`, `{episodeCode}` and `{year}`
 - Card theme (`midnight-blue`, `paper`, `compact`), width (280-800 px) and which fields show
+- `card.artworkTint` (default `true`): tint the card background from the cover's dominant colour; set `false` in `config.json` to turn it off
 - Discord wording, timestamps, buttons, idle behaviour and update interval (5 seconds to 5 minutes)
 - Privacy mode and per-field hiding (see [Privacy and safe configuration](Privacy-and-safe-configuration))
 
