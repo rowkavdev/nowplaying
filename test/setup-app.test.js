@@ -220,3 +220,18 @@ test("the native window gets the session secret through its environment, not arg
   assert.ok(!call.args.some((arg) => arg.includes(secret)));
   assert.throws(() => runNativeSetup("http://127.0.0.1:4567/setup", { scriptPath: "C:\\np\\windows-setup.ps1", sessionSecret: "short", spawnProcess }), /sessionSecret/);
 });
+
+test("the wizard writes every server signed in during setup, oldest first (#252)", async () => {
+  const { parseAppConfig } = await import("../src/app-config.js");
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  const nav = { provider: "navidrome", id: "rowan", displayName: "Rowan", serverUrl: "http://127.0.0.1:4533" };
+  const jf = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
+  await writeSetupConfig(file, { provider: "jellyfin", account: jf, servers: [nav] });
+  const text = await readFile(file, "utf8");
+  assert.deepEqual(JSON.parse(text).servers.map((s) => [s.provider, s.serverUrl, s.credentialRef.identityId]), [
+    ["navidrome", "http://127.0.0.1:4533", "rowan"],
+    ["jellyfin", "http://127.0.0.1:8096", "u1"],
+  ]);
+  assert.equal(parseAppConfig(text).servers.length, 2);
+});

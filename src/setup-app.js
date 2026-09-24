@@ -10,6 +10,7 @@ import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
 import { createSetupTestHandler } from "./setup-test-handler.js";
 import { serializeSetupConfig } from "./setup-config.js";
+import { setupAccounts } from "./setup.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
@@ -25,10 +26,14 @@ export function windowsConfigPath({ localAppData, appName = "nowplaying" } = {})
 // createSetupConfig, which refuses anything that looks like a credential.
 export async function writeSetupConfig(file, draft) {
   if (!draft?.account) throw new TypeError("setup is not signed in");
+  // Every server signed in during setup (#252), oldest first.
+  const servers = setupAccounts(draft).map((account) => ({
+    provider: account.provider,
+    ...(account.serverUrl ? { serverUrl: account.serverUrl } : {}),
+    identity: { id: account.id, displayName: account.displayName },
+  }));
   const body = serializeSetupConfig({
-    provider: draft.provider,
-    ...(draft.account.serverUrl ? { serverUrl: draft.account.serverUrl } : {}),
-    identity: { id: draft.account.id, displayName: draft.account.displayName },
+    servers,
     credentialStored: true,
     discordEnabled: draft.discordEnabled,
     discordIdleBehavior: draft.discordIdleBehavior,

@@ -2,6 +2,9 @@ const STEPS = Object.freeze(["welcome", "provider", "signin", "discord", "review
 const MAX_ACCOUNT_FIELD = 200;
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const IDLE_BEHAVIORS = new Set(["clear", "grace", "show", "recent"]);
+// Matches MAX_SERVERS in setup-config.js: the account being signed in plus up
+// to seven already added (#252).
+export const MAX_SETUP_SERVERS = 8;
 
 export function createSetupDraft(input = {}) {
   const step = input.step ?? "welcome";
@@ -14,6 +17,7 @@ export function createSetupDraft(input = {}) {
   if (input.credential !== undefined || input.token !== undefined || input.apiKey !== undefined) throw new TypeError("setup draft cannot contain credentials");
   const provider = input.provider ?? null;
   const account = createAccount(input.account);
+  const servers = createServerList(input.servers);
   return Object.freeze({
     version: 1,
     step,
@@ -21,6 +25,9 @@ export function createSetupDraft(input = {}) {
     // Who signed in, never the secret (that lives in the credential store).
     // Choosing a different server drops it, so the account always matches.
     account: account && account.provider === provider ? account : null,
+    // Servers already signed in with "Add another server" (#252), oldest
+    // first. Accounts only; their secrets are in the credential store.
+    servers,
     discordEnabled: input.discordEnabled ?? true,
     discordIdleBehavior: input.discordIdleBehavior ?? "clear",
     // Album art lookup (title + artist to MusicBrainz / Cover Art Archive).
@@ -29,6 +36,48 @@ export function createSetupDraft(input = {}) {
     // null means "not offered / leave as it is" (no Windows startup support).
     startWithWindows: input.startWithWindows ?? null,
   });
+}
+
+function createServerList(input) {
+  if (input === undefined || input === null) return Object.freeze([]);
+  if (!Array.isArray(input) || input.length > MAX_SETUP_SERVERS - 1) throw new TypeError("setup.servers is invalid");
+  const seen = new Set();
+  return Object.freeze(input.map((item) => {
+    let account;
+    try { account = createAccount(item); } catch { account = null; }
+    if (!account) throw new TypeError("setup.servers is invalid");
+    const key = `${account.provider}\u0000${account.id}`;
+    if (seen.has(key)) throw new TypeError("setup.servers is invalid");
+    seen.add(key);
+    return account;
+  }));
+}
+
+// Every signed-in account setup will save, oldest first. The first one is the
+// server the app uses until it can watch several (#252).
+export function setupAccounts(draft) {
+  const current = createSetupDraft(draft);
+  const all = [...current.servers];
+  if (current.account && !all.some((item) => item.provider === current.account.provider && item.id === current.account.id)) all.push(current.account);
+  return Object.freeze(all);
+}
+
+// Keeps the signed-in account and goes back to the server choice so another
+// one can be signed in.
+export function addAnotherServer(draft) {
+  const current = createSetupDraft(draft);
+  if (!current.account) throw new SetupStepError("signin_required");
+  const servers = setupAccounts(current);
+  if (servers.length >= MAX_SETUP_SERVERS) throw new SetupStepError("too_many_servers");
+  return createSetupDraft({ ...current, step: "provider", provider: null, account: null, servers });
+}
+
+// Drops an added server (never the one being signed in right now).
+export function removeSetupServer(draft, { provider, id } = {}) {
+  const current = createSetupDraft(draft);
+  const servers = current.servers.filter((item) => !(item.provider === provider && item.id === id));
+  if (servers.length === current.servers.length) throw new SetupStepError("server_not_found");
+  return createSetupDraft({ ...current, servers });
 }
 
 function createAccount(input) {
