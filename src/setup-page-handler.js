@@ -35,7 +35,6 @@ h1{font-size:1.5rem}
 ol{display:flex;flex-wrap:wrap;gap:.25rem .75rem;padding:0;list-style:none;font-size:.85rem;color:#aaa}
 ol li[aria-current=step]{color:#fff;font-weight:600}
 label{display:block;margin:.5rem 0}
-fieldset{border:0;margin:0;padding:0}
 select{font:inherit}
 nav{display:flex;gap:.5rem;margin-top:2rem}
 button{font:inherit;padding:.5rem 1rem;border-radius:.4rem;border:1px solid #555;background:#222;color:#eee;cursor:pointer}
