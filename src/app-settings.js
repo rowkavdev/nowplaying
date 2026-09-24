@@ -9,6 +9,8 @@ import { serializeSetupConfig } from "./setup-config.js";
 
 const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup"]);
 const HOSTED_KEYS = new Set(["enabled"]);
+const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
+const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
 
 export function discordSettingsView(config) {
   return Object.freeze({
@@ -22,6 +24,17 @@ export function hostedSettingsView(config) {
   return Object.freeze({ enabled: config.hosted?.enabled === true });
 }
 
+export function privacySettingsView(config) {
+  const privacy = config.privacy ?? {};
+  const kinds = privacy.suppressMediaKinds ?? [];
+  return Object.freeze({
+    hideTitles: privacy.redactTitles === true,
+    hideArtwork: privacy.hideArtwork === true,
+    hideProgress: privacy.hideProgress === true,
+    ...Object.fromEntries(PRIVACY_KIND_KEYS.map(([key, kind]) => [key, kinds.includes(kind)])),
+  });
+}
+
 function checkChanges(changes, allowed, name) {
   if (!changes || typeof changes !== "object" || Array.isArray(changes)) throw new TypeError(`${name} settings: expected an object`);
   const keys = Object.keys(changes);
@@ -29,7 +42,7 @@ function checkChanges(changes, allowed, name) {
 }
 
 // serializeSetupConfig validates every value the same way setup does.
-function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted } = {}) {
+function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy } = {}) {
   const text = serializeSetupConfig({
     provider: config.provider,
     ...(config.serverUrl ? { serverUrl: config.serverUrl } : {}),
@@ -40,6 +53,7 @@ function rewrite(config, { discord = { ...discordSettingsView(config), timestamp
     discordArtworkLookup: discord.artworkLookup,
     discordTimestamps: discord.timestamps,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
+    ...(privacy ? { privacy } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
 }
@@ -53,6 +67,18 @@ export function applyDiscordChanges(config, changes) {
 export function applyHostedChanges(config, changes) {
   checkChanges(changes, HOSTED_KEYS, "hosted");
   return rewrite(config, { hosted: { ...(config.hosted ?? {}), enabled: changes.enabled } });
+}
+
+export function applyPrivacyChanges(config, changes) {
+  checkChanges(changes, PRIVACY_KEYS, "privacy");
+  for (const [key, value] of Object.entries(changes)) if (typeof value !== "boolean") throw new TypeError(`privacy settings: ${key} must be true or false`);
+  const view = { ...privacySettingsView(config), ...changes };
+  return rewrite(config, { privacy: {
+    redactTitles: view.hideTitles,
+    hideArtwork: view.hideArtwork,
+    hideProgress: view.hideProgress,
+    suppressMediaKinds: PRIVACY_KIND_KEYS.filter(([key]) => view[key]).map(([, kind]) => kind),
+  } });
 }
 
 export function createAppSettingsStore({ file } = {}) {
@@ -80,5 +106,6 @@ export function createAppSettingsStore({ file } = {}) {
     // One write at a time: two quick saves never race each other.
     updateDiscord: (changes) => queued(() => update(applyDiscordChanges, changes)),
     updateHosted: (changes) => queued(() => update(applyHostedChanges, changes)),
+    updatePrivacy: (changes) => queued(() => update(applyPrivacyChanges, changes)),
   });
 }

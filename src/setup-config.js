@@ -5,6 +5,27 @@ import { normalizeHostedUrl } from "./hosted-uploader.js";
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
+const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress"];
+const PRIVACY_KINDS = new Set(["movie", "episode", "track"]);
+
+// Privacy (set from the settings page, #253). Left out means nothing hidden.
+function normalizePrivacy(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.privacy must be an object");
+  const privacy = {};
+  for (const key of Object.keys(value)) {
+    if (PRIVACY_FLAGS.includes(key)) {
+      if (typeof value[key] !== "boolean") throw new TypeError(`setup config.privacy.${key} must be a boolean`);
+      privacy[key] = value[key];
+    } else if (key === "suppressMediaKinds") {
+      const kinds = value[key];
+      if (!Array.isArray(kinds) || kinds.some((kind) => !PRIVACY_KINDS.has(kind))) throw new TypeError("setup config.privacy.suppressMediaKinds must list movie, episode or track");
+      privacy[key] = Object.freeze([...new Set(kinds)].sort());
+    } else {
+      throw new TypeError(`setup config.privacy.${key} is not a setting`);
+    }
+  }
+  return Object.freeze(privacy);
+}
 
 export function createSetupConfig(input = {}) {
   if (!PROVIDERS.has(input.provider)) throw new TypeError("setup config.provider is invalid");
@@ -29,6 +50,7 @@ export function createSetupConfig(input = {}) {
   if (input.hostedUrl !== undefined && input.hostedUrl !== null) {
     try { hostedUrl = normalizeHostedUrl(input.hostedUrl); } catch { throw new TypeError("setup config.hostedUrl is invalid"); }
   }
+  const privacy = input.privacy === undefined ? null : normalizePrivacy(input.privacy);
   if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
   return Object.freeze({
     version: 1,
@@ -50,6 +72,7 @@ export function createSetupConfig(input = {}) {
     ...(input.hostedEnabled !== undefined || hostedUrl ? {
       hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(hostedUrl ? { url: hostedUrl } : {}) }),
     } : {}),
+    ...(privacy ? { privacy } : {}),
   });
 }
 
