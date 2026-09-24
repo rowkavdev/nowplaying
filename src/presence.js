@@ -27,6 +27,12 @@ export function createPresence(input = {}) {
     subtitle: optionalString(input.subtitle, "subtitle"),
     artwork: normalizeArtwork(input.artwork),
     artworkUrl: optionalString(input.artworkUrl, "artworkUrl"),
+    // Optional TV / film details (#143). Providers that don't know them
+    // leave them null; nothing else changes shape.
+    series: optionalString(input.series, "series"),
+    season: optionalCount(input.season, "season"),
+    episode: optionalCount(input.episode, "episode"),
+    year: optionalYear(input.year),
     positionMs,
     durationMs,
     updatedAt: normalizeDate(input.updatedAt),
@@ -73,6 +79,18 @@ function nonNegativeNumber(value, name) {
   if (!Number.isFinite(value) || value < 0) {
     throw new TypeError(`${name} must be a non-negative finite number`);
   }
+  return value;
+}
+
+function optionalCount(value, name) {
+  if (value == null) return null;
+  if (!Number.isInteger(value) || value < 0 || value > 9999) throw new TypeError(`${name} must be a whole number from 0 to 9999`);
+  return value;
+}
+
+function optionalYear(value) {
+  if (value == null) return null;
+  if (!Number.isInteger(value) || value < 1800 || value > 2200) throw new TypeError("year must be a whole number from 1800 to 2200");
   return value;
 }
 

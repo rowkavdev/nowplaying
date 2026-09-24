@@ -5,6 +5,10 @@ export const templateFields = Object.freeze([
   "subtitle",
   "album",
   "year",
+  "series",
+  "season",
+  "episode",
+  "episodeCode",
   "provider",
   "mediaType",
   "state",
@@ -15,6 +19,14 @@ export const templateFields = Object.freeze([
 ]);
 
 const FIELD_SET = new Set(templateFields);
+
+// "S02E05" when both numbers are known, "E05" or "S02" when only one is.
+function episodeCode(season, episode) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const s = Number.isInteger(season) ? `S${pad(season)}` : "";
+  const e = Number.isInteger(episode) ? `E${pad(episode)}` : "";
+  return s + e;
+}
 
 function formatDuration(milliseconds) {
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return "";
@@ -49,6 +61,10 @@ export function createTemplateValues(presence, { labels = {} } = {}) {
     subtitle: presence.subtitle ?? "",
     album: presence.album ?? "",
     year: presence.year == null ? "" : String(presence.year),
+    series: presence.series ?? "",
+    season: presence.season == null ? "" : String(presence.season),
+    episode: presence.episode == null ? "" : String(presence.episode),
+    episodeCode: episodeCode(presence.season, presence.episode),
     provider: presence.provider ?? "",
     mediaType: presence.mediaType ?? "",
     state: presence.state ?? "",

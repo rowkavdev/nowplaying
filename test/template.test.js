@@ -87,6 +87,10 @@ test("exports every supported template field", () => {
     "subtitle",
     "album",
     "year",
+    "series",
+    "season",
+    "episode",
+    "episodeCode",
     "provider",
     "mediaType",
     "state",
@@ -95,4 +99,12 @@ test("exports every supported template field", () => {
     "duration",
     "progressPercent",
   ]);
+});
+
+test("formats series, season, episode and a compact episode code", () => {
+  const values = createTemplateValues({ state: "playing", title: "Pilot", series: "The Show", season: 2, episode: 5, year: 2024 });
+  assert.deepEqual([values.series, values.season, values.episode, values.episodeCode, values.year], ["The Show", "2", "5", "S02E05", "2024"]);
+  assert.equal(createTemplateValues({ episode: 7 }).episodeCode, "E07");
+  assert.equal(createTemplateValues({ season: 1 }).episodeCode, "S01");
+  assert.deepEqual([createTemplateValues({}).episodeCode, createTemplateValues({}).series, createTemplateValues({}).season], ["", "", ""]);
 });
