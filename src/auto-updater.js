@@ -2,7 +2,7 @@ import { checkForUpdate } from "./update-check.js";
 import { downloadVerifiedUpdate } from "./update-download.js";
 import { installVerifiedUpdate } from "./update-install.js";
 
-export function createAutoUpdater({ currentVersion, repository, token, targetDir, channel, mode = "notify", fetchImpl, onUpdate } = {}) {
+export function createAutoUpdater({ currentVersion, repository, token, targetDir, channel, platform, mode = "notify", fetchImpl, onUpdate } = {}) {
   if (!["off", "notify", "install"].includes(mode)) throw new TypeError("mode: expected off, notify or install");
   // No default channel: which releases a user gets must be their explicit choice (#172).
   if (mode !== "off" && !["stable", "beta"].includes(channel)) throw new TypeError("channel: choose stable or beta");
@@ -13,7 +13,7 @@ export function createAutoUpdater({ currentVersion, repository, token, targetDir
     if (mode === "off") return Object.freeze({ status: "disabled" });
     if (running) return running;
     running = (async () => {
-      const update = await checkForUpdate({ currentVersion, repository, token, channel, fetchImpl });
+      const update = await checkForUpdate({ currentVersion, repository, token, channel, platform, fetchImpl });
       if (!update.available) return Object.freeze({ status: "current", version: update.currentVersion });
       if (mode === "notify") { await onUpdate?.(update); return Object.freeze({ status: "available", ...update }); }
       const verified = await downloadVerifiedUpdate({ update, token, fetchImpl });

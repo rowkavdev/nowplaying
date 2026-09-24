@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readBoundedBytes, timeoutSignal } from "./bounded-response.js";
+import { updateAssetName } from "./update-check.js";
 
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
@@ -27,11 +28,20 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
   ]);
   if (archive.byteLength < 1) throw new Error("update archive size is invalid");
   const checksumText = new TextDecoder().decode(checksumBytes);
-  const filename = `nowplaying-v${update.version}.tar.gz`;
+  const filename = expectedAssetName(update);
   const expected = parseChecksum(checksumText, filename);
   const actual = createHash("sha256").update(archive).digest("hex");
   if (actual !== expected) throw new Error("update checksum mismatch");
   return Object.freeze({ filename, bytes: archive, sha256: actual, version: update.version });
+}
+
+// Only the two names the release workflow publishes for this exact version are
+// accepted, whatever the update object says; older callers default to the tarball.
+function expectedAssetName(update) {
+  const allowed = [updateAssetName(update.version, "linux"), updateAssetName(update.version, "win32")];
+  const name = update.assetName ?? allowed[0];
+  if (!allowed.includes(name)) throw new TypeError("update.assetName: unexpected release asset");
+  return name;
 }
 
 function trustedAssetUrl(value, name) {
