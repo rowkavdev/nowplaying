@@ -400,3 +400,29 @@ test("settings page can ask the host to open setup for servers (#253)", async ()
     await plain.close();
   }
 });
+
+test("the local card embeds the server's album art, and a failed fetch leaves it out (#449)", async () => {
+  const sharp = (await import("sharp")).default;
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#f28c28" } }).png().toBuffer();
+  const session = { UserId: "u1", PlayState: { IsPaused: false, PositionTicks: 0 }, NowPlayingItem: { Id: "item1", Type: "Audio", Name: "Song", Artists: ["Artist"], ImageTags: { Primary: "tag1" }, RunTimeTicks: 1_000_000_000 } };
+  for (const artworkWorks of [true, false]) {
+    const requests = [];
+    const fetchImpl = async (url, init = {}) => {
+      requests.push({ url: String(url), token: init.headers?.["X-Emby-Token"] ?? null });
+      if (String(url).endsWith("/Sessions")) return Response.json([session]);
+      if (!artworkWorks) return new Response("nope", { status: 500 });
+      return new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
+    };
+    const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+    try {
+      const svg = await (await fetch(`${app.url}/card.svg`)).text();
+      assert.match(svg, />Song</);
+      assert.equal(/<image href="data:image\/png;base64,/.test(svg), artworkWorks);
+      const art = requests.find((request) => request.url.includes("/Items/item1/Images/Primary"));
+      assert.ok(art, "artwork was requested from the server");
+      assert.equal(art.token, "jf-token");
+    } finally {
+      await app.close();
+    }
+  }
+});
