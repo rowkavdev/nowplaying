@@ -30,7 +30,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
@@ -43,6 +43,10 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const artworkHeight = bounded(layout.artworkHeight, 100, 48, 180, "layout.artworkHeight");
   const fieldOrder = layout.fieldOrder ?? DEFAULT_FIELD_ORDER;
   if (!Array.isArray(fieldOrder) || fieldOrder.length !== 3 || new Set(fieldOrder).size !== 3 || !fieldOrder.every((field) => DEFAULT_FIELD_ORDER.includes(field))) throw new TypeError("layout.fieldOrder: expected state, title and subtitle, each once");
+  const progressPosition = layout.progressPosition ?? "bottom";
+  if (!new Set(["bottom", "text"]).has(progressPosition)) throw new TypeError("layout.progressPosition: expected bottom or text");
+  const progressSpan = layout.progressWidth ?? "content";
+  if (!new Set(["content", "full"]).has(progressSpan)) throw new TypeError("layout.progressWidth: expected content or full");
   const textAlign = layout.textAlign ?? "start";
   if (!Object.hasOwn(TEXT_ANCHORS, textAlign)) throw new TypeError("layout.textAlign: expected start, middle or end");
   if (artworkDataUri !== null && (typeof artworkDataUri !== "string" || !DATA_IMAGE_PATTERN.test(artworkDataUri))) throw new TypeError("artworkDataUri must be a validated raster data URI");
@@ -75,15 +79,20 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     previous = field;
   }
   const customOrder = fieldOrder.some((field, index) => field !== DEFAULT_FIELD_ORDER[index]);
-  const height = Math.max(baseHeight, customOrder ? cursor + padding + 2 + (visibility.progress ? progressHeight + 16 : 0) : 0);
+  const underArtwork = progressSpan === "full" && hasArtwork && visibility.progress ? padding * 2 + artworkHeight + 12 + progressHeight : 0;
+  const height = Math.max(baseHeight, customOrder ? cursor + padding + 2 + (visibility.progress ? progressHeight + 16 : 0) : 0, underArtwork);
   const titleY = baselines.title;
   const subtitleY = baselines.subtitle;
   const stateY = baselines.state;
   const anchor = TEXT_ANCHORS[textAlign];
   const textX = textAlign === "middle" ? contentX + Math.round(contentWidth / 2) : textAlign === "end" ? contentX + contentWidth : contentX;
   const anchorAttr = anchor === "start" ? "" : ` text-anchor="${anchor}"`;
-  const progressY = height - padding;
-  const progress = progressWidth(presence, contentWidth);
+  // "text" puts the bar under the last line instead of the card's bottom
+  // edge; "full" runs it across the whole card, under the artwork too.
+  const progressY = progressPosition === "text" && !underArtwork ? Math.min(height - padding, cursor + 16) : height - padding;
+  const barX = progressSpan === "full" ? padding : contentX;
+  const barWidth = progressSpan === "full" ? width - padding * 2 : contentWidth;
+  const progress = progressWidth(presence, barWidth);
   const description = subtitle || status;
 
 
@@ -95,7 +104,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   ${visibility.state ? `<text x="${textX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
   <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${titleSize}" font-weight="600">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
   ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${subtitleSize}">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
-  ${visibility.progress ? `<rect x="${contentX}" y="${progressY}" width="${contentWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${contentX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
+  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
 
