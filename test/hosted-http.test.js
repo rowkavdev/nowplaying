@@ -79,3 +79,28 @@ test("card rejects bad options and unknown ids never leak detail", async () => {
     assert.equal((await call(app.port, "GET", "/api/health")).body, "ok");
   } finally { await app.close(); }
 });
+
+test("card layout options come from the URL, are checked, and cache separately", async () => {
+  const app = await start();
+  try {
+    const { cardId, token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 1000, durationMs: 4000 });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
+    const plain = await call(app.port, "GET", `/card/${cardId}.svg`);
+    const styled = await call(app.port, "GET", `/card/${cardId}.svg?padding=12&radius=0&titleSize=24&subtitleSize=12&progressHeight=8&textAlign=middle&fieldOrder=title,subtitle,state&progressPosition=text&progressWidth=full&direction=auto`);
+    assert.equal(styled.status, 200);
+    assert.match(styled.body, /rx="0"/);
+    assert.match(styled.body, /font-size="24"/);
+    assert.match(styled.body, /text-anchor="middle"/);
+    assert.match(styled.body, /height="8"/);
+    assert.notEqual(styled.headers.etag, plain.headers.etag);
+    const same = await call(app.port, "GET", `/card/${cardId}.svg?padding=12&radius=0&titleSize=24&subtitleSize=12&progressHeight=8&textAlign=middle&fieldOrder=title,subtitle,state&progressPosition=text&progressWidth=full&direction=auto`, { headers: { "if-none-match": styled.headers.etag } });
+    assert.equal(same.status, 304);
+    assert.equal((await call(app.port, "GET", `/card/${cardId}.svg`, { headers: { "if-none-match": styled.headers.etag } })).status, 200);
+    for (const query of ["padding=11", "padding=49", "radius=-1", "radius=1.5", "titleSize=31", "subtitleSize=9", "progressHeight=13", "padding=0x10", "textAlign=center", "fieldOrder=title,state", "fieldOrder=title,title,state", "progressPosition=top", "progressWidth=half", "direction=RTL", "radius=2&radius=3"]) {
+      const bad = await call(app.port, "GET", `/card/${cardId}.svg?${query}`);
+      assert.equal(bad.status, 400, query);
+      assert.deepEqual(JSON.parse(bad.body), { error: "invalid_layout" }, query);
+    }
+  } finally { await app.close(); }
+});

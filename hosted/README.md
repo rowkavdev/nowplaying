@@ -16,6 +16,7 @@ What it never does:
 | `POST` | `/api/ingest` | `Authorization: Bearer <device token>`. Push one state update (schema below). |
 | `POST` / `DELETE` | `/api/revoke` | Delete the device token and any stored state. |
 | `GET` / `HEAD` | `/card/<cardId>.svg` | Public SVG. Options: `theme`, `width`, `show` (same as the local card). |
+| | | Layout options, all optional: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`). Out-of-range or repeated values return 400 `invalid_layout`. Set only in the URL, never sent by the app. |
 | `GET` | `/healthz` | Liveness. |
 
 The device token is only stored as a SHA-256 hash. The card ID is random and can't be traced to an email, server or username.
