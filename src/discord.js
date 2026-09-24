@@ -20,6 +20,17 @@ export const discordDefaults = Object.freeze({
   minUpdateIntervalMs: 15_000,
 });
 
+// Episodes read better as "Lost" / "S04E05 · The Constant" (#143). These only
+// replace details or state when that field is still the plain default, so a
+// custom template always wins. Without a series name the plain defaults stay.
+const EPISODE_DEFAULTS = Object.freeze({ details: "{series}", state: "{episodeCode} · {title}" });
+
+function templatesFor(presence, input, settings) {
+  if (presence.kind !== "episode" || !presence.series) return settings;
+  const pick = (key) => input[key] === undefined || input[key] === discordDefaults[key] ? EPISODE_DEFAULTS[key] : settings[key];
+  return { ...settings, details: pick("details"), state: pick("state") };
+}
+
 export function validateDiscordSettings(input = {}) {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("discord: expected an object");
@@ -73,7 +84,7 @@ function trimDiscordText(value) {
 
 export function formatDiscordActivity(presence, input = {}) {
   validateDiscordSettings(input);
-  const settings = { ...discordDefaults, ...input };
+  const settings = templatesFor(presence, input, { ...discordDefaults, ...input });
   if (presence.state === "idle" && settings.idleBehavior === "clear") return null;
   const values = createTemplateValues(presence);
   const details = trimDiscordText(formatTemplate(settings.details, values));
