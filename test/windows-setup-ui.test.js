@@ -47,7 +47,9 @@ test("native setup window walks every step, including sign-in, against the real 
     assert.deepEqual(startupApplied, [true]);
     assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "selftest" }, "nd-secret"]]);
     const draft = await (await fetch(new URL("/api/setup/draft", app.url))).json();
-    assert.deepEqual([draft.draft.step, draft.draft.provider, draft.draft.account.id], ["complete", "navidrome", "selftest"]);
+    // Finish clears the draft; the next run starts again from the config it wrote.
+    await assert.rejects(readFile(join(dir, "draft.json")), { code: "ENOENT" });
+    assert.deepEqual([draft.draft.step, draft.draft.provider, draft.draft.account.id], ["welcome", "navidrome", "selftest"]);
     const configText = await readFile(join(dir, "config.json"), "utf8");
     const config = JSON.parse(configText);
     assert.deepEqual([config.version, config.servers[0].provider, config.servers[0].serverUrl, config.servers[0].credentialRef], [2, "navidrome", "http://127.0.0.1:4533", { provider: "navidrome", identityId: "selftest" }]);

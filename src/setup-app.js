@@ -11,7 +11,7 @@ import { createSetupSignInHandler } from "./setup-signin-handler.js";
 import { createSetupTestHandler } from "./setup-test-handler.js";
 import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
 import { serializeSetupConfig } from "./setup-config.js";
-import { setupAccounts } from "./setup.js";
+import { createSetupDraft, setupAccounts } from "./setup.js";
 import { migrateAppConfig, parseAppConfig } from "./app-config.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
@@ -98,13 +98,13 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, spotifySignIn, startup, fetchImpl } = {}) {
   if (startup !== undefined && (typeof startup?.isEnabled !== "function" || typeof startup?.setEnabled !== "function")) throw new TypeError("startup is invalid");
   const page = createSetupPageHandler();
-  const store = withStartupState(createSetupDraftStore({ file: draftFile }), startup);
-  // Sign-in is only offered when a credential store is supplied, so a secret
-  // can never be obtained without somewhere safe to put it. Without one the
-  // wizard skips the sign-in step.
   // Finish writes the real config only when there is a signed-in account to
   // point it at; without a credential store there is nothing to run from yet.
   const writeConfig = configFile && credentialStore;
+  const store = withStartupState(writeConfig ? withInstalledConfig(createSetupDraftStore({ file: draftFile }), configFile) : createSetupDraftStore({ file: draftFile }), startup);
+  // Sign-in is only offered when a credential store is supplied, so a secret
+  // can never be obtained without somewhere safe to put it. Without one the
+  // wizard skips the sign-in step.
   const onFinish = writeConfig || startup ? async (finished) => {
     if (writeConfig) await writeSetupConfig(configFile, finished);
     if (startup && typeof finished.startWithWindows === "boolean") await startup.setEnabled(finished.startWithWindows);
@@ -139,6 +139,54 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, sessionSecret, close: () => app.close() });
+}
+
+// Running setup on an installed app starts from what is installed: with no
+// draft in progress, the wizard opens with the configured servers, Discord
+// choices and Spotify sign-in already filled in, so Finish doesn't drop them.
+// Once Finish has written the config the draft file is removed; the next run
+// starts again from the config it wrote.
+function withInstalledConfig(store, configFile) {
+  return Object.freeze({
+    ...store,
+    async load() {
+      const loaded = await store.load();
+      if (loaded.resumed) return loaded;
+      const seeded = setupDraftFromConfig(await readCurrentConfig(configFile));
+      return seeded ? { ...loaded, draft: seeded } : loaded;
+    },
+    async save(draft) {
+      if (draft?.step !== "complete") return store.save(draft);
+      await store.clear();
+      return createSetupDraft(draft);
+    },
+  });
+}
+
+// A fresh draft (at the welcome step) holding an installed config's setup
+// choices, or null when there is no usable config.
+export function setupDraftFromConfig(config) {
+  if (!config?.servers?.length) return null;
+  try {
+    const accounts = config.servers.map((server) => ({
+      provider: server.provider,
+      id: server.identity.id,
+      displayName: server.identity.displayName,
+      ...(server.serverUrl ? { serverUrl: server.serverUrl } : {}),
+    }));
+    const account = accounts.at(-1);
+    return createSetupDraft({
+      provider: account.provider,
+      account,
+      servers: accounts.slice(0, -1),
+      discordEnabled: config.discord?.enabled ?? true,
+      discordIdleBehavior: config.discord?.idleBehavior ?? "clear",
+      discordArtworkLookup: config.discord?.artworkLookup === "musicbrainz",
+      ...(config.spotify ? { spotify: { clientId: config.spotify.clientId, identity: { id: config.spotify.identity.id, displayName: config.spotify.identity.displayName } } } : {}),
+    });
+  } catch {
+    return null;
+  }
 }
 
 // Until the user chooses, the "Start with Windows" box shows what is set now
