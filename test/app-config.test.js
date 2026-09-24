@@ -26,10 +26,14 @@ const code = (startupCode) => (error) => error instanceof StartupError && error.
 test("reads the wizard's config back exactly", async () => {
   const config = await loadAppConfig(await configFile());
   assert.deepEqual(config, {
-    version: 1, provider: "jellyfin", serverUrl: "http://127.0.0.1:8096",
-    identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" },
+    version: 2,
+    servers: [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" } }],
     discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
   });
+  // The rest of the app still reads the first server directly (#252).
+  assert.equal(config.provider, "jellyfin");
+  assert.equal(config.serverUrl, "http://127.0.0.1:8096");
+  assert.deepEqual(config.credentialRef, { provider: "jellyfin", identityId: "u1" });
 });
 
 test("keeps the album art lookup choice, and older configs without it stay off", async () => {
@@ -49,11 +53,16 @@ test("a missing config says to run setup", async () => {
 
 test("a damaged, tampered or credential-bearing config is refused", async () => {
   const good = JSON.parse(serializeSetupConfig(JELLYFIN));
+  const server = good.servers[0];
+  const withServer = (changes) => JSON.stringify({ ...good, servers: [{ ...server, ...changes }] });
   for (const bad of [
-    "{nope", "[]", JSON.stringify({ ...good, version: 2 }), JSON.stringify({ ...good, provider: "other" }),
-    JSON.stringify({ ...good, credentialRef: { provider: "jellyfin", identityId: "someone-else" } }),
-    JSON.stringify({ ...good, serverUrl: undefined }), JSON.stringify({ ...good, serverUrl: "http://u:p@x" }),
-    JSON.stringify({ ...good, token: "s3cret" }), "x".repeat(20000),
+    "{nope", "[]", JSON.stringify({ ...good, version: 3 }), JSON.stringify({ ...good, version: 1 }), withServer({ provider: "other" }),
+    withServer({ credentialRef: { provider: "jellyfin", identityId: "someone-else" } }), withServer({ credentialRef: undefined }),
+    withServer({ serverUrl: undefined }), withServer({ serverUrl: "http://u:p@x" }), withServer({ token: "s3cret" }),
+    JSON.stringify({ ...good, token: "s3cret" }), JSON.stringify({ ...good, provider: "jellyfin" }),
+    JSON.stringify({ ...good, servers: [] }), JSON.stringify({ ...good, servers: [server, server] }),
+    JSON.stringify({ ...good, servers: Array.from({ length: 9 }, (_, i) => ({ ...server, identity: { id: `u${i}`, displayName: "x" }, credentialRef: { provider: "jellyfin", identityId: `u${i}` } })) }),
+    "x".repeat(20000),
   ]) {
     assert.throws(() => parseAppConfig(bad), code("CONFIG_INVALID"), bad.slice(0, 60));
   }
@@ -188,9 +197,9 @@ test("start-up migration leaves a current config alone and refuses a newer one (
   await writeFile(file, serializeSetupConfig(JELLYFIN));
   assert.equal((await migrateAppConfig(file)).status, "current");
   assert.equal((await readdir(dir)).length, 1);
-  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 2 }));
+  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 3 }));
   await assert.rejects(loadAppConfig(file), code("CONFIG_TOO_NEW"));
-  assert.equal(JSON.parse(await readFile(file, "utf8")).version, 2);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).version, 3);
   await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 0 }));
   await assert.rejects(loadAppConfig(file), code("CONFIG_INVALID"));
   assert.deepEqual((await readdir(dir)).sort(), ["config.json"]);
@@ -258,4 +267,52 @@ test("a down server is retried with backoff, not on every request, and recovers 
   } finally {
     await app.close();
   }
+});
+
+test("a v1 single-server config is migrated to a v2 servers list, with a backup (#252)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-migrate-v1-"));
+  const file = join(dir, "config.json");
+  const v1 = {
+    version: 1, provider: "jellyfin", serverUrl: "http://127.0.0.1:8096",
+    identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" },
+    discord: { enabled: false, idleBehavior: "show", artworkLookup: "musicbrainz", timestamps: "elapsed" },
+    hosted: { enabled: true }, privacy: { hideArtwork: true },
+  };
+  await writeFile(file, JSON.stringify(v1));
+  const config = await loadAppConfig(file);
+  assert.equal(config.version, 2);
+  assert.deepEqual(config.servers, [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" } }]);
+  assert.deepEqual(config.discord, v1.discord);
+  assert.equal(config.hosted.enabled, true);
+  assert.equal(config.privacy.hideArtwork, true);
+  const saved = JSON.parse(await readFile(file, "utf8"));
+  assert.equal(saved.version, 2);
+  assert.equal("provider" in saved, false);
+  const backups = (await readdir(dir)).filter((name) => name.startsWith("config.json.backup-"));
+  assert.equal(backups.length, 1);
+  assert.deepEqual(JSON.parse(await readFile(join(dir, backups[0]), "utf8")), v1);
+});
+
+test("a v1 config that fails validation after migration is left untouched", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-migrate-v1-bad-"));
+  const file = join(dir, "config.json");
+  const bad = JSON.stringify({ version: 1, provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialRef: { provider: "jellyfin", identityId: "other" } });
+  await writeFile(file, bad);
+  await assert.rejects(loadAppConfig(file), code("CONFIG_INVALID"));
+  assert.equal(await readFile(file, "utf8"), bad);
+});
+
+test("several servers load, and the app runs from the first one for now", async () => {
+  const text = serializeSetupConfig({
+    servers: [
+      { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } },
+      { provider: "navidrome", serverUrl: "http://192.168.1.5:4533", identity: { id: "rowan", displayName: "rowan" } },
+    ],
+    credentialStored: true,
+  });
+  const config = parseAppConfig(text);
+  assert.deepEqual(config.servers.map((s) => s.provider), ["jellyfin", "navidrome"]);
+  assert.deepEqual(config.servers[1].credentialRef, { provider: "navidrome", identityId: "rowan" });
+  assert.equal(config.provider, "jellyfin");
+  assert.equal(JSON.parse(JSON.stringify(config)).provider, undefined);
 });

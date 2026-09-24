@@ -187,3 +187,18 @@ test("Start with Windows is hidden when the build can't offer it", async () => {
     await app.close();
   }
 });
+
+test("settings changes keep every server in a multi-server config (#252)", () => {
+  const config = parseAppConfig(serializeSetupConfig({
+    servers: [
+      { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } },
+      { provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "rowan" } },
+    ],
+    credentialStored: true,
+  }));
+  const { config: next, text } = applyDiscordChanges(config, { enabled: false });
+  assert.equal(next.discord.enabled, false);
+  assert.deepEqual(next.servers, config.servers);
+  assert.deepEqual(JSON.parse(text).servers.map((s) => s.provider), ["jellyfin", "navidrome"]);
+  assert.deepEqual(applyHostedChanges(config, { enabled: true }).config.servers, config.servers);
+});

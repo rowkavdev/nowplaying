@@ -63,9 +63,8 @@ function checkChanges(changes, allowed, name) {
 // serializeSetupConfig validates every value the same way setup does.
 function rewrite(config, { discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card } = {}) {
   const text = serializeSetupConfig({
-    provider: config.provider,
-    ...(config.serverUrl ? { serverUrl: config.serverUrl } : {}),
-    identity: config.identity,
+    // Every server is kept; settings changes never drop one (#252).
+    servers: config.servers.map(({ provider, serverUrl, identity }) => ({ provider, ...(serverUrl ? { serverUrl } : {}), identity })),
     credentialStored: true,
     discordEnabled: discord.enabled,
     discordIdleBehavior: discord.idleBehavior,
