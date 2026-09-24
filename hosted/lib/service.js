@@ -15,6 +15,9 @@ export const REGISTRATIONS_PER_HOUR = 5;
 // stays far below this. It only stops a leaked token or a looping client from
 // hammering Redis.
 export const INGESTS_PER_MINUTE = 30;
+// Per-day aggregate counters for the private usage dashboard (#218). Kept a
+// little over a year, then they expire on their own.
+export const DAY_STATS_TTL_SECONDS = 60 * 60 * 24 * 400;
 
 const STATES = new Set(["playing", "paused", "idle"]);
 const KINDS = new Set(["track", "episode", "movie", "show", "unknown"]);
@@ -61,6 +64,32 @@ export function validateIngest(payload, { now = Date.now() } = {}) {
 export function createService({ redis, now = () => Date.now() } = {}) {
   if (!redis || typeof redis.command !== "function") throw new TypeError("redis client is required");
   const cmd = (...args) => redis.command(args);
+  const dayKey = (metric) => `np:stats:day:${new Date(now()).toISOString().slice(0, 10)}:${metric}`;
+
+  // Aggregate-only, best effort: a stats write failing must never fail a card,
+  // an ingest or a registration. The key gets its TTL before the first INCR,
+  // so it can't be left without one.
+  async function countToday(metric) {
+    try {
+      const key = dayKey(metric);
+      await cmd("SET", key, "0", "EX", DAY_STATS_TTL_SECONDS, "NX");
+      await cmd("INCR", key);
+    } catch { /* ignore */ }
+  }
+
+  // Unique devices per day. A HyperLogLog of a hash of the device ID spots
+  // first-time devices without storing anything readable; when it changes,
+  // a plain per-day counter goes up. The dashboard's read-only Redis token
+  // can't run PFCOUNT, so it reads that counter. HyperLogLog is approximate:
+  // treat the number as an estimate.
+  async function markDeviceActive(deviceId) {
+    try {
+      const hllKey = dayKey("devices");
+      const changed = await cmd("PFADD", hllKey, hashToken(`device:${deviceId}`).slice(0, 32));
+      await cmd("EXPIRE", hllKey, DAY_STATS_TTL_SECONDS);
+      if (changed === 1) await countToday("active_devices");
+    } catch { /* ignore */ }
+  }
 
   async function register({ clientKey = "unknown" } = {}) {
     const bucket = `np:rl:register:${hashToken(String(clientKey)).slice(0, 32)}`;
@@ -72,6 +101,7 @@ export function createService({ redis, now = () => Date.now() } = {}) {
     const token = randomId(32);
     await cmd("SET", `np:tok:${hashToken(token)}`, JSON.stringify({ cardId, deviceId }));
     await cmd("INCR", "np:stats:registrations");
+    await countToday("registrations");
     return { cardId, deviceId, token };
   }
 
@@ -102,6 +132,7 @@ export function createService({ redis, now = () => Date.now() } = {}) {
     } else {
       await cmd("SET", stateKey, JSON.stringify({ ...update, receivedAt: now() }), "EX", STATE_TTL_SECONDS);
     }
+    await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
   }
 
@@ -117,6 +148,7 @@ export function createService({ redis, now = () => Date.now() } = {}) {
     if (!isCardId(cardId)) throw new ServiceError(404, "not_found");
     const raw = await cmd("GET", `np:state:${cardId}`);
     await cmd("INCR", "np:stats:cards_rendered");
+    await countToday("renders");
     if (!raw) return { state: "idle", kind: "unknown", title: null, subtitle: null, positionMs: null, durationMs: null };
     const stored = JSON.parse(raw);
     let positionMs = stored.positionMs;
