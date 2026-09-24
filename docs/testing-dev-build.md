@@ -34,6 +34,10 @@ Write down the build number and version from the release title, for example `dev
 ## 5. Tray
 
 - [ ] "Settings" in the tray menu opens the settings page in your browser.
+- [ ] Settings > Privacy > "Hide titles": within about 15 seconds Discord and the card show "Private media", with no show name or episode code.
+- [ ] "Hide album art": Discord shows the NowPlaying icon instead of the cover.
+- [ ] "Hide progress and timer": no progress bar on the card and no timer on Discord.
+- [ ] "Don't show" Music (or Movies / TV episodes): playing that kind clears Discord and the card shows nothing playing. Untick it and it comes back.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
