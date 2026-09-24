@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", artworkTint: true };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", artworkTint: true };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
@@ -20,9 +20,24 @@ test("the card view shows renderer defaults for configs without a card section",
 test("card changes are saved in full and bad ones are refused", () => {
   const before = parseAppConfig(serializeSetupConfig(BASE));
   const { config } = applyCardChanges(before, { theme: "paper", radius: 0 });
-  assert.deepEqual({ ...config.card }, { ...DEFAULTS, theme: "paper", radius: 0 });
+  const { artworkWidth, artworkHeight, ...rest } = DEFAULTS;
+  assert.deepEqual({ ...config.card }, { ...rest, theme: "paper", radius: 0 });
   assert.deepEqual({ ...config.discord }, { ...before.discord });
   for (const bad of [{}, { colors: {} }, { radius: 99 }, { theme: "neon" }, { showProgress: 1 }, { artworkTint: "no" }]) assert.throws(() => applyCardChanges(before, bad), TypeError, JSON.stringify(bad));
+});
+
+test("artwork size stays automatic until it is set, and null clears it", () => {
+  const before = parseAppConfig(serializeSetupConfig(BASE));
+  // A full save from the page sends null for untouched artwork sliders.
+  const saved = applyCardChanges(before, { ...DEFAULTS, theme: "paper" }).config;
+  assert.equal(Object.hasOwn(saved.card, "artworkWidth"), false);
+  assert.equal(Object.hasOwn(saved.card, "artworkHeight"), false);
+  assert.equal(cardSettingsView(saved).artworkWidth, null);
+  const sized = applyCardChanges(saved, { artworkWidth: 120 }).config;
+  assert.deepEqual([sized.card.artworkWidth, Object.hasOwn(sized.card, "artworkHeight")], [120, false]);
+  assert.equal(applyCardChanges(sized, { theme: "midnight-blue" }).config.card.artworkWidth, 120, "a set size survives other saves");
+  assert.equal(Object.hasOwn(applyCardChanges(sized, { artworkWidth: null }).config.card, "artworkWidth"), false);
+  assert.throws(() => applyCardChanges(before, { theme: null }), TypeError, "only artwork size takes null");
 });
 
 function handler(previewCard = async (card) => `<svg data-card='${JSON.stringify(card)}'></svg>`) {
