@@ -2,9 +2,11 @@ import { checkForUpdate } from "./update-check.js";
 import { downloadVerifiedUpdate } from "./update-download.js";
 import { installVerifiedUpdate } from "./update-install.js";
 
-export function createAutoUpdater({ currentVersion, repository, token, targetDir, channel = "beta", mode = "notify", fetchImpl, onUpdate } = {}) {
-  if (!["stable", "beta"].includes(channel)) throw new TypeError("channel: expected stable or beta");
+export function createAutoUpdater({ currentVersion, repository, token, targetDir, channel, mode = "notify", fetchImpl, onUpdate } = {}) {
   if (!["off", "notify", "install"].includes(mode)) throw new TypeError("mode: expected off, notify or install");
+  // No default channel: which releases a user gets must be their explicit choice (#172).
+  if (mode !== "off" && !["stable", "beta"].includes(channel)) throw new TypeError("channel: choose stable or beta");
+  if (channel !== undefined && !["stable", "beta"].includes(channel)) throw new TypeError("channel: expected stable or beta");
   if (onUpdate !== undefined && typeof onUpdate !== "function") throw new TypeError("onUpdate: expected a function");
   let running;
   async function check() {
