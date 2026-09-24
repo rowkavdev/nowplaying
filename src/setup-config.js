@@ -51,8 +51,8 @@ export function normalizeCard(value) {
       if (!TEXT_ALIGNS.has(item)) throw new TypeError("setup config.card.textAlign must be start, middle or end");
     } else if (key === "fieldOrder") {
       if (!Array.isArray(item) || item.length !== 3 || new Set(item).size !== 3 || !item.every((field) => CARD_FIELDS.includes(field))) throw new TypeError("setup config.card.fieldOrder must list state, title and subtitle once each");
-    } else if (key === "showProgress") {
-      if (typeof item !== "boolean") throw new TypeError("setup config.card.showProgress must be a boolean");
+    } else if (key === "showProgress" || key === "artworkTint") {
+      if (typeof item !== "boolean") throw new TypeError(`setup config.card.${key} must be a boolean`);
     } else if (Object.hasOwn(CARD_NUMBERS, key)) {
       const [min, max] = CARD_NUMBERS[key];
       if (!Number.isInteger(item) || item < min || item > max) throw new TypeError(`setup config.card.${key} must be a whole number from ${min} to ${max}`);
@@ -75,6 +75,8 @@ export function cardRenderOptions(card) {
     ...(card.width !== undefined ? { width: card.width } : {}),
     ...(Object.keys(layout).length ? { layout } : {}),
     ...(card.showProgress !== undefined ? { show: { progress: card.showProgress } } : {}),
+    // Tint from the album art (#447) is on unless turned off.
+    ...(card.artworkTint === false ? { artworkTint: false } : {}),
   });
 }
 

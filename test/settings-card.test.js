@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", artworkTint: true };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
@@ -22,7 +22,7 @@ test("card changes are saved in full and bad ones are refused", () => {
   const { config } = applyCardChanges(before, { theme: "paper", radius: 0 });
   assert.deepEqual({ ...config.card }, { ...DEFAULTS, theme: "paper", radius: 0 });
   assert.deepEqual({ ...config.discord }, { ...before.discord });
-  for (const bad of [{}, { colors: {} }, { radius: 99 }, { theme: "neon" }, { showProgress: 1 }]) assert.throws(() => applyCardChanges(before, bad), TypeError, JSON.stringify(bad));
+  for (const bad of [{}, { colors: {} }, { radius: 99 }, { theme: "neon" }, { showProgress: 1 }, { artworkTint: "no" }]) assert.throws(() => applyCardChanges(before, bad), TypeError, JSON.stringify(bad));
 });
 
 function handler(previewCard = async (card) => `<svg data-card='${JSON.stringify(card)}'></svg>`) {
