@@ -12,6 +12,20 @@ Each adapter returns the same normalized presence shape. Provider details stay a
 
 Use HTTPS between the process and media server where possible. Never expose provider credentials to browser code or put them in an SVG URL.
 
+
+## What each provider reports
+
+| Provider | Music | TV episodes | Films |
+| --- | --- | --- | --- |
+| Plex | yes | yes (`series`, `season`, `episode`) | yes (`year`) |
+| Jellyfin | yes | yes (`series`, `season`, `episode`) | yes (`year`) |
+| Emby | yes | yes (`series`, `season`, `episode`) | yes (`year`) |
+| Navidrome | yes | no | no |
+| Spotify | yes, and podcasts (shown as music with the show name) | no | no |
+| YouTube (browser extension) | yes (YouTube Music) | no | no |
+
+A provider only ever reports the kinds it claims (`mediaKinds`); anything else is normalised to `unknown` rather than mislabelled. Cards render episodes as `Series` / `S04E05 · Episode title` and films as `Title (year)`, falling back to the plain provider text when fields are missing or hidden by the privacy settings.
+
 ## Plex
 
 ```js

@@ -23,13 +23,13 @@ export const EXAMPLES = [
     file: "episode-playing.svg",
     title: "TV episode, playing",
     options: {},
-    presence: { kind: "episode", state: "playing", title: "The Constant", subtitle: "Lost · S04E05", positionMs: 980_000, durationMs: 2_580_000 },
+    presence: { kind: "episode", state: "playing", series: "Lost", season: 4, episode: 5, title: "The Constant", positionMs: 980_000, durationMs: 2_580_000 },
   },
   {
     file: "movie-playing.svg",
     title: "Movie, playing",
     options: {},
-    presence: { kind: "movie", state: "playing", title: "Spirited Away", subtitle: "2001", positionMs: 3_600_000, durationMs: 7_500_000 },
+    presence: { kind: "movie", state: "playing", title: "Spirited Away", year: 2001, positionMs: 3_600_000, durationMs: 7_500_000 },
   },
   {
     file: "paused.svg",
