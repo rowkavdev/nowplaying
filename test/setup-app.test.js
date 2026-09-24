@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { parseAppConfig } from "../src/app-config.js";
+import { serializeSetupConfig } from "../src/setup-config.js";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath, writeSetupConfig } from "../src/setup-app.js";
@@ -245,4 +247,36 @@ test("the wizard writes the optional Spotify block from the draft (#135)", async
   assert.deepEqual(saved.spotify, { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "rowan", displayName: "Rowan" }, credentialRef: { provider: "spotify", identityId: "rowan" } });
   await writeSetupConfig(file, { provider: "jellyfin", account });
   assert.equal(JSON.parse(await readFile(file, "utf8")).spotify, undefined);
+});
+
+test("running setup again keeps settings it doesn't own", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  const account = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
+  const card = { theme: "paper", radius: 0, textAlign: "middle", fieldOrder: ["title", "subtitle", "state"] };
+  const privacy = { redactTitles: true, hideArtwork: false, hideProgress: true, suppressMediaKinds: ["movie"] };
+  await writeFile(file, serializeSetupConfig({
+    servers: [{ provider: "jellyfin", serverUrl: account.serverUrl, identity: { id: "u1", displayName: "Rowan" } }],
+    credentialStored: true, discordTimestamps: "none", hostedEnabled: true, privacy, card,
+  }));
+  const nav = { provider: "navidrome", id: "n1", displayName: "rowan", serverUrl: "http://127.0.0.1:4533" };
+  await writeSetupConfig(file, { provider: "navidrome", account: nav, servers: [account], discordEnabled: false, discordIdleBehavior: "show", discordArtworkLookup: false });
+  const saved = parseAppConfig(await readFile(file, "utf8"));
+  assert.deepEqual(saved.servers.map((server) => server.provider), ["jellyfin", "navidrome"], "setup still owns the server list");
+  assert.deepEqual([saved.discord.enabled, saved.discord.idleBehavior, saved.discord.artworkLookup], [false, "show", "off"], "and the Discord basics");
+  assert.equal(saved.discord.timestamps, "none");
+  assert.equal(saved.hosted.enabled, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.privacy)), privacy);
+  assert.deepEqual(JSON.parse(JSON.stringify(saved.card)), card);
+});
+
+test("a broken existing config is replaced rather than blocking setup", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, "{ not json");
+  const account = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
+  await writeSetupConfig(file, { provider: "jellyfin", account });
+  const saved = parseAppConfig(await readFile(file, "utf8"));
+  assert.equal(saved.servers[0].identity.id, "u1");
+  assert.equal(saved.card, undefined);
 });
