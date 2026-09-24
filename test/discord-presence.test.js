@@ -196,3 +196,31 @@ test("rejects bad stale settings", () => {
   assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => idle, stuckAfterMs: 10 }), RangeError);
   assert.throws(() => createDiscordPresenceLoop({ client, getPresence: async () => idle, stuckAfterMs: 1.5 }), RangeError);
 });
+
+test("app wiring: a stuck track cannot stay on Discord past the timeout (#153)", async () => {
+  let time = Date.parse("2026-09-24T07:00:00.000Z");
+  const sets = [];
+  let clears = 0;
+  const transport = { connect: async () => {}, setActivity: async (a) => sets.push(a), clearActivity: async () => { clears += 1; }, close: async () => {} };
+  // The server keeps saying "playing" at the same position after the player has gone.
+  const provider = { getPresence: async () => ({ ...playing, positionMs: 42_000, updatedAt: new Date(time).toISOString() }) };
+  const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, provider, {
+    env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport,
+    intervalMs: 3_600_000, stuckAfterMs: 300_000, now: () => time,
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(sets.length, 1);
+    for (let i = 0; i < 4; i += 1) { time += 60_000; await d.refreshArtwork(); }
+    assert.equal(clears, 0, "still inside the timeout after 4 minutes");
+    time += 60_000;
+    await d.refreshArtwork();
+    assert.equal(clears, 1, "cleared once the position has been frozen for 5 minutes");
+    const published = sets.length;
+    time += 60_000;
+    await d.refreshArtwork();
+    assert.equal(sets.length, published, "not republished while it stays stuck");
+  } finally {
+    await d.stop();
+  }
+});

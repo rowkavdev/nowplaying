@@ -155,13 +155,13 @@ function defaultDiscordTransport(clientId) {
 // local server images fall back to the NowPlaying icon image. No title or artist
 // leaves the machine unless the config has artworkLookup "musicbrainz" (the
 // default for new setups, off for configs written before it existed).
-export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, now } = {}) {
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, stuckAfterMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
   const artwork = createArtwork(config.discord);
-  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(now ? { now } : {}) });
+  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(stuckAfterMs ? { stuckAfterMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.
   async function refreshArtwork() {
