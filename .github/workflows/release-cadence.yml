@@ -101,6 +101,12 @@ jobs:
             printf '%s\t%s\t%s\t%s\n' "$sha" "$pr" "$size" "$subject" >> changes.tsv
           done < all-changes.tsv
           {
+            # Hand-written sections from docs/releasing.md (Breaking changes,
+            # Migration, Compatibility, Security) come first when present.
+            if [[ -f "docs/release-notes/$TAG.md" ]]; then
+              cat "docs/release-notes/$TAG.md"
+              printf '\n'
+            fi
             printf "## What's Changed\n\n"
             node scripts/release-notes.js changes.tsv "$GITHUB_REPOSITORY"
             printf '\nEvery change is listed in [CHANGELOG.md](https://github.com/%s/blob/%s/CHANGELOG.md).\n' "$GITHUB_REPOSITORY" "$TAG"
