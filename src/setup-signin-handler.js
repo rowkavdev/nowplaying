@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   SignInError, normalizeServerUrl, pollJellyfinQuickConnect, pollPlexPin, signInEmby, signInNavidrome, startJellyfinQuickConnect, startPlexPin,
 } from "./provider-signin.js";
+import { NETWORK_FAILURES } from "./setup-network-failure.js";
 
 // Local setup API for provider sign-in. The page (or the native window) only
 // ever sees what the user must act on: a Plex sign-in link or a Jellyfin Quick
@@ -113,7 +114,7 @@ export function createSetupSignInHandler({
     try {
       return await actions[input.action](input);
     } catch (error) {
-      if (error instanceof SignInError) return json(error.status === "unreachable" ? 502 : 400, { error: error.status });
+      if (error instanceof SignInError) return json(NETWORK_FAILURES.includes(error.status) ? 502 : 400, { error: error.status });
       return json(500, { error: "signin_failed" });
     }
   };
