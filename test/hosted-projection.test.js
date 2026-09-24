@@ -80,3 +80,18 @@ test("rejects a missing or bad sequence number", () => {
   assert.throws(() => projectHostedState(playing, {}, { now: NOW }), TypeError);
   assert.throws(() => projectHostedState(playing, {}, { seq: -1, now: NOW }), TypeError);
 });
+
+test("TV and film details never leave the PC, even with privacy off (#143)", () => {
+  const episode = createPresence({ state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost", series: "Lost", season: 4, episode: 5, year: 2008, positionMs: 1000, durationMs: 2_580_000 });
+  const film = createPresence({ state: "playing", kind: "movie", title: "Dune: Part Two", subtitle: "2024", year: 2024 });
+  for (const presence of [episode, film]) {
+    const payload = projectHostedState(presence, {}, { seq: 1, now: NOW });
+    for (const key of ["series", "season", "episode", "year"]) assert.equal(Object.hasOwn(payload, key), false, `${key} must not be uploaded`);
+    assert.doesNotMatch(JSON.stringify(payload), /S04E05|"season"|"series"/);
+    assert.doesNotThrow(() => validateIngest(payload, { now: NOW }));
+  }
+  // Redacted titles stay redacted for episodes: neither the episode nor the
+  // show name gets out another way.
+  const hidden = projectHostedState(episode, { privacy: { redactTitles: true } }, { seq: 2, now: NOW });
+  assert.doesNotMatch(JSON.stringify(hidden), /The Constant|Lost/);
+});
