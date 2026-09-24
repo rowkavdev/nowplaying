@@ -27,7 +27,7 @@ nowplaying clears sessions that sit at the same position too long. If Discord it
 ## The media server connection failed in setup
 
 - **Unreachable:** the server address must open in a browser on the same PC. Check the port and that it's `http://` or `https://` with no extra path.
-- **Authentication failed:** check the sign-in on the server's own web interface, then try again. See your provider's page: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify) (planned).
+- **Authentication failed:** check the sign-in on the server's own web interface, then try again. See your provider's page: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify).
 
 ## Still stuck
 

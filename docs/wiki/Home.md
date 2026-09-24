@@ -12,7 +12,7 @@ Everything runs on your own machine or server. Your server address, sign-in deta
 1. **New here? Start with the [Quick start](Quick-Start).** It gets one media server and one output working in about ten minutes.
 2. Installing on your PC: [Install on Windows](Install-on-Windows)
 3. Running it on a server instead: [Run as a hosted service](Run-as-a-hosted-service)
-4. Connecting your media server: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify) (planned)
+4. Connecting your media server: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify)
 5. Setting up the outputs: [README card](Add-a-README-card) · [Discord Rich Presence](Enable-Discord-Rich-Presence)
 
 ## After setup
