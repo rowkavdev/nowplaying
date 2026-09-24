@@ -125,6 +125,10 @@ test("the hosted link follows the saved card style, width and progress bar", asy
   assert.equal(hostedLink(DEFAULTS)(base), base);
   assert.equal(hostedLink({ ...DEFAULTS, theme: "paper", width: 520, showProgress: false })(base), `${base}?theme=paper&width=520&show=mediaType,state,subtitle`);
   assert.equal(hostedLink({ ...DEFAULTS, theme: "compact", showProgress: false })(base), `${base}?theme=compact`);
-  assert.equal(hostedLink({ ...DEFAULTS, radius: 0, padding: 12 })(base), base);
+  assert.equal(hostedLink({ ...DEFAULTS, radius: 0, padding: 12 })(base), `${base}?padding=12&radius=0`);
+  assert.equal(hostedLink({ ...DEFAULTS, artworkPosition: "right", artworkWidth: 120, artworkHeight: 120 })(base), base, "artwork settings stay local");
+  assert.equal(hostedLink({ ...DEFAULTS, progressHeight: 8, fieldOrder: ["title", "subtitle", "state"], textAlign: "middle", progressPosition: "text", progressWidth: "full", direction: "auto" })(base),
+    `${base}?progressHeight=8&fieldOrder=title,subtitle,state&textAlign=middle&progressPosition=text&progressWidth=full&direction=auto`);
+  assert.equal(hostedLink({ ...DEFAULTS, showProgress: false, progressHeight: 8, progressPosition: "text", progressWidth: "full" })(base), `${base}?show=mediaType,state,subtitle`, "bar options drop when the bar is off");
   assert.equal(hostedLink(DEFAULTS)(""), "");
 });

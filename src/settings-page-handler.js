@@ -55,7 +55,7 @@ const PAGE = `<!doctype html>
 </form>
 <form id="card-form" hidden>
 <section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
-<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save. The hosted card link below uses your style, width and progress bar choice.</p>
+<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save. The hosted card link below uses these settings too, apart from artwork, which the hosted card never shows.</p>
 <p class="row"><label for="card-theme">Style</label>
 <select id="card-theme">
 <option value="midnight-blue">Dark</option>
@@ -305,8 +305,9 @@ startup.form.addEventListener("submit", async (event) => {
   }
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], off: ["Off", ""] };
-// The hosted card takes style, width and the progress bar from its link
-// (#94). Padding, corners and bar thickness are local only for now.
+// The hosted card takes its look from the link (#94, #414, #421). Only
+// non-default settings are added. Artwork options are left out because the
+// hosted card never draws artwork.
 let hostedCard = null;
 let savedCard = null;
 function hostedLink(base) {
@@ -315,6 +316,15 @@ function hostedLink(base) {
   if (savedCard.theme !== "midnight-blue") query.set("theme", savedCard.theme);
   if (savedCard.width !== 440) query.set("width", String(savedCard.width));
   if (savedCard.theme !== "compact" && !savedCard.showProgress) query.set("show", "mediaType,state,subtitle");
+  const progressShown = savedCard.theme === "compact" ? savedCard.showProgress === true : savedCard.showProgress !== false;
+  if (savedCard.padding !== undefined && savedCard.padding !== 24) query.set("padding", String(savedCard.padding));
+  if (savedCard.radius !== undefined && savedCard.radius !== 10) query.set("radius", String(savedCard.radius));
+  if (progressShown && savedCard.progressHeight !== undefined && savedCard.progressHeight !== 4) query.set("progressHeight", String(savedCard.progressHeight));
+  if (savedCard.fieldOrder && savedCard.fieldOrder.join(",") !== "state,title,subtitle") query.set("fieldOrder", savedCard.fieldOrder.join(","));
+  if (savedCard.textAlign && savedCard.textAlign !== "start") query.set("textAlign", savedCard.textAlign);
+  if (progressShown && savedCard.progressPosition && savedCard.progressPosition !== "bottom") query.set("progressPosition", savedCard.progressPosition);
+  if (progressShown && savedCard.progressWidth && savedCard.progressWidth !== "content") query.set("progressWidth", savedCard.progressWidth);
+  if (savedCard.direction && savedCard.direction !== "ltr") query.set("direction", savedCard.direction);
   const text = query.toString().replace(/%2C/g, ",");
   return text ? base + (base.includes("?") ? "&" : "?") + text : base;
 }
