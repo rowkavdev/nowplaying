@@ -30,14 +30,18 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
   const titleSize = bounded(layout.titleSize, 20, 14, 30, "layout.titleSize");
   const subtitleSize = bounded(layout.subtitleSize, 14, 10, 20, "layout.subtitleSize");
   const progressHeight = bounded(layout.progressHeight, 4, 2, 12, "layout.progressHeight");
-  const artworkPosition = layout.artworkPosition ?? "left";
+  const directionSetting = layout.direction ?? "ltr";
+  if (!new Set(["ltr", "rtl", "auto"]).has(directionSetting)) throw new TypeError("layout.direction: expected ltr, rtl or auto");
+  // "auto" follows the first strong character of the title, then subtitle.
+  const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${presence.title ?? ""}${presence.subtitle ?? ""}`));
+  const artworkPosition = layout.artworkPosition ?? (rtl ? "right" : "left");
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
   const artworkWidth = bounded(layout.artworkWidth, 68, 48, 160, "layout.artworkWidth");
   const artworkHeight = bounded(layout.artworkHeight, 100, 48, 180, "layout.artworkHeight");
@@ -84,9 +88,13 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const titleY = baselines.title;
   const subtitleY = baselines.subtitle;
   const stateY = baselines.state;
-  const anchor = TEXT_ANCHORS[textAlign];
-  const textX = textAlign === "middle" ? contentX + Math.round(contentWidth / 2) : textAlign === "end" ? contentX + contentWidth : contentX;
-  const anchorAttr = anchor === "start" ? "" : ` text-anchor="${anchor}"`;
+  // In RTL, start is the right edge. SVG text-anchor is relative to the
+  // text direction too, so direction="rtl" with anchor start sits on x as
+  // its right end.
+  const edge = textAlign === "middle" ? "middle" : (textAlign === "start") !== rtl ? "left" : "right";
+  const textX = edge === "middle" ? contentX + Math.round(contentWidth / 2) : edge === "right" ? contentX + contentWidth : contentX;
+  const anchor = edge === "middle" ? "middle" : (edge === "right") === rtl ? "start" : "end";
+  const anchorAttr = (anchor === "start" ? "" : ` text-anchor="${anchor}"`) + (rtl ? ' direction="rtl"' : "");
   // "text" puts the bar under the last line instead of the card's bottom
   // edge; "full" runs it across the whole card, under the artwork too.
   const progressY = progressPosition === "text" && !underArtwork ? Math.min(height - padding, cursor + 16) : height - padding;
@@ -104,7 +112,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   ${visibility.state ? `<text x="${textX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${status}</text>` : ""}
   <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${titleSize}" font-weight="600">${escapeXml(truncate(title, Math.max(12, Math.floor(contentWidth / (titleSize / 2)))))}</text>
   ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="${subtitleSize}">${escapeXml(truncate(subtitle, Math.max(16, Math.floor(contentWidth / (subtitleSize / 2)))))}</text>` : ""}
-  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
+  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
 
@@ -114,3 +122,12 @@ function progressWidth(presence, available) { if (!presence.durationMs || presen
 function providerLabel(kind) { return kind === "track" ? "Music" : kind === "movie" ? "Movie" : kind === "episode" ? "Episode" : "Media"; }
 function truncate(value, length) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }
 function escapeXml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
+// Hebrew, Arabic, Syriac, Thaana, NKo and related blocks, plus RTL
+// presentation forms. Latin, digits and punctuation are skipped over.
+function firstStrongIsRtl(text) {
+  for (const char of text) {
+    if (/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u.test(char)) return true;
+    if (/\p{L}/u.test(char)) return false;
+  }
+  return false;
+}
