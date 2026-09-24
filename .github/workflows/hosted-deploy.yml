@@ -11,10 +11,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: hosted-deploy
-  cancel-in-progress: false
-
 jobs:
   changes:
     name: Hosted card changes
@@ -55,6 +51,11 @@ jobs:
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Serialize deploys only. A workflow-level group would drop the whole
+    # queued run (and its checks) when two main commits land close together.
+    concurrency:
+      group: hosted-deploy
+      cancel-in-progress: false
     environment:
       name: production
       url: ${{ vars.HOSTED_BASE_URL }}
