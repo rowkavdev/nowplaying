@@ -14,7 +14,8 @@ import { cardRenderOptions, serializeSetupConfig } from "./setup-config.js";
 import { createSetupPreviewHandler } from "./setup-preview.js";
 import { createSetupDiscordTestHandler } from "./setup-discord-test.js";
 import { createSetupDraft, setupAccounts } from "./setup.js";
-import { migrateAppConfig, parseAppConfig } from "./app-config.js";
+import { hostedUploadSettings, migrateAppConfig, parseAppConfig } from "./app-config.js";
+import { createSetupHostedHandler } from "./setup-hosted-handler.js";
 
 export function windowsSetupDraftPath({ localAppData, appName = "nowplaying" } = {}) {
   if (typeof localAppData !== "string" || !localAppData.trim()) throw new TypeError("LOCALAPPDATA is required");
@@ -60,6 +61,8 @@ export async function writeSetupConfig(file, draft) {
     discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
     ...(draft.spotify ? { spotify: { clientId: draft.spotify.clientId, identity: draft.spotify.identity } } : {}),
     ...keptSettings(await readCurrentConfig(file)),
+    // A hosting choice made in setup replaces the installed one.
+    ...(typeof draft.hostedEnabled === "boolean" ? { hostedEnabled: draft.hostedEnabled, hostedUrl: draft.hostedEnabled ? draft.hostedUrl ?? null : null } : {}),
   });
   await mkdir(dirname(file), { recursive: true });
   const temporary = `${file}.tmp`;
@@ -116,6 +119,11 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const preview = createSetupPreviewHandler({ renderOptions: async () => (configFile ? cardRenderOptions((await readCurrentConfig(configFile))?.card) : {}) });
   // "Test Discord" on the Discord step, separate from the media server test.
   const discordTest = createSetupDiscordTestHandler(discordTestOptions);
+  // "Card hosting" step (#140): upload preview and self-hosted check.
+  const hosted = createSetupHostedHandler({
+    settings: async () => hostedUploadSettings(configFile ? await readCurrentConfig(configFile) : null),
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
   const onSignedIn = async ({ provider, identity, serverUrl }) => {
@@ -141,7 +149,7 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   // Per-run secret: the browser page gets it as a SameSite=Strict cookie, the
   // native window gets it through its environment. Other local sites get neither.
   const sessionSecret = randomBytes(32).toString("base64url");
-  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await preview(request)) ?? (await discordTest(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await spotify(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
+  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await preview(request)) ?? (await discordTest(request)) ?? (await hosted(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await spotify(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, sessionSecret, close: () => app.close() });
@@ -188,6 +196,7 @@ export function setupDraftFromConfig(config) {
       discordEnabled: config.discord?.enabled ?? true,
       discordIdleBehavior: config.discord?.idleBehavior ?? "clear",
       discordArtworkLookup: config.discord?.artworkLookup === "musicbrainz",
+      ...(config.hosted ? { hostedEnabled: config.hosted.enabled === true, hostedUrl: config.hosted.url ?? null } : {}),
       ...(config.spotify ? { spotify: { clientId: config.spotify.clientId, identity: { id: config.spotify.identity.id, displayName: config.spotify.identity.displayName } } } : {}),
     });
   } catch {

@@ -14,6 +14,8 @@ test("starts with privacy-first, testable defaults", () => {
     discordIdleBehavior: "clear",
     discordArtworkLookup: true,
     startWithWindows: null,
+    hostedEnabled: null,
+    hostedUrl: null,
   });
 });
 

@@ -114,7 +114,8 @@ export function createHostedUploader({
 
   async function send(presence) {
     const at = now();
-    const probe = projectHostedState(presence, settings, { seq: 0, now: at });
+    // `settings` can be a function so privacy and card changes apply without a restart.
+    const probe = projectHostedState(presence, typeof settings === "function" ? settings() : settings, { seq: 0, now: at });
     const key = changeKey(probe);
     if (!due(key, at, probe.positionMs)) return { sent: false, reason: "unchanged" };
     const device = await ensureRegistered();
