@@ -20,7 +20,7 @@ test("walks the wizard forward and back, persisting each step", async () => {
   const first = await handle({ method: "GET", url: "/api/setup/draft" });
   assert.equal(first.status, 200);
   assert.equal(first.headers["Cache-Control"], "no-store");
-  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, account: null, discordEnabled: true, discordIdleBehavior: "clear", discordArtworkLookup: true, startWithWindows: null }, resumed: false, discarded: false });
+  assert.deepEqual(parse(first), { draft: { version: 1, step: "welcome", provider: null, account: null, servers: [], discordEnabled: true, discordIdleBehavior: "clear", discordArtworkLookup: true, startWithWindows: null }, resumed: false, discarded: false });
 
   assert.equal(parse(await handle(post({ action: "next" }))).draft.step, "provider");
   const signin = parse(await handle(post({ action: "next", changes: { provider: "navidrome" } }))).draft;
@@ -106,4 +106,22 @@ test("works behind the loopback server and refuses cross-site writes", async () 
   } finally {
     await app.close();
   }
+});
+
+test("add-server and remove-server actions (#252)", async () => {
+  const { store, handle } = await setup();
+  const nav = { provider: "navidrome", id: "rowan", displayName: "Rowan" };
+  const early = await handle(post({ action: "add-server" }));
+  assert.deepEqual([early.status, parse(early).error], [409, "signin_required"]);
+  await store.save({ ...(await store.load()).draft, step: "signin", provider: "navidrome", account: nav });
+  const added = parse(await handle(post({ action: "add-server" }))).draft;
+  assert.deepEqual([added.step, added.provider, added.servers], ["provider", null, [nav]]);
+  assert.equal((await handle(post({ action: "remove-server" }))).status, 400);
+  assert.equal((await handle(post({ action: "add-server", server: { provider: "navidrome", id: "rowan" } }))).status, 400);
+  assert.equal((await handle(post({ action: "remove-server", server: { provider: "navidrome", id: "rowan", extra: 1 } }))).status, 400);
+  const missing = await handle(post({ action: "remove-server", server: { provider: "plex", id: "x" } }));
+  assert.deepEqual([missing.status, parse(missing).error], [409, "server_not_found"]);
+  assert.deepEqual(parse(await handle(post({ action: "remove-server", server: { provider: "navidrome", id: "rowan" } }))).draft.servers, []);
+  const noSignIn = createSetupDraftHandler({ store, signIn: false });
+  assert.deepEqual(parse(await noSignIn(post({ action: "add-server" }))).error, "signin_unavailable");
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { advanceSetupDraft, createSetupDraft, previousSetupDraft, serializeSetupDraft } from "../src/setup.js";
+import { addAnotherServer, advanceSetupDraft, createSetupDraft, previousSetupDraft, removeSetupServer, serializeSetupDraft, setupAccounts } from "../src/setup.js";
 
 test("starts with privacy-first, testable defaults", () => {
   assert.deepEqual(createSetupDraft(), {
@@ -8,6 +8,7 @@ test("starts with privacy-first, testable defaults", () => {
     step: "welcome",
     provider: null,
     account: null,
+    servers: [],
     discordEnabled: true,
     discordIdleBehavior: "clear",
     discordArtworkLookup: true,
@@ -78,4 +79,28 @@ test("steps back without losing choices and stops at welcome", () => {
 test("rejects invalid Discord choices", () => {
   assert.throws(() => createSetupDraft({ discordEnabled: "yes" }), /discordEnabled is invalid/);
   assert.throws(() => createSetupDraft({ discordIdleBehavior: "explode" }), /discordIdleBehavior is invalid/);
+});
+
+test("add another server keeps the signed-in account and goes back to the server choice (#252)", () => {
+  const nav = { provider: "navidrome", id: "rowan", displayName: "Rowan", serverUrl: "http://127.0.0.1:4533" };
+  const jf = { provider: "jellyfin", id: "u1", displayName: "Rowan" };
+  assert.throws(() => addAnotherServer(createSetupDraft({ step: "signin", provider: "navidrome" })), /signin_required/);
+  const second = addAnotherServer(createSetupDraft({ step: "signin", provider: "navidrome", account: nav }));
+  assert.deepEqual([second.step, second.provider, second.account, second.servers], ["provider", null, null, [nav]]);
+  const both = createSetupDraft({ ...second, provider: "jellyfin", account: jf });
+  assert.deepEqual(setupAccounts(both), [nav, jf]);
+  // Signing the same account in again doesn't list it twice.
+  assert.deepEqual(setupAccounts(createSetupDraft({ ...second, provider: "navidrome", account: nav })), [nav]);
+  assert.deepEqual(removeSetupServer(both, { provider: "navidrome", id: "rowan" }).servers, []);
+  assert.throws(() => removeSetupServer(both, { provider: "plex", id: "x" }), /server_not_found/);
+});
+
+test("setup server list is capped, deduped and accounts-only (#252)", () => {
+  const account = (i) => ({ provider: "plex", id: `u${i}`, displayName: `User ${i}` });
+  const full = createSetupDraft({ step: "signin", provider: "plex", account: account(7), servers: [0, 1, 2, 3, 4, 5, 6].map(account) });
+  assert.throws(() => addAnotherServer(full), /too_many_servers/);
+  assert.throws(() => createSetupDraft({ servers: [0, 1, 2, 3, 4, 5, 6, 7].map(account) }), /servers is invalid/);
+  assert.throws(() => createSetupDraft({ servers: [account(1), account(1)] }), /servers is invalid/);
+  assert.throws(() => createSetupDraft({ servers: [{ ...account(1), token: "x" }] }), /servers is invalid/);
+  assert.throws(() => createSetupDraft({ servers: "plex" }), /servers is invalid/);
 });
