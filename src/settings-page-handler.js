@@ -74,6 +74,21 @@ const PAGE = `<!doctype html>
 </select></p>
 <p class="row"><label for="card-artworkWidth">Artwork width</label><input type="range" id="card-artworkWidth" min="48" max="160" step="1"> <output id="card-artworkWidth-value" for="card-artworkWidth"></output></p>
 <p class="row"><label for="card-artworkHeight">Artwork height</label><input type="range" id="card-artworkHeight" min="48" max="180" step="1"> <output id="card-artworkHeight-value" for="card-artworkHeight"></output></p>
+<p class="row"><label for="card-fieldOrder">Line order</label>
+<select id="card-fieldOrder">
+<option value="state,title,subtitle">Status / Title / Subtitle</option>
+<option value="state,subtitle,title">Status / Subtitle / Title</option>
+<option value="title,state,subtitle">Title / Status / Subtitle</option>
+<option value="title,subtitle,state">Title / Subtitle / Status</option>
+<option value="subtitle,state,title">Subtitle / Status / Title</option>
+<option value="subtitle,title,state">Subtitle / Title / Status</option>
+</select></p>
+<p class="row"><label for="card-textAlign">Text alignment</label>
+<select id="card-textAlign">
+<option value="start">Left</option>
+<option value="middle">Centre</option>
+<option value="end">Right</option>
+</select></p>
 <div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings"><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p></div>
 <p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
@@ -187,13 +202,13 @@ privacy.form.addEventListener("submit", async (event) => {
     privacy.save.disabled = false;
   }
 });
-const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100 };
+const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: 68, artworkHeight: 100, fieldOrder: ["state", "title", "subtitle"], textAlign: "start" };
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
 const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note") };
 const cardField = (key) => document.getElementById("card-" + key);
 function cardSay(text, tone) { const el = document.getElementById("card-result"); el.textContent = text; el.className = tone || ""; }
 function cardValues() {
-  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value };
+  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value };
   for (const key of Object.keys(CARD_NUMBERS)) values[key] = Number(cardField(key).value);
   return values;
 }
@@ -210,7 +225,7 @@ function cardChanged() {
     if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
     card.save.disabled = false;
     if (document.getElementById("card-result").className === "bad") cardSay("");
-    const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0" });
+    const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0", fieldOrder: values.fieldOrder.join(",") });
     card.preview.src = "/api/settings/card/preview.svg?" + query;
   }, 200);
 }
@@ -222,10 +237,12 @@ function showCard(c) {
   cardField("theme").value = c.theme;
   cardField("showProgress").checked = c.showProgress;
   cardField("artworkPosition").value = c.artworkPosition;
+  cardField("fieldOrder").value = c.fieldOrder.join(",");
+  cardField("textAlign").value = c.textAlign;
   for (const key of Object.keys(CARD_NUMBERS)) cardField(key).value = c[key];
   cardChanged();
 }
-for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight"]) cardField(key).addEventListener("input", cardChanged);
+for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign"]) cardField(key).addEventListener("input", cardChanged);
 cardField("theme").addEventListener("change", () => {
   // Compact hides the bar by default; the others show it.
   cardField("showProgress").checked = cardField("theme").value !== "compact";
@@ -353,6 +370,8 @@ function parsePreviewQuery(searchParams) {
     if (key === "theme") card.theme = value;
     else if (key === "showProgress" && (value === "1" || value === "0")) card.showProgress = value === "1";
     else if (key === "artworkPosition") card.artworkPosition = value;
+    else if (key === "textAlign") card.textAlign = value;
+    else if (key === "fieldOrder") card.fieldOrder = value.split(",");
     else if (PREVIEW_NUMBERS.has(key) && /^\d{1,3}$/.test(value)) card[key] = Number(value);
     else throw new TypeError("bad preview query");
   }

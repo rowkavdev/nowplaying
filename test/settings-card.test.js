@@ -48,7 +48,9 @@ test("the preview renders draft settings and refuses bad ones", async () => {
   assert.deepEqual(JSON.parse(ok.body.match(/data-card='(.*)'/)[1]), { theme: "paper", width: 500, padding: 16, radius: 0, progressHeight: 8, showProgress: false });
   const art = await h({ url: `${PREVIEW}?artworkPosition=right&artworkWidth=120&artworkHeight=90` });
   assert.deepEqual(JSON.parse(art.body.match(/data-card='(.*)'/)[1]), { artworkPosition: "right", artworkWidth: 120, artworkHeight: 90 });
-  for (const query of ["artworkPosition=top", "artworkWidth=40", "artworkHeight=200",
+  const text = await h({ url: `${PREVIEW}?fieldOrder=title,subtitle,state&textAlign=middle` });
+  assert.deepEqual(JSON.parse(text.body.match(/data-card='(.*)'/)[1]), { fieldOrder: ["title", "subtitle", "state"], textAlign: "middle" });
+  for (const query of ["fieldOrder=title,title,state", "fieldOrder=title", "textAlign=center", "artworkPosition=top", "artworkWidth=40", "artworkHeight=200",
     "theme=neon", "width=9999", "radius=-1", "radius=1.5", "showProgress=yes", "colors=red", "theme=paper&theme=paper"]) {
     assert.equal((await h({ url: `${PREVIEW}?${query}` })).status, 400, query);
   }
@@ -96,9 +98,10 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
+  assert.equal(page.match(/<option value="(?:state|title|subtitle),(?:state|title|subtitle),(?:state|title|subtitle)">/g).length, 6);
   assert.equal(page.toLowerCase().split("<script").length, 2);
   assert.doesNotMatch(page, /\sstyle=|\son[a-z]+=/i);
   const script = (await h({ url: "/settings.js" })).body;
