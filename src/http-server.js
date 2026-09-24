@@ -69,6 +69,9 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
       response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(page ? { "Content-Security-Policy": PAGE_CSP } : {}), ...(page && sessionCookie ? { "Set-Cookie": sessionCookie } : {}) });
       response.end(result.body);
     } catch {
+      // Headers already set (the body failed to write): a 500 can't be sent
+      // now, and trying throws out of this callback. Drop the connection.
+      if (response.headersSent) { response.destroy(); return; }
       response.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
       response.end("Internal Server Error");
     }
