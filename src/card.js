@@ -189,7 +189,8 @@ function luminance(hex) { const [r, g, b] = channels(hex); return (0.2126 * r + 
 function mix(from, to, amount) { const a = channels(from); const b = channels(to); return `#${a.map((v, i) => Math.round(v + (b[i] - v) * amount).toString(16).padStart(2, "0")).join("")}`; }
 function pad(value) { return String(value).padStart(2, "0"); }
 function providerLabel(kind) { return kind === "track" ? "Music" : kind === "movie" ? "Movie" : kind === "episode" ? "Episode" : "Media"; }
-function truncate(value, length) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }
+// Never cut between the two halves of an emoji or other astral character.
+function truncate(value, length) { if (value.length <= length) return value; const cut = value.slice(0, length - 1); return `${/[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut}…`; }
 function escapeXml(value) { return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char]); }
 // Hebrew, Arabic, Syriac, Thaana, NKo and related blocks, plus RTL
 // presentation forms. Latin, digits and punctuation are skipped over.

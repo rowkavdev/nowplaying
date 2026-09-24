@@ -82,3 +82,14 @@ test("episodes and films read like TV and films, not music (#143)", async () => 
   // Music is untouched.
   assert.deepEqual(cardText(createPresence({ state: "playing", kind: "track", title: "Song", subtitle: "Artist" })), { title: "Song", subtitle: "Artist" });
 });
+
+test("truncating long emoji titles never leaves half a surrogate pair", () => {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (let prefix = 0; prefix < 40; prefix++) {
+    for (const width of [280, 340, 440]) {
+      const svg = renderCard({ state: "playing", kind: "track", title: `${"a".repeat(prefix)}${"😀".repeat(60)}`, subtitle: `${"b".repeat(prefix)}${"🎵".repeat(80)}` }, { width });
+      assert.doesNotMatch(svg, lone, `prefix ${prefix}, width ${width}`);
+      assert.match(svg, /…/);
+    }
+  }
+});
