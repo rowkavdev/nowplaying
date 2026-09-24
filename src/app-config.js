@@ -258,7 +258,7 @@ export function youtubeForDiscord(source) {
   });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {} } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
@@ -381,6 +381,9 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),
+    // Servers (#253): adding or removing a server runs through setup. The
+    // host (the Windows tray session) opens it and restarts the app after.
+    ...(typeof requestSetup === "function" ? { openSetup: () => { requestSetup(); } } : {}),
     // Pairing token for the YouTube extension (#136): shown on the settings
     // page for pasting into the extension. Reset makes a new one and cuts
     // off the old extension.

@@ -471,6 +471,7 @@ function parsePreviewQuery(searchParams) {
   return normalizeCard(card);
 }
 
+export const OPEN_SETUP_PATH = "/api/settings/servers/setup";
 export const YOUTUBE_PAIRING_PATH = "/api/settings/youtube/pairing";
 export const YOUTUBE_PAIRING_RESET_PATH = "/api/settings/youtube/pairing/reset";
 
@@ -486,7 +487,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   };
   const read = async () => {
     const value = await settings.read();
-    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}) };
+    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}), ...(typeof settings.openSetup === "function" ? { setup: { available: true } } : {}) };
   };
   async function preview(request, method, url) {
     if (typeof settings.previewCard !== "function") return response(404, "Not Found");
@@ -499,6 +500,16 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     try { svg = await settings.previewCard(card); } catch { svg = null; }
     if (typeof svg !== "string" || !svg.includes("<svg")) return response(503, "Preview unavailable", { "Cache-Control": "no-store" });
     return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+  }
+  // "Add or remove servers" (#253): asks the app's host to open setup. The
+  // app restarts once setup closes, so this answers straight away.
+  async function openSetup(request, method) {
+    if (typeof settings.openSetup !== "function") return response(404, "Not Found");
+    if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
+    const site = header(request?.headers, "sec-fetch-site");
+    if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
+    try { settings.openSetup(); } catch { return json(500, { error: "open_failed" }); }
+    return json(202, { opening: true });
   }
   // YouTube extension pairing token (#136). POST even for reading, so the
   // server's session check applies and only this app's own page gets the
@@ -521,6 +532,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     const disconnect = url.pathname === "/api/settings/hosted/disconnect";
     const refresh = url.pathname === "/api/settings/discord/refresh-artwork";
     if (url.pathname === PREVIEW_PATH) return preview(request, method, url);
+    if (url.pathname === OPEN_SETUP_PATH) return openSetup(request, method);
     if (url.pathname === YOUTUBE_PAIRING_PATH || url.pathname === YOUTUBE_PAIRING_RESET_PATH) return youtubePairing(request, method, url.pathname === YOUTUBE_PAIRING_RESET_PATH);
     if (!asset && url.pathname !== "/api/settings" && !disconnect && !refresh) return fallback(request);
     if (asset) {
