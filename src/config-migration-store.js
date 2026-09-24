@@ -14,6 +14,9 @@ export function createConfigMigrationStore({ file, currentVersion, migrations, v
       throw new Error("configuration could not be read");
     }
     let document;
+    // Match parseAppConfig (#522): drop one leading BOM (Notepad, PowerShell 5)
+    // so an old-version config saved that way still migrates (#532).
+    if (sourceText.charCodeAt(0) === 0xfeff) sourceText = sourceText.slice(1);
     try { document = JSON.parse(sourceText); }
     catch { throw new Error("configuration is malformed"); }
 
