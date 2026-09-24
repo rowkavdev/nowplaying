@@ -206,3 +206,15 @@ test("tray endpoint serves the same line", async () => {
   assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "same-origin" } })).status, 200);
   assert.equal((await handle({ method: "GET", url: "/api/tray", headers: { "sec-fetch-site": "none" } })).status, 200);
 });
+
+test("discord artwork source and reason are short words only", () => {
+  const status = createAppStatus({ config });
+  status.setDiscord(() => ({ enabled: true, state: "ready", artwork: { strategy: "fallback", failure: "lookup_miss" } }));
+  assert.deepEqual({ ...status.snapshot().discord.artwork }, { source: "fallback", reason: "lookup_miss" });
+  status.setDiscord(() => ({ enabled: true, state: "ready", artwork: { strategy: "lookup", failure: null } }));
+  assert.deepEqual({ ...status.snapshot().discord.artwork }, { source: "lookup", reason: null });
+  status.setDiscord(() => ({ enabled: true, state: "ready", artwork: { strategy: "https://cdn.example/x.png", failure: "private host 10.0.0.2" } }));
+  assert.deepEqual({ ...status.snapshot().discord.artwork }, { source: "unknown", reason: "unknown" });
+  status.setDiscord(() => ({ enabled: true, state: "ready" }));
+  assert.equal(status.snapshot().discord.artwork, undefined);
+});

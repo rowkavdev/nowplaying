@@ -131,6 +131,7 @@ test("startDiscordFromConfig exposes a privacy-safe connection status", async ()
   assert.equal(status.state, "ready");
   assert.match(status.lastPublishedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.doesNotMatch(JSON.stringify(status), /Song|Artist/);
+  assert.equal(status.artwork.strategy, "fallback");
   await d.stop();
 });
 
