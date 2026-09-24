@@ -501,6 +501,22 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
   return Object.freeze({ ...multi, artwork });
 }
 
+// Tint for the card background (#447): the art's average colour, worked out
+// once per image. The renderer keeps it in a safe lightness range.
+const tints = new Map();
+async function tintFor(dataUri) {
+  if (tints.has(dataUri)) return tints.get(dataUri);
+  let tint = null;
+  try {
+    const { default: sharp } = await import("sharp");
+    const { dominant } = await sharp(Buffer.from(dataUri.slice(dataUri.indexOf(",") + 1), "base64")).stats();
+    tint = `#${[dominant.r, dominant.g, dominant.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+  } catch { tint = null; }
+  if (tints.size >= 128) tints.delete(tints.keys().next().value);
+  tints.set(dataUri, tint);
+  return tint;
+}
+
 function artworkRefKey(ref) {
   return JSON.stringify([ref.provider ?? null, ref.type ?? null, ref.itemId ?? null, ref.imageId ?? null, ref.imageTag ?? null]);
 }
@@ -520,7 +536,9 @@ function createServerArtwork(server, secret, fetchImpl) {
         const { createDefaultArtworkSanitizer } = await import("./artwork-sanitizer-runtime.js");
         return createArtworkService({ cache: createArtworkCache(), sanitizer: createDefaultArtworkSanitizer(), fetchImpl, timeoutMs: 3000 });
       })().catch((error) => { service = null; throw error; });
-      return (await service).resolve(ref, providerConfig);
+      const dataUri = await (await service).resolve(ref, providerConfig);
+      if (!dataUri) return null;
+      return { dataUri, tint: await tintFor(dataUri) };
     },
   });
 }

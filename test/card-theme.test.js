@@ -59,3 +59,17 @@ test("rejects unknown themes and unsafe colors", () => {
     { message: "Unknown card color: shadow" },
   );
 });
+
+test("an artwork tint is pulled into a safe lightness range (#447)", () => {
+  const stop = (svg) => /<stop offset="0" stop-color="(#[0-9a-f]{6})"\/>/.exec(svg)?.[1];
+  const lightness = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); return (Math.max(r, g, b) + Math.min(r, g, b)) / 2; };
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
+  const white = stop(renderCard(presence, { tint: "#ffffff" }));
+  const orange = stop(renderCard(presence, { tint: "#f28c28" }));
+  assert.ok(white && lightness(white) < 0.25, `dark card with a white cover stays dark: ${white}`);
+  assert.ok(orange && lightness(orange) < 0.25, `dark card with an orange cover stays dark: ${orange}`);
+  const paperBlack = stop(renderCard(presence, { theme: "paper", tint: "#000000" }));
+  assert.ok(paperBlack && lightness(paperBlack) > 0.9, `paper card with a black cover stays light: ${paperBlack}`);
+  assert.equal(stop(renderCard(presence, {})), undefined);
+  assert.throws(() => renderCard(presence, { tint: "orange" }), TypeError);
+});

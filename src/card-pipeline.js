@@ -10,11 +10,15 @@ export function createCardPipeline({ provider, privacy = {}, artworkService, pro
   return async function resolveCard(options = {}) {
     const rawPresence = await provider.getPresence();
     const presence = applyPrivacy(rawPresence, privacy);
-    const artworkDataUri = presence.artwork && artworkService
+    const art = presence.artwork && artworkService
       ? await artworkService.resolve(presence.artwork, providerConfig)
       : null;
+    // A service can return the data URI alone, or with a tint taken from the
+    // art (#447).
+    const artworkDataUri = typeof art === "string" ? art : art?.dataUri ?? null;
     // Saved appearance (config.card) first; /card.svg query options win.
-    const base = defaults ? defaults() : {};
-    return renderer(presence, { ...base, ...options, artworkDataUri });
+    const { artworkTint = true, ...base } = defaults ? defaults() : {};
+    const tint = artworkTint && artworkDataUri && typeof art?.tint === "string" ? { tint: art.tint } : {};
+    return renderer(presence, { ...base, ...options, artworkDataUri, ...tint });
   };
 }

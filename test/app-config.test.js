@@ -418,6 +418,7 @@ test("the local card embeds the server's album art, and a failed fetch leaves it
       const svg = await (await fetch(`${app.url}/card.svg`)).text();
       assert.match(svg, />Song</);
       assert.equal(/<image href="data:image\/png;base64,/.test(svg), artworkWorks);
+      assert.equal(/<linearGradient id="bg"/.test(svg), artworkWorks, "the art tints the background (#447)");
       const art = requests.find((request) => request.url.includes("/Items/item1/Images/Primary"));
       assert.ok(art, "artwork was requested from the server");
       assert.equal(art.token, "jf-token");

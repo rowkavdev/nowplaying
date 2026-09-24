@@ -118,7 +118,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const dotX = edge === "right" ? textX - 4 : textX + 4;
   const stateX = dot ? (edge === "right" ? textX - 14 : textX + 14) : textX;
   const light = luminance(palette.background) > 0.5;
-  const tintStop = tint ? mix(palette.background, tint, light ? 0.12 : 0.34) : null;
+  // Any tint is pulled into a safe lightness range first, so a white or black
+  // cover can't wash out the text.
+  const tintStop = tint ? mix(palette.background, clampLightness(tint, light ? 0.6 : 0.12, light ? 0.9 : 0.45), light ? 0.12 : 0.34) : null;
   const background = tintStop ? "url(#bg)" : palette.background;
   const defs = [
     tintStop ? `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${tintStop}"/><stop offset="0.75" stop-color="${palette.background}"/></linearGradient>` : "",
@@ -168,6 +170,20 @@ export function cardText(presence) {
 // Generous on purpose so the check fails safe.
 function estimateWidth(text, size, factor, spacing) { return text.length * (size * factor + spacing); }
 function clock(ms) { const total = Math.floor(ms / 1000); const h = Math.floor(total / 3600); const m = Math.floor((total % 3600) / 60); const sec = pad(total % 60); return h ? `${h}:${pad(m)}:${sec}` : `${m}:${sec}`; }
+function clampLightness(hex, min, max) {
+  const [r, g, b] = channels(hex).map((v) => v / 255);
+  const high = Math.max(r, g, b); const low = Math.min(r, g, b);
+  const lightness = (high + low) / 2;
+  const target = Math.min(max, Math.max(min, lightness));
+  if (target === lightness) return hex;
+  const saturation = high === low ? 0 : (high - low) / (1 - Math.abs(2 * lightness - 1));
+  const hue = high === low ? 0 : high === r ? ((g - b) / (high - low) + 6) % 6 : high === g ? (b - r) / (high - low) + 2 : (r - g) / (high - low) + 4;
+  const chroma = (1 - Math.abs(2 * target - 1)) * saturation;
+  const x = chroma * (1 - Math.abs((hue % 2) - 1));
+  const [r1, g1, b1] = hue < 1 ? [chroma, x, 0] : hue < 2 ? [x, chroma, 0] : hue < 3 ? [0, chroma, x] : hue < 4 ? [0, x, chroma] : hue < 5 ? [x, 0, chroma] : [chroma, 0, x];
+  const m = target - chroma / 2;
+  return `#${[r1, g1, b1].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
 function channels(hex) { return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); }
 function luminance(hex) { const [r, g, b] = channels(hex); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; }
 function mix(from, to, amount) { const a = channels(from); const b = channels(to); return `#${a.map((v, i) => Math.round(v + (b[i] - v) * amount).toString(16).padStart(2, "0")).join("")}`; }

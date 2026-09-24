@@ -24,3 +24,19 @@ test("privacy can suppress artwork before the artwork service", async () => {
   assert.equal(called, false);
   assert.equal(result.options.artworkDataUri, null);
 });
+
+test("the pipeline passes an artwork tint on unless the card turns it off (#447)", async () => {
+  const presence = { state: "playing", kind: "track", title: "Song", artwork: { provider: "plex", imageId: "/a", type: "thumb" } };
+  const seen = [];
+  const renderer = (_presence, options) => { seen.push(options); return "<svg/>"; };
+  const artworkService = { resolve: async () => ({ dataUri: "data:image/png;base64,AAAA", tint: "#123456" }) };
+  const provider = { getPresence: async () => presence };
+  await createCardPipeline({ provider, artworkService, providerConfig: {}, renderer })();
+  await createCardPipeline({ provider, artworkService, providerConfig: {}, renderer, defaults: () => ({ artworkTint: false }) })();
+  await createCardPipeline({ provider, artworkService: { resolve: async () => "data:image/png;base64,AAAA" }, providerConfig: {}, renderer })();
+  assert.deepEqual(seen.map((options) => [options.artworkDataUri, options.tint ?? null, "artworkTint" in options]), [
+    ["data:image/png;base64,AAAA", "#123456", false],
+    ["data:image/png;base64,AAAA", null, false],
+    ["data:image/png;base64,AAAA", null, false],
+  ]);
+});
