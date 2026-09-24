@@ -9,7 +9,8 @@ const REDACTED = "[redacted]";
 export function redactDiagnosticText(value, { sensitiveValues = [] } = {}) {
   let text = String(value ?? "");
   text = text.replace(/\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+/gi, `${REDACTED}-credential`);
-  text = text.replace(/\b(?:token|api[-_ ]?key|secret|password|authorization|webhook)\b\s*[:=]\s*[^\s,;]+/gi, (match) => `${match.split(/[:=]/, 1)[0]}=${REDACTED}`);
+  // Also JSON-style keys ("token": "x") and camelCase ones (accessToken=x).
+  text = text.replace(/(?:\b|(?<=[a-z]))(token|api[-_ ]?key|secret|password|authorization|webhook)\b["']?\s*[:=]\s*(?:"[^"]*"?|'[^']*'?|[^\s,;}]+)/gi, (_match, key) => `${key}=${REDACTED}`);
   text = text.replace(/\b(?:https?|wss?):\/\/[^\s<>'"`]+/gi, `${REDACTED}-url`);
   text = text.replace(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g, `${REDACTED}-ip`);
   text = text.replace(/(?<![\w:])(?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}(?![\w:])/gi, `${REDACTED}-ip`);
