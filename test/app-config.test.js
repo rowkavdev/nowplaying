@@ -374,3 +374,29 @@ test("the YouTube extension bridge feeds the card, with a stored pairing token (
     await app.close();
   }
 });
+
+test("settings page can ask the host to open setup for servers (#253)", async () => {
+  let asked = 0;
+  const store = { read: async (ref) => (ref.provider === "jellyfin" ? "jf-token" : null) };
+  const start = (extra) => startAppFromConfig({ configFile: undefined, credentialStore: store, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" }, ...extra });
+  const app = await start({ configFile: await configFile(), requestSetup: () => { asked += 1; } });
+  const plain = await start({ configFile: await configFile() });
+  try {
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const own = { Cookie: cookie, "Content-Type": "application/json" };
+    assert.equal((await fetch(`${app.url}/api/settings/servers/setup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 403);
+    assert.equal(asked, 0);
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).setup, { available: true });
+    assert.equal((await (await fetch(`${plain.url}/api/settings`)).json()).setup, undefined);
+    const res = await fetch(`${app.url}/api/settings/servers/setup`, { method: "POST", headers: own, body: "{}" });
+    assert.deepEqual([res.status, await res.json()], [202, { opening: true }]);
+    assert.equal(asked, 1);
+    assert.equal((await fetch(`${app.url}/api/settings/servers/setup`, { headers: own })).status, 405);
+    // No host to open setup (dev checkout, hand-written config): not offered.
+    const plainCookie = (await fetch(`${plain.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    assert.equal((await fetch(`${plain.url}/api/settings/servers/setup`, { method: "POST", headers: { Cookie: plainCookie, "Content-Type": "application/json" }, body: "{}" })).status, 404);
+  } finally {
+    await app.close();
+    await plain.close();
+  }
+});
