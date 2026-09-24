@@ -168,7 +168,10 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
     await loop.tick().catch(() => null);
     return dropped;
   }
-  return Object.freeze({ status: "on", connection: () => loop.status(), stop: () => loop.stop(), refreshArtwork });
+  // The status page shows which artwork source Discord got and why it fell
+  // back (#154), as short words only - never a URL or host.
+  const connection = () => ({ ...loop.status(), artwork: typeof artwork?.status === "function" ? artwork.status() : null });
+  return Object.freeze({ status: "on", connection, stop: () => loop.stop(), refreshArtwork });
 }
 
 // Hosted card upload (#140) runs only when the config turns it on. It pushes

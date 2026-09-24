@@ -76,7 +76,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
         lastOkAt: iso(lastOkAt),
       }),
       playing: failure ? null : playing,
-      discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError) }),
+      discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError), ...artworkStatus(discordState?.artwork) }),
       hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: word(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedState?.lastError ? word(hostedState.lastError) : null }),
     });
   }
@@ -141,6 +141,13 @@ function serverOrigin(value) {
   try { const url = new URL(value); return url.origin; } catch { return null; }
 }
 function text(value) { return typeof value === "string" && value.trim() ? value.trim().slice(0, 200) : null; }
+// Artwork diagnostics (#154): the source Discord got (provider, proxy, lookup,
+// fallback or none) and a short fallback reason. Anything else is dropped.
+function artworkStatus(value) {
+  if (!value || typeof value !== "object") return {};
+  return { artwork: Object.freeze({ source: word(value.strategy), reason: value.failure == null ? null : word(value.failure) }) };
+}
+
 function word(value) { return typeof value === "string" && /^[a-z_]{1,32}$/.test(value) ? value : "unknown"; }
 function code(value) { return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,47}$/.test(value) ? value : null; }
 function iso(value) {
