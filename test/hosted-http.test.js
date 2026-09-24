@@ -84,7 +84,8 @@ test("card layout options come from the URL, are checked, and cache separately",
   const app = await start();
   try {
     const { cardId, token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
-    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 1000, durationMs: 4000 });
+    // Paused, so the progress bar doesn't move between requests.
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "paused", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 1000, durationMs: 4000 });
     assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
     const plain = await call(app.port, "GET", `/card/${cardId}.svg`);
     const styled = await call(app.port, "GET", `/card/${cardId}.svg?padding=12&radius=0&titleSize=24&subtitleSize=12&progressHeight=8&textAlign=middle&fieldOrder=title,subtitle,state&progressPosition=text&progressWidth=full&direction=auto`);
