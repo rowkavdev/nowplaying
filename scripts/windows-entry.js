@@ -11,7 +11,11 @@ import { createWindowsCredentialAdapter } from "../src/windows-credential-adapte
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { ensureConfigured, parseStartArgs } from "../src/first-run.js";
 import { runTraySession } from "../src/tray-session.js";
+import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
+
+// Declared before any top-level await so the start path below can use it.
+let recovery;
 
 const command = process.argv[2] ?? "help";
 
@@ -49,7 +53,8 @@ if (command === "--version" || command === "version") {
       if (!app || typeof app.close !== "function") throw Object.assign(new TypeError("config start() must return an app with close()"), { startupCode: "APP_INVALID" });
     } else {
       // The config written by `nowplaying.exe setup`; the sign-in comes from Credential Manager.
-      app = await startFromWizardConfig(configFile);
+      app = await guardedStart(configFile);
+      if (app.safeMode) await logger.event("startup", "degraded", { level: "warn", code: `SAFE_MODE_${String(recovery?.recovery?.subsystem ?? "unknown").toUpperCase()}` });
     }
   } catch (error) {
     await logger.event("startup", "failed", { level: "error", code: error?.startupCode ?? "START_FAILED" });
@@ -73,7 +78,8 @@ if (command === "--version" || command === "version") {
       app,
       runTray: (current) => runTrayProcess(`${current.url}/`),
       runSetup: () => openSetupWindow(),
-      restartApp: () => startFromWizardConfig(configFile),
+      // Running setup again is the way out of safe mode: the next start is normal.
+      restartApp: async () => { await recovery?.retryNormal(); return guardedStart(configFile); },
       onRestart: (current) => { app = current; },
     });
     await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
@@ -134,7 +140,16 @@ async function openSetupWindow() {
   }
 }
 
-async function startFromWizardConfig(configFile) {
+// Crash-loop protection for the installed app (#122): after three starts in a
+// row that never stayed up, the next one runs in safe mode.
+async function guardedStart(configFile) {
+  recovery?.cancel();
+  const store = createStartupRecoveryStore({ file: resolve(dirname(configFile), "startup-recovery.json") });
+  recovery = await guardStartup({ store, start: ({ safeMode }) => startFromWizardConfig(configFile, { safeMode }) });
+  return recovery.app;
+}
+
+async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
   const adapter = createWindowsCredentialAdapter();
   const credentialStore = createCredentialStore({ adapter });
   const hostedCredentials = createHostedCredentials({ adapter });
@@ -143,8 +158,10 @@ async function startFromWizardConfig(configFile) {
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType });
-  console.log(`NowPlaying is running. Card: ${app.url}/card.svg`);
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode });
+  console.log(safeMode
+    ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run setup again from the tray to go back to normal. Card: ${app.url}/card.svg`
+    : `NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }
 
