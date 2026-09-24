@@ -280,3 +280,57 @@ test("a broken existing config is replaced rather than blocking setup", async ()
   assert.equal(saved.servers[0].identity.id, "u1");
   assert.equal(saved.card, undefined);
 });
+
+test("setup on an installed app starts from the installed config and Finish clears the draft", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const draftFile = join(dir, "draft.json");
+  const configFile = join(dir, "config.json");
+  const card = { theme: "paper" };
+  await writeFile(configFile, serializeSetupConfig({
+    servers: [
+      { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } },
+      { provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "n1", displayName: "rowan" } },
+    ],
+    credentialStored: true, discordEnabled: false, discordIdleBehavior: "show", discordArtworkLookup: "musicbrainz", discordTimestamps: "none", card,
+    spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "rowan", displayName: "Rowan" } },
+  }));
+  const before = parseAppConfig(await readFile(configFile, "utf8"));
+  const app = await startSetupApp({ draftFile, configFile, credentialStore: { save: async () => {} }, deviceId: "device-0001" });
+  try {
+    const api = (method, body) => fetch(new URL("/api/setup/draft", app.url), { method, headers: { "Content-Type": "application/json", "X-Nowplaying-Session": app.sessionSecret }, body: body && JSON.stringify(body) }).then(async (r) => [r.status, await r.json()]);
+    const [, opened] = await api("GET");
+    assert.equal(opened.draft.step, "welcome");
+    assert.deepEqual(opened.draft.account, { provider: "navidrome", id: "n1", displayName: "rowan", serverUrl: "http://127.0.0.1:4533" });
+    assert.deepEqual(opened.draft.servers, [{ provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" }]);
+    assert.deepEqual([opened.draft.discordEnabled, opened.draft.discordIdleBehavior, opened.draft.discordArtworkLookup], [false, "show", true]);
+    assert.equal(opened.draft.spotify.identity.id, "rowan");
+    let step = opened.draft.step;
+    for (let i = 0; i < 8 && step !== "complete"; i += 1) {
+      const [status, body] = await api("POST", { action: "next" });
+      assert.equal(status, 200, JSON.stringify(body));
+      step = body.draft.step;
+    }
+    assert.equal(step, "complete");
+    const after = parseAppConfig(await readFile(configFile, "utf8"));
+    assert.deepEqual(JSON.parse(JSON.stringify(after)), JSON.parse(JSON.stringify(before)), "finishing without changes leaves the config as it was");
+    await assert.rejects(readFile(draftFile), { code: "ENOENT" });
+    assert.equal((await api("GET"))[1].draft.step, "welcome", "the next run starts again from the config");
+  } finally {
+    await app.close();
+  }
+});
+
+test("a draft in progress wins over the installed config", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const draftFile = join(dir, "draft.json");
+  const configFile = join(dir, "config.json");
+  await writeFile(configFile, serializeSetupConfig({ servers: [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" } }], credentialStored: true }));
+  await writeFile(draftFile, JSON.stringify({ version: 1, step: "provider", provider: "navidrome" }));
+  const app = await startSetupApp({ draftFile, configFile, credentialStore: { save: async () => {} }, deviceId: "device-0001" });
+  try {
+    const body = await (await fetch(new URL("/api/setup/draft", app.url))).json();
+    assert.deepEqual([body.resumed, body.draft.step, body.draft.provider, body.draft.account], [true, "provider", "navidrome", null]);
+  } finally {
+    await app.close();
+  }
+});
