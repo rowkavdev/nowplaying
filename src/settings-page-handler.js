@@ -187,7 +187,7 @@ load();
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 const MAX_BODY = 4096;
 
-const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup" };
+const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup", privacy: "updatePrivacy" };
 
 export function createSettingsPageHandler({ settings, fallback } = {}) {
   if (!settings || typeof settings.read !== "function" || typeof settings.updateDiscord !== "function") throw new TypeError("settings: expected read() and updateDiscord()");
@@ -199,7 +199,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   };
   const read = async () => {
     const value = await settings.read();
-    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}) };
+    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}) };
   };
   return async function handle(request) {
     const method = request?.method || "GET";

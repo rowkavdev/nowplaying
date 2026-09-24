@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createAppSettingsStore, discordSettingsView, hostedSettingsView } from "./app-settings.js";
+import { createAppSettingsStore, discordSettingsView, hostedSettingsView, privacySettingsView } from "./app-settings.js";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
@@ -25,13 +25,14 @@ import { createDiscordRpcTransport } from "./discord-rpc.js";
 import { createHostedLoop } from "./hosted-loop.js";
 import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 import { withProviderBackoff } from "./provider-backoff.js";
+import { applyPrivacy } from "./privacy.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
 // file never holds a secret: the sign-in is read from the credential store by
 // credentialRef at start-up.
 
 const MAX_CONFIG_BYTES = 16 * 1024;
-const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted"]);
+const CONFIG_KEYS = new Set(["version", "provider", "serverUrl", "identity", "credentialRef", "discord", "hosted", "privacy"]);
 const HOSTED_KEYS = new Set(["enabled", "url"]);
 
 export class StartupError extends Error {
@@ -67,6 +68,7 @@ export function parseAppConfig(text) {
       discordArtworkLookup: parsed.discord?.artworkLookup,
       discordTimestamps: parsed.discord?.timestamps,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
+      ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
     });
   } catch {
     throw invalidConfig();
@@ -145,6 +147,35 @@ export function createProviderFromConfig(config, secret, { fetchImpl = fetch } =
   return Object.freeze({ ...inner, getPresence: () => inner.getPresence(filter) });
 }
 
+// Privacy (#253): one policy for everything that leaves the app - Discord,
+// the hosted card and the local card. "episode" also covers whole-series items.
+export function privacyPolicyFromConfig(config) {
+  const privacy = config?.privacy ?? {};
+  const kinds = privacy.suppressMediaKinds ?? [];
+  return Object.freeze({
+    redactTitles: privacy.redactTitles === true,
+    hideArtwork: privacy.hideArtwork === true,
+    hideProgress: privacy.hideProgress === true,
+    suppressMediaKinds: Object.freeze(kinds.includes("episode") ? [...kinds, "show"] : [...kinds]),
+  });
+}
+
+function hidesAnything(policy) {
+  return policy.redactTitles || policy.hideArtwork || policy.hideProgress || policy.suppressMediaKinds.length > 0;
+}
+
+// Reads the policy on every poll, so a saved change applies straight away.
+export function withPrivacy(provider, getConfig) {
+  return Object.freeze({
+    ...provider,
+    getPresence: async (...args) => {
+      const presence = await provider.getPresence(...args);
+      const policy = privacyPolicyFromConfig(getConfig());
+      return presence && hidesAnything(policy) ? applyPrivacy(presence, policy) : presence;
+    },
+  });
+}
+
 function defaultDiscordTransport(clientId) {
   return createDiscordRpcTransport({ clientId, createClient: async () => createDiscordIpcClient() });
 }
@@ -160,7 +191,9 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
-  const artwork = createArtwork(config.discord);
+  // Hidden titles or album art: never look covers up by title.
+  const policy = privacyPolicyFromConfig(config);
+  const artwork = createArtwork(policy.redactTitles || policy.hideArtwork ? { ...config.discord, artworkLookup: "off" } : config.discord);
   const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(stuckAfterMs ? { stuckAfterMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.
@@ -211,9 +244,12 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // Discord, hosted uploads and the status page.
   const provider0 = safeMode ? OFFLINE_PROVIDER : withProviderBackoff(await createSignedInProvider(config, credentialStore, fetchImpl), providerBackoff);
   const status = createAppStatus({ config, version, build, packageType, safeMode });
-  const provider = safeMode ? provider0 : status.wrapProvider(provider0);
-  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
+  const tracked = safeMode ? provider0 : status.wrapProvider(provider0);
   let current = config;
+  // The status page (local only) sees what's really playing; the card,
+  // Discord and hosted uploads get the privacy-filtered version.
+  const provider = withPrivacy(tracked, () => current);
+  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
   // status page run. Discord and hosted uploads, which poll in the background,
@@ -251,7 +287,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     catch { return { available: false, startWithWindows: false }; }
   };
   const settings = Object.freeze({
-    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView() }),
+    read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current) }),
     // Start with Windows is the Startup-folder shortcut, not config.json:
     // setup and this page change the same shortcut.
     async updateStartup(changes) {
@@ -261,6 +297,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     },
     async updateDiscord(changes) {
       const next = await settingsStore.updateDiscord(changes);
+      current = next;
+      await discord.stop().catch(() => {});
+      discord = launchDiscord(next);
+    },
+    // Privacy applies on the next poll; Discord restarts so it updates now
+    // and drops any title lookup.
+    async updatePrivacy(changes) {
+      const next = await settingsStore.updatePrivacy(changes);
       current = next;
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
