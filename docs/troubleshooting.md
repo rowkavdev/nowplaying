@@ -59,6 +59,10 @@ Discord Rich Presence is local. A server process running without a desktop sessi
 
 If Discord isn't running or restarts, nowplaying keeps trying to reconnect: after 5 seconds, then doubling up to once a minute, with a little random spread. Once Discord answers, it shows the current activity again. The status page shows `degraded` with `DISCORD_NOT_RUNNING` while it waits.
 
+## Discord keeps showing something that stopped
+
+nowplaying clears Discord as soon as the media server reports nothing playing, or can't be reached. Some servers keep a session "playing" for a few minutes after the player has gone, with its position frozen. If a playing session's position hasn't moved for 5 minutes, nowplaying clears Discord until it moves again. Paused sessions stay as they are.
+
 ## Discord shows the default image or old album art
 
 Discord fetches images itself, so it can only show public HTTPS artwork. Covers from a private media server can't be used there. See [Discord artwork](artwork.md#discord-artwork) for the order nowplaying tries.

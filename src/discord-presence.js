@@ -12,7 +12,7 @@ const ACTIVE = new Set(["playing", "paused"]);
 
 export function createDiscordPresenceLoop({
   getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
-  intervalMs = 15_000, graceMs = 120_000, now = Date.now,
+  intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, now = Date.now,
   setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
@@ -21,6 +21,7 @@ export function createDiscordPresenceLoop({
   if (!TIMESTAMP_MODES.includes(timestamps)) throw new TypeError("timestamps is invalid");
   if (!Number.isInteger(intervalMs) || intervalMs < 1000) throw new RangeError("intervalMs must be at least 1000");
   if (!Number.isInteger(graceMs) || graceMs < 0) throw new RangeError("graceMs is invalid");
+  if (!Number.isInteger(stuckAfterMs) || stuckAfterMs < 1000) throw new RangeError("stuckAfterMs must be at least 1000");
 
   const live = createDiscordController({ client, settings: { idleBehavior: idleBehavior === "show" ? "show" : "clear", timestamps }, ...(artwork ? { artwork } : {}) });
   const frozen = createDiscordController({ client, settings: { timestamps: "none" }, ...(artwork ? { artwork } : {}) });
@@ -29,12 +30,29 @@ export function createDiscordPresenceLoop({
   let timer = null;
   let stopped = true;
   let running = null;
+  let stuck = null;
+
+  // Stuck sessions (#153) are treated like nothing playing: media servers can
+  // keep reporting "playing" for minutes after the player has gone, with the
+  // position frozen. A playing session whose position hasn't moved for
+  // stuckAfterMs is cleared until it moves again. Paused sessions and
+  // sessions without a position are never "stuck".
+  function isStale(presence) {
+    if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; return false; }
+    const key = JSON.stringify([presence.kind, presence.title, presence.subtitle, presence.series, presence.season, presence.episode]);
+    if (!stuck || stuck.key !== key || stuck.positionMs !== presence.positionMs) {
+      stuck = { key, positionMs: presence.positionMs, since: now() };
+      return false;
+    }
+    return now() - stuck.since >= stuckAfterMs;
+  }
 
   async function tick() {
     let presence;
     try { presence = await getPresence(); } catch { presence = null; }
     // A server we can't reach counts as idle, so a stale status never lingers.
-    const active = presence && ACTIVE.has(presence.state);
+    const active = presence && ACTIVE.has(presence.state) && !isStale(presence);
+    if (presence && ACTIVE.has(presence.state) && !active) presence = null;
     if (active) {
       lastActive = presence;
       idleSince = null;
