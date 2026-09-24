@@ -27,3 +27,21 @@ test("rejects truncated or unsupported raster headers", () => {
   assert.throws(() => validateRasterDimensions(Uint8Array.from([0x89,0x50]), "image/png"), /could not be decoded/);
   assert.throws(() => validateRasterDimensions(Uint8Array.from([0xff,0xd8]), "image/jpeg"), /could not be decoded/);
 });
+
+function webpLossless(width, height) {
+  const b = new Uint8Array(30); b.set(Buffer.from("RIFF"),0); b.set(Buffer.from("WEBP"),8); b.set(Buffer.from("VP8L"),12);
+  b[20] = 0x2f; b[21] = (width-1) & 255; b[22] = ((width-1) >> 8) & 0x3f;
+  const h = height-1; b[22] |= (h & 3) << 6; b[23] = (h >> 2) & 255; b[24] = (h >> 10) & 0x0f;
+  return b;
+}
+function jpegWithAppSegment(width, height) {
+  return Uint8Array.from([0xff,0xd8, 0xff,0xe0, 0x00,0x04, 0xaa,0xbb, 0xff,0xc0, 0x00,0x08, 0x08, height>>8, height&255, width>>8, width&255, 0x01]);
+}
+
+test("decodes lossless WebP (VP8L) dimensions", () => {
+  assert.deepEqual(validateRasterDimensions(webpLossless(100, 49), "image/webp"), { width:100, height:49 });
+});
+
+test("walks past non-image JPEG segments to find the dimensions", () => {
+  assert.deepEqual(validateRasterDimensions(jpegWithAppSegment(300, 200), "image/jpeg"), { width:300, height:200 });
+});
