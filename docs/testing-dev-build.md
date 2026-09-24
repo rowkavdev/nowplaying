@@ -33,6 +33,7 @@ Write down the build number and version from the release title, for example `dev
 
 ## 5. Tray
 
+- [ ] "Settings" in the tray menu opens the settings page in your browser.
 - [ ] "Run setup again" opens setup, and the change you save takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
