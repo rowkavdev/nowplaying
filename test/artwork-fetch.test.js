@@ -75,3 +75,29 @@ test("creates self-contained raster data URIs", () => {
   assert.equal(artworkDataUri({ contentType: "image/png", bytes: png }), `data:image/png;base64,${Buffer.from(png).toString("base64")}`);
   assert.equal(artworkDataUri(null), null);
 });
+
+test("stops reading a chunked body without Content-Length once it passes maxBytes", async () => {
+  let pulled = 0;
+  let cancelled = false;
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled += 1;
+      if (pulled > 50) return controller.close();
+      controller.enqueue(pulled === 1 ? png : new Uint8Array(100_000));
+    },
+    cancel() { cancelled = true; },
+  });
+  const chunked = new Response(body, { headers: { "content-type": "image/png" } });
+  await assert.rejects(
+    fetchArtwork({ url: "https://media.example.test/huge" }, { fetchImpl: async () => chunked, maxBytes: 250_000 }),
+    /maximum byte size/,
+  );
+  assert.ok(pulled <= 5, `read ${pulled} chunks before giving up`);
+  assert.equal(cancelled, true);
+});
+
+test("reads a streamed body under the cap", async () => {
+  const ok = new Response(new ReadableStream({ start(c) { c.enqueue(png.slice(0, 10)); c.enqueue(png.slice(10)); c.close(); } }), { headers: { "content-type": "image/png" } });
+  const artwork = await fetchArtwork({ url: "https://media.example.test/ok" }, { fetchImpl: async () => ok });
+  assert.deepEqual(artwork.bytes, png);
+});

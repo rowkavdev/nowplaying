@@ -1,3 +1,4 @@
+import { readBoundedBytes } from "./bounded-response.js";
 import { validateRasterDimensions } from "./raster-dimensions.js";
 
 
@@ -30,8 +31,11 @@ export async function fetchArtwork(request, {
     if (!ALLOWED_TYPES.has(contentType)) throw new TypeError(`Artwork content type is not allowed: ${contentType || "missing"}`);
     const declaredLength = Number(response.headers?.get?.("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new RangeError("Artwork exceeds maximum byte size");
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maxBytes) throw new RangeError("Artwork exceeds maximum byte size");
+    // Chunked responses have no Content-Length, so stop reading as soon as
+    // the cap is passed instead of buffering the whole body first.
+    const bytes = await readBoundedBytes(response, maxBytes, "Artwork").catch((error) => {
+      throw /too large/.test(error?.message) ? new RangeError("Artwork exceeds maximum byte size") : error;
+    });
     validateMagic(bytes, contentType);
     const dimensions = validateRasterDimensions(bytes, contentType, { maxPixels });
     return Object.freeze({ contentType, bytes, ...dimensions });
