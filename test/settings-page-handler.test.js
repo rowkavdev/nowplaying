@@ -34,6 +34,17 @@ test("reads and saves Discord settings", async () => {
   assert.equal((await h({ method: "DELETE", url: "/api/settings" })).status, 405);
 });
 
+test("the page offers every idle behaviour and saves it with the Discord form", async () => {
+  const h = handler();
+  const page = (await h({ url: "/settings" })).body;
+  for (const value of ["clear", "grace", "show", "recent"]) assert.match(page, new RegExp('<option value="' + value + '">'));
+  assert.match(page, /<label for="discord-idle">When nothing is playing<\/label>/);
+  const script = (await h({ url: "/settings.js" })).body;
+  assert.match(script, /idleBehavior: fields\.idleBehavior\.value/);
+  const saved = await h(put({ discord: { idleBehavior: "recent" } }));
+  assert.equal(JSON.parse(saved.body).discord.idleBehavior, "recent");
+});
+
 test("refuses other sites, bad JSON and unknown sections", async () => {
   const h = handler();
   assert.equal((await h({ url: "/api/settings", headers: { "Sec-Fetch-Site": "cross-site" } })).status, 403);
