@@ -40,6 +40,8 @@ button{font:inherit;padding:.5rem 1rem;border-radius:.4rem;border:1px solid #555
 button#next{background:#3b6;border-color:#3b6;color:#000}
 button.link{margin-left:auto;background:none;border:none;text-decoration:underline}
 button:disabled{opacity:.5;cursor:default}
+#addServer{margin-left:.5rem}
+#addedServers button{margin-left:.5rem;padding:.2rem .6rem}
 #error{color:#f77}
 `;
 
@@ -73,6 +75,10 @@ const JS = `"use strict";
     too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
   };
   var signin = { flowId: null, code: null, timer: null };
+  var DRAFT_ERRORS = {
+    too_many_servers: "You can add up to 8 servers.",
+    server_not_found: "That server was already removed.",
+  };
   var PROVIDERS = [["plex", "Plex"], ["jellyfin", "Jellyfin"], ["emby", "Emby"], ["navidrome", "Navidrome"]];
   var IDLE = [["clear", "Clear my status"], ["grace", "Keep it for a short grace period"], ["show", "Show that nothing is playing"], ["recent", "Show what I played last"]];
   var draft = null;
@@ -89,8 +95,12 @@ const JS = `"use strict";
     var init = { method: method, headers: { "Content-Type": "application/json" }, credentials: "same-origin", cache: "no-store" };
     if (body !== undefined) init.body = JSON.stringify(body);
     return fetch(API, init).then(function (response) {
-      if (!response.ok) throw new Error("Request failed (" + response.status + ")");
-      return response.json();
+      if (response.ok) return response.json();
+      return response.json().catch(function () { return {}; }).then(function (result) {
+        var error = new Error("Request failed (" + response.status + ")");
+        error.code = result.error;
+        throw error;
+      });
     });
   }
 
@@ -157,7 +167,10 @@ const JS = `"use strict";
       parts.push(el("p", { textContent: "Signed in as " + draft.account.displayName + ". Your sign-in is saved in Windows Credential Manager, not in this page." }));
       parts.push(el("button", { type: "button", id: "connectionTest", textContent: "Test connection" }));
       if (connectionTest) parts.push(el("p", { id: "connectionResult", role: "status", textContent: connectionTest }));
+      // Several servers (#252): keep this one and sign in to another.
+      parts.push(el("button", { type: "button", id: "addServer", textContent: "Add another server" }));
     }
+    if (draft.servers && draft.servers.length) parts.push(el("p", { textContent: "Also added:" }), addedServers(false));
     if (draft.provider === "plex") {
       parts.push(field("serverUrl", "Plex server address", "url", DEFAULT_URLS.plex));
       parts.push(el("p", { textContent: signin.flowId ? "Finish signing in on the Plex page. This page updates when you're done." : "Plex opens in a new tab so you can approve NowPlaying." }));
@@ -204,7 +217,7 @@ const JS = `"use strict";
     showError("");
     render();
     request(method, body).then(function (result) { draft = result.draft; })
-      .catch(function () { showError("Couldn't save that step. Check NowPlaying is still running and try again."); })
+      .catch(function (error) { showError(DRAFT_ERRORS[error.code] || "Couldn't save that step. Check NowPlaying is still running and try again."); })
       .then(function () { busy = false; render(); });
   }
 
@@ -229,6 +242,27 @@ const JS = `"use strict";
     return result;
   }
 
+  function accountLabel(account) {
+    return nameOf(PROVIDERS, account.provider) + " (signed in as " + account.displayName + ")";
+  }
+
+  // Servers already signed in with "Add another server". On review each one
+  // gets a Remove button; the account signed in last is always kept.
+  function addedServers(removable, withCurrent) {
+    var list = el("ul", { id: "addedServers" }, draft.servers.map(function (account) {
+      var item = el("li", { textContent: accountLabel(account) + " " });
+      if (removable) {
+        var remove = el("button", { type: "button", className: "removeServer", textContent: "Remove" });
+        remove.dataset.provider = account.provider;
+        remove.dataset.id = account.id;
+        item.append(remove);
+      }
+      return item;
+    }));
+    if (withCurrent && draft.account) list.append(el("li", { textContent: accountLabel(draft.account) }));
+    return list;
+  }
+
   function nameOf(list, value) {
     var match = list.filter(function (item) { return item[0] === value; })[0];
     return match ? match[1] : "Not chosen";
@@ -239,9 +273,13 @@ const JS = `"use strict";
       case "welcome":
         return [el("h2", { textContent: "Show what you're playing on Discord" }), el("p", { textContent: "This takes about a minute. Your progress is saved on this PC, so you can close this page and come back." })];
       case "provider":
-        return [el("h2", { textContent: "Which media server do you use?" })].concat(PROVIDERS.map(function (item) {
-          return el("label", {}, [el("input", { type: "radio", name: "provider", value: item[0], checked: draft.provider === item[0] }), " " + item[1]]);
-        }));
+        var adding = draft.servers && draft.servers.length > 0 && !draft.account;
+        return [el("h2", { textContent: adding ? "Which server do you want to add?" : "Which media server do you use?" })]
+          .concat(adding ? [el("p", { textContent: "Already added:" }), addedServers(false)] : [])
+          .concat(PROVIDERS.map(function (item) {
+            return el("label", {}, [el("input", { type: "radio", name: "provider", value: item[0], checked: draft.provider === item[0] }), " " + item[1]]);
+          }))
+          .concat(adding ? [el("button", { type: "button", id: "cancelAddServer", textContent: "Don't add another server" })] : []);
       case "signin":
         return signInPanel();
       case "discord":
@@ -258,11 +296,17 @@ const JS = `"use strict";
       case "review":
         return [
           el("h2", { textContent: "Check your choices" }),
+        ].concat(draft.servers && draft.servers.length ? [
+          el("p", { textContent: "Media servers:" }),
+          addedServers(true, true),
+        ] : [
           el("p", { textContent: "Media server: " + nameOf(PROVIDERS, draft.provider) + (draft.account ? " (signed in as " + draft.account.displayName + ")" : "") }),
+        ]).concat([
           el("p", { textContent: "Discord status: " + (draft.discordEnabled ? "On" : "Off") + " - when idle: " + nameOf(IDLE, draft.discordIdleBehavior) }),
           el("p", { textContent: "Album art lookup: " + (draft.discordArtworkLookup !== false ? "On" : "Off") }),
-        ].concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]);
+        ]).concat(draft.startWithWindows === null ? [] : [el("p", { textContent: "Start with Windows: " + (draft.startWithWindows ? "On" : "Off") })]);
       default:
+        if (draft.account && draft.servers && draft.servers.length) return [el("h2", { textContent: "All set" }), el("p", { textContent: "You're signed in to " + (draft.servers.length + 1) + " media servers, and your choices are saved." })];
         return [el("h2", { textContent: "All set" }), el("p", { textContent: draft.account ? "You're signed in to " + nameOf(PROVIDERS, draft.provider) + " as " + draft.account.displayName + ", and your choices are saved." : "Your choices are saved." })];
     }
   }
@@ -285,6 +329,8 @@ const JS = `"use strict";
     if (start) start.disabled = busy;
     var tester = document.getElementById("connectionTest");
     if (tester) tester.disabled = busy;
+    ["addServer", "cancelAddServer"].forEach(function (id) { var node = document.getElementById(id); if (node) node.disabled = busy; });
+    Array.prototype.forEach.call(document.querySelectorAll(".removeServer"), function (node) { node.disabled = busy; });
     document.getElementById("next").textContent = draft.step === "review" ? "Finish" : "Next";
     document.getElementById("reset").disabled = busy;
   }
@@ -296,6 +342,11 @@ const JS = `"use strict";
     document.getElementById("panel").addEventListener("click", function (event) {
       if (event.target && event.target.id === "signinStart") onSignInClick();
       if (event.target && event.target.id === "connectionTest") runConnectionTest();
+      if (event.target && event.target.id === "addServer") send("POST", { action: "add-server" });
+      if (event.target && event.target.id === "cancelAddServer") send("POST", { action: "cancel-add-server" });
+      if (event.target && event.target.classList && event.target.classList.contains("removeServer")) {
+        send("POST", { action: "remove-server", server: { provider: event.target.dataset.provider, id: event.target.dataset.id } });
+      }
     });
     document.getElementById("next").addEventListener("click", function () { send("POST", { action: "next", changes: changes() }); });
     document.getElementById("back").addEventListener("click", function () { send("POST", { action: "back", changes: changes() }); });

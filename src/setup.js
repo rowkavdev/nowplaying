@@ -72,6 +72,15 @@ export function addAnotherServer(draft) {
   return createSetupDraft({ ...current, step: "provider", provider: null, account: null, servers });
 }
 
+// Changed their mind after "Add another server": the last added server
+// becomes the signed-in account again and the wizard returns to sign-in.
+export function cancelAddServer(draft) {
+  const current = createSetupDraft(draft);
+  if (current.step !== "provider" || current.account || current.servers.length === 0) throw new SetupStepError("nothing_to_cancel");
+  const last = current.servers[current.servers.length - 1];
+  return createSetupDraft({ ...current, step: "signin", provider: last.provider, account: last, servers: current.servers.slice(0, -1) });
+}
+
 // Drops an added server (never the one being signed in right now).
 export function removeSetupServer(draft, { provider, id } = {}) {
   const current = createSetupDraft(draft);

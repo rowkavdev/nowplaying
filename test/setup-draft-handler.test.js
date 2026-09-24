@@ -125,3 +125,14 @@ test("add-server and remove-server actions (#252)", async () => {
   const noSignIn = createSetupDraftHandler({ store, signIn: false });
   assert.deepEqual(parse(await noSignIn(post({ action: "add-server" }))).error, "signin_unavailable");
 });
+
+test("cancel-add-server returns to the last signed-in server (#252)", async () => {
+  const { store, handle } = await setup();
+  const nav = { provider: "navidrome", id: "rowan", displayName: "Rowan" };
+  await store.save({ ...(await store.load()).draft, step: "signin", provider: "navidrome", account: nav });
+  await handle(post({ action: "add-server" }));
+  const back = parse(await handle(post({ action: "cancel-add-server" }))).draft;
+  assert.deepEqual([back.step, back.account, back.servers], ["signin", nav, []]);
+  const again = await handle(post({ action: "cancel-add-server" }));
+  assert.deepEqual([again.status, parse(again).error], [409, "nothing_to_cancel"]);
+});

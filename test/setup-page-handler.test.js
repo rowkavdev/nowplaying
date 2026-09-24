@@ -62,3 +62,11 @@ test("the loopback server applies the page policy to the wizard only", async () 
     await app.close();
   }
 });
+
+test("the page offers adding, cancelling and removing servers through the draft API (#252)", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  assert.match(js, /action: "add-server"/);
+  assert.match(js, /action: "cancel-add-server"/);
+  assert.match(js, /action: "remove-server", server: \{ provider: event\.target\.dataset\.provider, id: event\.target\.dataset\.id \}/);
+  assert.doesNotMatch(js, /innerHTML/);
+});
