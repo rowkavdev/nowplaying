@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { parseAppConfig } from "./app-config.js";
 import { serializeSetupConfig } from "./setup-config.js";
+import { IDLE_BEHAVIORS } from "./discord-presence.js";
 
 // Settings the web UI can change while the app runs (#253). Each change is
 // checked against the same rules as setup, then config.json is replaced in one
 // step (temp file + rename) so a crash never leaves half a file.
 
-const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup"]);
+const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "idleBehavior"]);
 const HOSTED_KEYS = new Set(["enabled"]);
 const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
@@ -17,6 +18,7 @@ export function discordSettingsView(config) {
     enabled: config.discord?.enabled !== false,
     timestamps: config.discord?.timestamps ?? "both",
     artworkLookup: config.discord?.artworkLookup ?? "off",
+    idleBehavior: config.discord?.idleBehavior ?? "clear",
   });
 }
 
@@ -49,7 +51,7 @@ function rewrite(config, { discord = { ...discordSettingsView(config), timestamp
     identity: config.identity,
     credentialStored: true,
     discordEnabled: discord.enabled,
-    discordIdleBehavior: config.discord?.idleBehavior,
+    discordIdleBehavior: discord.idleBehavior,
     discordArtworkLookup: discord.artworkLookup,
     discordTimestamps: discord.timestamps,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
@@ -60,6 +62,7 @@ function rewrite(config, { discord = { ...discordSettingsView(config), timestamp
 
 export function applyDiscordChanges(config, changes) {
   checkChanges(changes, DISCORD_KEYS, "discord");
+  if (changes.idleBehavior !== undefined && !IDLE_BEHAVIORS.includes(changes.idleBehavior)) throw new TypeError("discord settings: idleBehavior is invalid");
   return rewrite(config, { discord: { ...discordSettingsView(config), ...changes } });
 }
 

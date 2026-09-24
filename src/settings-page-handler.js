@@ -1,4 +1,5 @@
-// Local settings page (#253): Discord section (#272). Served on loopback by
+// Local settings page (#253): Discord section (#272), including what
+// Discord shows when nothing is playing. Served on loopback by
 // the running app next to the status page. Saves go to /api/settings as JSON;
 // the HTTP server only lets them through with the session cookie this page
 // sets, from the app's own origin.
@@ -18,6 +19,13 @@ const PAGE = `<!doctype html>
 <option value="elapsed">Time played</option>
 <option value="remaining">Time left</option>
 <option value="none">No timer</option>
+</select></p>
+<p class="row"><label for="discord-idle">When nothing is playing</label>
+<select id="discord-idle" name="idleBehavior">
+<option value="clear">Clear my status</option>
+<option value="grace">Keep it for a short grace period</option>
+<option value="show">Show that nothing is playing</option>
+<option value="recent">Show what I played last</option>
 </select></p>
 <p class="row"><label for="discord-artwork">Album art</label>
 <select id="discord-artwork" name="artworkLookup">
@@ -61,7 +69,7 @@ const PAGE = `<!doctype html>
 </main><script src="/settings.js"></script></body></html>
 `;
 
-const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:96px;color:#555}
+const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:184px;color:#555}
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}.hint a{color:inherit}
 fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color:#555}
@@ -71,11 +79,11 @@ dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}
 
 const SCRIPT = `"use strict";
 const form = document.getElementById("discord-form");
-const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork") };
+const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), idleBehavior: document.getElementById("discord-idle") };
 const save = document.getElementById("discord-save");
 function say(text, tone) { const el = document.getElementById("discord-result"); el.textContent = text; el.className = tone || ""; }
-function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; toggle(); }
-function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = !fields.enabled.checked; }
+function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; fields.idleBehavior.value = d.idleBehavior || "clear"; toggle(); }
+function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = fields.idleBehavior.disabled = !fields.enabled.checked; }
 fields.enabled.addEventListener("change", toggle);
 async function load() {
   try {
@@ -96,7 +104,7 @@ form.addEventListener("submit", async (event) => {
   save.disabled = true;
   say("Saving...", "warn");
   try {
-    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value } };
+    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value, idleBehavior: fields.idleBehavior.value } };
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(String(res.status));
     show((await res.json()).discord);
