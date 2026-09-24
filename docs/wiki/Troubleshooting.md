@@ -10,6 +10,7 @@ Find the symptom you see. Keep server addresses, usernames and tokens out of any
 
 ## Discord shows nothing
 
+- In setup, the Discord step has a **Test Discord** button: it sends a short test status and tells you if Discord refused it, isn't open, or didn't answer.
 - Make sure the **Discord desktop app** is open; a browser tab doesn't work.
 - In Discord settings, check **Activity Privacy** and turn activity sharing on.
 - Play something and wait a few seconds.
@@ -26,7 +27,9 @@ nowplaying clears sessions that sit at the same position too long. If Discord it
 
 ## The media server connection failed in setup
 
-- **Unreachable:** the server address must open in a browser on the same PC. Check the port and that it's `http://` or `https://` with no extra path.
+- **Couldn't find a server with that name:** check the address is spelled right, or use the server's IP address instead.
+- **Certificate isn't trusted:** the server's security certificate is self-signed or out of date. Give the server a certificate Windows trusts, or use its local `http://` address. Setup never offers to skip certificate checks.
+- **Timed out or unreachable:** the server address must open in a browser on the same PC. Check the port, that the server is running, and that it's `http://` or `https://` with no extra path.
 - **YouTube extension not reporting:** check the pairing code and port in the extension's options match the settings page, and that you're not watching a Short. After **Make a new code**, paste the new code into the extension.
 - **Authentication failed:** check the sign-in on the server's own web interface, then try again. See your provider's page: [Plex](Connect-Plex) · [Jellyfin](Connect-Jellyfin) · [Navidrome](Connect-Navidrome) · [Emby](Connect-Emby) · [Spotify](Connect-Spotify).
 
