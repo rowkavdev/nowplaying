@@ -20,6 +20,10 @@ test("normalizes a playing track", () => {
     subtitle: "Artist",
     artwork: null,
     artworkUrl: null,
+    series: null,
+    season: null,
+    episode: null,
+    year: null,
     positionMs: 1_000,
     durationMs: 4_000,
     updatedAt: "2026-09-20T20:00:00.000Z",
@@ -75,4 +79,13 @@ test("rejects credential-bearing and malformed artwork", () => {
     () => createPresence({ artwork: { provider: "emby", type: "primary" } }),
     { message: "artwork requires itemId or imageId" },
   );
+});
+
+test("carries optional episode and film details, and refuses bad ones", () => {
+  const episode = createPresence({ state: "playing", kind: "episode", title: "Pilot", series: " The Show ", season: 2, episode: 5, year: 2024 });
+  assert.deepEqual([episode.series, episode.season, episode.episode, episode.year], ["The Show", 2, 5, 2024]);
+  assert.equal(createPresence({ kind: "movie", title: "Film", year: 1995 }).season, null);
+  for (const bad of [{ season: -1 }, { season: 1.5 }, { episode: "5" }, { episode: 10_000 }, { year: 1500 }, { year: "2024" }]) {
+    assert.throws(() => createPresence({ kind: "episode", ...bad }), TypeError);
+  }
 });
