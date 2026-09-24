@@ -100,7 +100,7 @@ export async function loadOrCreateDeviceId(file, { random = () => randomBytes(16
 // Port 0 lets the OS pick a free port so a busy app port never blocks setup.
 // `startup` (optional) manages "Start with Windows": { isEnabled(), setEnabled(bool) }.
 // Without it the wizard doesn't offer the choice.
-export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, deviceId, version, signIn: signInApi, spotifySignIn, startup, fetchImpl, discordTest: discordTestOptions } = {}) {
+export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1", port = 0, discover, credentialStore, hostedCredentials, deviceId, version, signIn: signInApi, spotifySignIn, startup, fetchImpl, discordTest: discordTestOptions } = {}) {
   if (startup !== undefined && (typeof startup?.isEnabled !== "function" || typeof startup?.setEnabled !== "function")) throw new TypeError("startup is invalid");
   const page = createSetupPageHandler();
   // Finish writes the real config only when there is a signed-in account to
@@ -119,9 +119,10 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   const preview = createSetupPreviewHandler({ renderOptions: async () => (configFile ? cardRenderOptions((await readCurrentConfig(configFile))?.card) : {}) });
   // "Test Discord" on the Discord step, separate from the media server test.
   const discordTest = createSetupDiscordTestHandler(discordTestOptions);
-  // "Card hosting" step (#140): upload preview and self-hosted check.
+  // "Card hosting" step (#140): upload preview, self-hosted check, GitHub sign-in.
   const hosted = createSetupHostedHandler({
     settings: async () => hostedUploadSettings(configFile ? await readCurrentConfig(configFile) : null),
+    credentials: typeof hostedCredentials?.save === "function" ? hostedCredentials : null,
     ...(fetchImpl ? { fetchImpl } : {}),
   });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});

@@ -124,9 +124,11 @@ async function startSetup() {
   const draftFile = windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA });
   const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
   const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
-  const credentialStore = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
+  const adapter = createWindowsCredentialAdapter();
+  const credentialStore = createCredentialStore({ adapter });
+  const hostedCredentials = createHostedCredentials({ adapter });
   const configFile = windowsConfigPath({ localAppData: process.env.LOCALAPPDATA });
-  return startSetupApp({ draftFile, configFile, credentialStore, deviceId, version: manifest.version, startup: windowsStartup() });
+  return startSetupApp({ draftFile, configFile, credentialStore, hostedCredentials, deviceId, version: manifest.version, startup: windowsStartup() });
 }
 
 // "Start with Windows" is offered only from the installed/portable bundle,

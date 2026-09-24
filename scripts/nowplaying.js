@@ -90,8 +90,9 @@ async function version() {
 
 async function startSetup(paths) {
   const deviceId = await loadOrCreateDeviceId(paths.deviceIdFile);
-  const credentialStore = createCredentialStore({ adapter: createPlatformCredentialAdapter() });
-  return startSetupApp({ draftFile: paths.draftFile, configFile: paths.configFile, credentialStore, deviceId, version: await version() });
+  const adapter = createPlatformCredentialAdapter();
+  const credentialStore = createCredentialStore({ adapter });
+  return startSetupApp({ draftFile: paths.draftFile, configFile: paths.configFile, credentialStore, hostedCredentials: createHostedCredentials({ adapter }), deviceId, version: await version() });
 }
 
 // Opens the setup page and resolves once setup has written the config (or timed out).
