@@ -10,7 +10,8 @@ import { createSetupDiscoveryHandler } from "./setup-discovery.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
 import { createSetupTestHandler } from "./setup-test-handler.js";
 import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
-import { serializeSetupConfig } from "./setup-config.js";
+import { cardRenderOptions, serializeSetupConfig } from "./setup-config.js";
+import { createSetupPreviewHandler } from "./setup-preview.js";
 import { createSetupDraft, setupAccounts } from "./setup.js";
 import { migrateAppConfig, parseAppConfig } from "./app-config.js";
 
@@ -110,6 +111,8 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
     if (startup && typeof finished.startWithWindows === "boolean") await startup.setEnabled(finished.startWithWindows);
   } : undefined;
   const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore), ...(onFinish ? { onFinish } : {}) });
+  // Example cards on the review step, in the installed card look if there is one.
+  const preview = createSetupPreviewHandler({ renderOptions: async () => (configFile ? cardRenderOptions((await readCurrentConfig(configFile))?.card) : {}) });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
   const onSignedIn = async ({ provider, identity, serverUrl }) => {
@@ -135,7 +138,7 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   // Per-run secret: the browser page gets it as a SameSite=Strict cookie, the
   // native window gets it through its environment. Other local sites get neither.
   const sessionSecret = randomBytes(32).toString("base64url");
-  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await spotify(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
+  const app = createHttpServer({ host, port, sessionSecret, handler: async (request) => (await page(request)) ?? (await preview(request)) ?? (await discovery(request)) ?? (await signIn(request)) ?? (await spotify(request)) ?? (await connectionTest(request)) ?? (await draft(request)) });
   const address = await app.listen();
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   return Object.freeze({ url: `http://${authority}:${address.port}/setup`, sessionSecret, close: () => app.close() });
