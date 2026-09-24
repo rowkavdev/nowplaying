@@ -440,6 +440,11 @@ function Show-Step {
       $panel.Controls.Add((New-Text "Spotify on your card: $(if ($script:Draft.spotify) { "On (signed in as $($script:Draft.spotify.identity.displayName))" } else { 'Off' })"))
       $panel.Controls.Add((New-Text "Album art lookup: $(if ($script:Draft.discordArtworkLookup -ne $false) { 'On' } else { 'Off' })"))
       if ($null -ne $script:Draft.startWithWindows) { $panel.Controls.Add((New-Text "Start with Windows: $(if ($script:Draft.startWithWindows) { 'On' } else { 'Off' })")) }
+      # Example cards (#143) open in the browser; this window can't draw SVG.
+      $preview = [System.Windows.Forms.LinkLabel]::new()
+      $preview.Name = 'cardPreview'; $preview.Text = 'See how your card will look'; $preview.AutoSize = $true
+      $preview.add_LinkClicked({ if (-not $SelfTest) { Start-Process "$Base/setup/preview" } })
+      $panel.Controls.Add($preview)
     }
     default {
       $title.Text = 'All set'
@@ -541,7 +546,9 @@ if ($SelfTest) {
     if (-not $startupBox) { throw 'discord step has no Start with Windows choice' }
     $startupBox.Checked = $true
   } elseif ($startupBox) { throw 'Start with Windows must be hidden when it is not offered' }
-  foreach ($i in 1..2) { & $onNext; $seen += $script:Draft.step }
+  & $onNext; $seen += $script:Draft.step
+  if (-not @($panel.Controls | Where-Object { $_.Name -eq 'cardPreview' })[0]) { throw 'review step has no card preview link' }
+  & $onNext; $seen += $script:Draft.step
   if ($errorLabel.Text) { throw "self-test error: $($errorLabel.Text) ($script:LastError)" }
   [Console]::Out.Write((@{ ok = $true; steps = $seen; provider = $script:Draft.provider; account = $script:Draft.account.displayName; connectionTest = $resultText; startWithWindows = $script:Draft.startWithWindows } | ConvertTo-Json -Compress))
   $form.Dispose()
