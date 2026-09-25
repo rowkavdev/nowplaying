@@ -1,6 +1,6 @@
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear, playbackTimes } from "./fields.js";
+import { optionalCount, optionalText, optionalYear, playbackTimes, pickSession, sessionList } from "./fields.js";
 
 const TICKS_PER_MILLISECOND = 10_000;
 
@@ -12,8 +12,8 @@ export function createJellyfinProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
     async getPresence({ username, userId } = {}) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/Sessions`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
       if (!response.ok) throw new Error(`Jellyfin sessions request failed: ${response.status} ${response.statusText}`);
-      const sessions = await response.json();
-      const session = sessions.find((candidate) => matchesSession(candidate, { username, userId }));
+      const sessions = sessionList(await response.json(), "Jellyfin");
+      const session = pickSession(sessions, (candidate) => matchesSession(candidate, { username, userId }), (candidate) => Boolean(candidate.PlayState?.IsPaused));
       return session ? mapSession(session) : { state: "idle" };
     },
     async whoami() {
