@@ -1,13 +1,11 @@
 param(
   [string]$DashboardUrl = $(if ($env:NOWPLAYING_DASHBOARD_URL) { $env:NOWPLAYING_DASHBOARD_URL } else { 'http://127.0.0.1:47832/' }),
-  [switch]$CanRunSetup,
   [switch]$SelfTest
 )
 
 # Exit codes tell `nowplaying.exe start` what the user picked:
-#   0 = Quit NowPlaying, 3 = Run setup again.
+#   0 = Quit NowPlaying.
 $ExitQuit = 0
-$ExitSetup = 3
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -33,15 +31,9 @@ $statusItem.Enabled = $false
 $menu.Items.Add('-') | Out-Null
 $open = $menu.Items.Add('Open dashboard')
 $open.add_Click({ Start-Process $DashboardUrl })
-# Day-to-day changes happen on the settings page (#253); setup is for
-# starting over (new server, safe mode).
 $settingsUrl = $DashboardUrl.TrimEnd('/') + '/settings'
 $settings = $menu.Items.Add('Settings')
 $settings.add_Click({ Start-Process $settingsUrl })
-if ($CanRunSetup) {
-  $setup = $menu.Items.Add('Run setup again')
-  $setup.add_Click({ $script:ExitCode = $ExitSetup; $notify.Visible = $false; [System.Windows.Forms.Application]::Exit() })
-}
 $logs = $menu.Items.Add('Open log folder')
 $logs.add_Click({
   if (-not $env:LOCALAPPDATA) { return }

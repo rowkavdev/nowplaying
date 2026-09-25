@@ -45,15 +45,14 @@ Name: "{userstartup}\nowplaying"; Filename: "{app}\nowplayingw.exe"; Parameters:
 Name: "{group}\NowPlaying install folder"; Filename: "{app}"
 
 [UninstallDelete]
-; "Start with Windows" in setup writes this same shortcut, which the installer
+; "Start with Windows" in WebUI Settings writes this same shortcut, which the installer
 ; didn't create, so remove it explicitly.
 Type: files; Name: "{userstartup}\nowplaying.lnk"
 
 [Run]
-; Both run `start`: on a first install it opens setup, then runs the app and
-; tray once setup is saved. (`setup` alone exits when the wizard closes, which
-; left first-time users with no tray and no Discord status.)
-Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Description: "Set up and start NowPlaying"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup
+; Both run `start`: a first install serves WebUI Settings from the running app;
+; after server sign-in, the same process restarts providers and keeps its tray.
+Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Description: "Start NowPlaying and open Settings"; Flags: postinstall nowait skipifsilent; Check: NeedsSetup
 Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Description: "Launch NowPlaying"; Flags: postinstall nowait skipifsilent; Check: not NeedsSetup
 Filename: "{app}"; Description: "Open the install folder"; Flags: postinstall shellexec nowait skipifsilent unchecked
 

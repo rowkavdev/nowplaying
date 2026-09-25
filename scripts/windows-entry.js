@@ -6,19 +6,17 @@ import { createAppLogger, windowsLogPath } from "../src/app-log.js";
 import { StartupError, resolveAppPort, startAppFromConfig } from "../src/app-config.js";
 import { createCredentialStore } from "../src/credential-store.js";
 import { createHostedCredentials } from "../src/hosted-credentials.js";
-import { loadOrCreateDeviceId, openSetupUrl, runNativeSetup, startSetupApp, windowsConfigPath, windowsSetupDraftPath } from "../src/setup-app.js";
+import { loadOrCreateDeviceId, openLocalSettingsUrl, windowsConfigPath } from "../src/setup-app.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
-import { ensureConfigured, parseStartArgs, runBrowserSetup } from "../src/first-run.js";
-import { createSetupRequests, runTraySession } from "../src/tray-session.js";
+import { parseStartArgs } from "../src/first-run.js";
+import { createRestartRequests, runTraySession } from "../src/tray-session.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
 
 // Declared before any top-level await so the start path below can use it.
 let recovery;
-// Settings-page requests to open setup (#253); only set when the tray
-// session runs, since it owns the setup-and-restart path.
-let setupRequests = null;
+const restartRequests = createRestartRequests();
 
 const command = process.argv[2] ?? "help";
 
@@ -39,19 +37,8 @@ if (command === "--version" || command === "version") {
   try {
     try { startArgs = parseStartArgs(process.argv.slice(3)); }
     catch (error) { console.error(`nowplaying: ${error.message}`); process.exit(2); }
-    // An explicit config module wins. With no argument, the wizard's config is
-    // used; installs from before the wizard keep their nowplaying.config.mjs.
+    // An explicit config module wins. Older installs may have a config module.
     legacyModule = startArgs.module ?? (!existsSync(configFile) && existsSync(resolve("nowplaying.config.mjs")) ? "nowplaying.config.mjs" : null);
-    if (process.platform === "win32" && !legacyModule && startArgs.tray && existsSync(resolve("nowplaying.exe"))) setupRequests = createSetupRequests();
-    // First launch: no config yet, so open setup instead of failing. `start
-    // --no-setup` (scripts, CI) keeps the plain "run setup" message.
-    if (!legacyModule && startArgs.setup && process.platform === "win32" && !existsSync(configFile)) {
-      console.log("NowPlaying isn't set up yet. Opening setup...");
-      // The setup page opens in the default browser; the native window is the
-      // fallback if the browser can't be started.
-      const outcome = await ensureConfigured({ configExists: () => existsSync(configFile), runSetup: () => openSetupInBrowser(configFile).catch(() => openSetupWindow()) });
-      await logger.event("startup", "first_run_setup", { code: outcome });
-    }
     if (legacyModule) {
       // Hand-written config module (advanced / pre-wizard setups).
       const configPath = resolve(legacyModule);
@@ -62,8 +49,8 @@ if (command === "--version" || command === "version") {
       app = await config.start();
       if (!app || typeof app.close !== "function") throw Object.assign(new TypeError("config start() must return an app with close()"), { startupCode: "APP_INVALID" });
     } else {
-      // The config written by `nowplaying.exe setup`; the sign-in comes from Credential Manager.
       app = await guardedStart(configFile);
+      if (app.firstRun && startArgs.setup) openLocalSettingsUrl(`${app.url}/settings`);
       if (app.safeMode) await logger.event("startup", "degraded", { level: "warn", code: `SAFE_MODE_${String(recovery?.recovery?.subsystem ?? "unknown").toUpperCase()}` });
     }
   } catch (error) {
@@ -78,73 +65,41 @@ if (command === "--version" || command === "version") {
   const close = async () => {
     // A deliberate stop after a successful start is not a crash (#497).
     await recovery?.cleanShutdown?.();
-    await app.close();
+    await (recovery?.app ?? app).close();
     await logger.event("startup", "stopped");
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
-  // The tray runs alongside the installed app (not hand-written configs, not
-  // dev checkouts). Quit closes the app; "Run setup again" restarts it.
+  // The tray stays open while a WebUI configuration change restarts the app.
   if (process.platform === "win32" && !legacyModule && startArgs.tray && existsSync(resolve("nowplaying.exe"))) {
     const session = await runTraySession({
       app,
       runTray: (current) => runTrayProcess(`${current.url}/`),
-      runSetup: () => openSetupWindow(),
-      // Running setup again is the way out of safe mode: the next start is normal.
       restartApp: async () => { await recovery?.retryNormal(); return guardedStart(configFile); },
       onRestart: (current) => { app = current; },
-      setupRequests,
+      restartRequests,
     });
     await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
     if (session.outcome === "quit") { await recovery?.cleanShutdown?.(); await logger.event("startup", "stopped"); process.exit(0); }
     if (session.outcome === "restart-failed") { console.error(session.error?.message ?? "NowPlaying couldn't restart."); process.exit(1); }
   }
 } else if (command === "setup") {
-  const setup = await startSetup();
-  const close = async () => { await setup.close(); };
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
-  const flags = new Set(process.argv.slice(3));
-  let native = process.platform === "win32" && !flags.has("--browser") && !flags.has("--no-open");
-  if (native) {
-    try {
-      const { code } = await runNativeSetup(setup.url, { sessionSecret: setup.sessionSecret, scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
-      if (code === 0) await close();
-      else native = false; // the window failed to start or crashed: keep the server and use the browser page
-    } catch {
-      native = false; // PowerShell unavailable or blocked: use the browser page instead
-    }
-  }
-  if (!native) {
-    console.log(`NowPlaying setup is open at ${setup.url}`);
-    if (!flags.has("--no-open")) openSetupUrl(setup.url);
-  }
+  console.error("Setup is in the WebUI. Run `nowplaying.exe start` and open Settings.");
+  process.exitCode = 2;
 } else if (command === "help" || command === "--help") {
-  console.log("Usage: nowplaying.exe start            (runs from the setup config; opens setup the first time)\n       nowplaying.exe start [--no-setup] [--no-tray]\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe setup [--browser | --no-open]\n       nowplaying.exe --version\n       nowplaying.exe --help");
+  console.log("Usage: nowplaying.exe start            (opens WebUI Settings the first time)\n       nowplaying.exe start [--no-setup] [--no-tray]\n       nowplaying.exe start <config.mjs>\n       nowplaying.exe --version\n       nowplaying.exe --help");
 } else {
   console.error(`nowplaying: unknown command: ${command}`);
   process.exitCode = 2;
 }
 
-// %LOCALAPPDATA% can be missing (damaged profile, service or scheduled-task
-// context): say so plainly instead of dying on a TypeError stack (#500).
+// %LOCALAPPDATA% may be absent in a damaged profile or service context.
 function windowsDataPaths() {
-  try {
-    return { configFile: windowsConfigPath({ localAppData: process.env.LOCALAPPDATA }), draftFile: windowsSetupDraftPath({ localAppData: process.env.LOCALAPPDATA }) };
-  } catch {
+  try { return { configFile: windowsConfigPath({ localAppData: process.env.LOCALAPPDATA }) }; }
+  catch {
     console.error("nowplaying: LOCALAPPDATA is not set, so NowPlaying cannot find its data folder. Sign in again or repair the user profile, then retry.");
     process.exit(1);
   }
-}
-
-async function startSetup() {
-  const { configFile, draftFile } = windowsDataPaths();
-  const deviceId = await loadOrCreateDeviceId(resolve(dirname(draftFile), "device-id"));
-  const manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8").catch(() => "{}"));
-  const adapter = createWindowsCredentialAdapter();
-  const credentialStore = createCredentialStore({ adapter });
-  const hostedCredentials = createHostedCredentials({ adapter });
-  return startSetupApp({ draftFile, configFile, credentialStore, hostedCredentials, deviceId, version: manifest.version, startup: windowsStartup() });
 }
 
 // "Start with Windows" is offered only from the installed/portable bundle,
@@ -158,38 +113,16 @@ function windowsStartup() {
     : undefined;
 }
 
-// First launch: opens the setup page in the default browser and resolves
-// once setup has written the config (or timed out waiting).
-async function openSetupInBrowser(configFile) {
-  const setup = await startSetup();
-  try {
-    return await runBrowserSetup({ url: setup.url, openUrl: (url) => openSetupUrl(url), configExists: () => existsSync(configFile) });
-  } finally {
-    await setup.close();
-  }
-}
-
-// Shows the native setup window and resolves true once it closes normally.
-async function openSetupWindow() {
-  const setup = await startSetup();
-  try {
-    const { code } = await runNativeSetup(setup.url, { sessionSecret: setup.sessionSecret, scriptPath: fileURLToPath(new URL("./windows-setup.ps1", import.meta.url)) });
-    return code === 0;
-  } finally {
-    await setup.close();
-  }
-}
-
 // Crash-loop protection for the installed app (#122): after three starts in a
 // row that never stayed up, the next one runs in safe mode.
 async function guardedStart(configFile) {
   recovery?.cancel();
   const store = createStartupRecoveryStore({ file: resolve(dirname(configFile), "startup-recovery.json") });
-  recovery = await guardStartup({ store, start: ({ safeMode }) => startFromWizardConfig(configFile, { safeMode }) });
+  recovery = await guardStartup({ store, start: ({ safeMode }) => startFromWebConfig(configFile, { safeMode }) });
   return recovery.app;
 }
 
-async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
+async function startFromWebConfig(configFile, { safeMode = false } = {}) {
   const adapter = createWindowsCredentialAdapter();
   const credentialStore = createCredentialStore({ adapter });
   const hostedCredentials = createHostedCredentials({ adapter });
@@ -198,20 +131,38 @@ async function startFromWizardConfig(configFile, { safeMode = false } = {}) {
   let build = null;
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null, ...(setupRequests ? { requestSetup: () => setupRequests.request() } : {}) });
+  const deviceId = await loadOrCreateDeviceId(resolve(dirname(configFile), "device-id"));
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, deviceId, onConfigured: () => {
+    if (process.platform === "win32" && existsSync(resolve("nowplaying.exe")) && !process.argv.includes("--no-tray")) restartRequests.request();
+    else void restartWithoutTray(configFile);
+  }, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
+  if (app.firstRun) { console.log(`NowPlaying Settings: ${app.url}/settings`); return app; }
   console.log(safeMode
-    ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run setup again from the tray to go back to normal. Card: ${app.url}/card.svg`
+    ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Change your settings in the WebUI to go back to normal. Card: ${app.url}/card.svg`
     : `NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
 }
 
-// Runs the tray icon and resolves with its exit code (0 quit, 3 run setup).
+// Runs the tray icon and resolves with its exit code (0 quit).
 function runTrayProcess(dashboardUrl) {
   const scriptPath = fileURLToPath(new URL("./windows-tray.ps1", import.meta.url));
-  const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", scriptPath, "-DashboardUrl", dashboardUrl, "-CanRunSetup"];
+  const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", scriptPath, "-DashboardUrl", dashboardUrl];
   return new Promise((resolvePromise, reject) => {
     const child = spawn("powershell.exe", args, { shell: false, windowsHide: true, stdio: "ignore" });
     child.on("error", reject);
     child.on("close", (code) => resolvePromise(code));
   });
+}
+
+let restartingWithoutTray = false;
+async function restartWithoutTray(configFile) {
+  if (restartingWithoutTray) return;
+  restartingWithoutTray = true;
+  try {
+    await recovery?.app?.close();
+    await recovery?.retryNormal();
+    const next = await guardedStart(configFile);
+    console.log(next.firstRun ? `NowPlaying Settings: ${next.url}/settings` : `NowPlaying is running. Card: ${next.url}/card.svg`);
+  } catch (error) { console.error(`NowPlaying couldn't restart after settings changed: ${error.message}`); }
+  finally { restartingWithoutTray = false; }
 }

@@ -16,12 +16,7 @@ function selfTest(scriptPath, extra = []) {
   return JSON.parse(out);
 }
 
-test("tray menu offers Run setup again when the app can restart", windows, () => {
-  const result = selfTest(SCRIPT, ["-CanRunSetup"]);
-  assert.deepEqual(result.items, ["NowPlaying: starting...", "", "Open dashboard", "Settings", "Run setup again", "Open log folder", "", "Quit NowPlaying"]);
-});
-
-test("tray menu hides Run setup again otherwise", windows, () => {
+test("tray offers Settings but never launches a setup wizard", windows, () => {
   assert.deepEqual(selfTest(SCRIPT).items, ["NowPlaying: starting...", "", "Open dashboard", "Settings", "Open log folder", "", "Quit NowPlaying"]);
 });
 

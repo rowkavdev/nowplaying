@@ -10,7 +10,7 @@ import { createLinuxCredentialAdapter } from "../src/linux-credential-adapter.js
 import { serializeSetupConfig } from "../src/setup-config.js";
 
 // The Linux/macOS entry point (#215), run for real with a throwaway HOME.
-// Nothing here touches the keychain: setup only writes a sign-in on Finish.
+// First run serves the WebUI without touching the keychain until sign-in.
 const ENTRY = fileURLToPath(new URL("../scripts/nowplaying.js", import.meta.url));
 const unix = { skip: process.platform === "win32" };
 
@@ -33,39 +33,30 @@ test("--version prints the package version", unix, async () => {
   assert.equal(cli.output().stdout.trim(), version);
 });
 
-test("start --no-setup with no config points at `nowplaying setup`", unix, async () => {
+test("start --no-setup with no config serves WebUI Settings on loopback", unix, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-"));
   const cli = run(home, ["start", "--no-setup"]);
-  assert.equal(await cli.exited, 1);
-  assert.match(cli.output().stderr, /`nowplaying setup`/);
-  assert.doesNotMatch(cli.output().stderr, /nowplaying\.exe/);
-});
-
-test("unknown commands and options exit 2", unix, async () => {
-  const home = await mkdtemp(join(tmpdir(), "np-unix-"));
-  for (const args of [["bogus"], ["start", "--no-tray"], ["setup", "--browser"]]) {
-    const cli = run(home, args);
-    assert.equal(await cli.exited, 2, args.join(" "));
-  }
-});
-
-test("setup --no-open serves the setup page on loopback", unix, async () => {
-  const home = await mkdtemp(join(tmpdir(), "np-unix-"));
-  const cli = run(home, ["setup", "--no-open"]);
   try {
     const url = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`setup did not come up: ${JSON.stringify(cli.output())}`)), 20000);
+      const timer = setTimeout(() => reject(new Error(`WebUI did not come up: ${JSON.stringify(cli.output())}`)), 10000);
       cli.child.stdout.on("data", () => {
-        const match = cli.output().stdout.match(/setup is open at (http:\/\/127\.0\.0\.1:\d+\/\S*)/);
+        const match = cli.output().stdout.match(/NowPlaying Settings: (http:\/\/127\.0\.0\.1:\d+\/settings)/);
         if (match) { clearTimeout(timer); resolve(match[1]); }
       });
+      cli.exited.then((code) => { clearTimeout(timer); reject(new Error(`start exited ${code}: ${JSON.stringify(cli.output())}`)); });
     });
     const response = await fetch(url);
     assert.equal(response.status, 200);
     assert.match(await response.text(), /NowPlaying/);
-  } finally {
-    cli.child.kill("SIGTERM");
-    await cli.exited;
+    assert.equal((await (await fetch(new URL("/api/settings/servers", url))).json()).firstRun, true);
+  } finally { cli.child.kill("SIGTERM"); await cli.exited; }
+});
+
+test("unknown commands and options exit 2", unix, async () => {
+  const home = await mkdtemp(join(tmpdir(), "np-unix-"));
+  for (const args of [["bogus"], ["start", "--no-tray"], ["setup"]]) {
+    const cli = run(home, args);
+    assert.equal(await cli.exited, 2, args.join(" "));
   }
 });
 
@@ -114,7 +105,7 @@ test("start runs the server and card from the setup config and the real Secret S
 });
 
 test("start and setup without HOME say so plainly, no stack trace (#500)", unix, async () => {
-  for (const args of [["start", "--no-setup"], ["setup", "--no-open"]]) {
+  for (const args of [["start", "--no-setup"]]) {
     const env = { ...process.env };
     delete env.HOME;
     const child = spawn(process.execPath, [ENTRY, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });

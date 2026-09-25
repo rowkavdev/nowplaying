@@ -242,6 +242,21 @@ export function openSetupUrl(url, { platform = process.platform, spawnProcess = 
   return parsed.href;
 }
 
+// Opens the running app's Settings page on loopback only. A separate setup
+// server is no longer part of the product flow.
+export function openLocalSettingsUrl(url, { platform = process.platform, spawnProcess = spawn } = {}) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" || !["127.0.0.1", "[::1]", "localhost"].includes(parsed.hostname) || parsed.pathname !== "/settings" || parsed.search || parsed.hash || parsed.username || parsed.password) {
+    throw new TypeError("Settings URL must be a loopback /settings URL");
+  }
+  const [command, args] = platform === "win32" ? ["rundll32.exe", ["url.dll,FileProtocolHandler", parsed.href]]
+    : platform === "darwin" ? ["open", [parsed.href]] : ["xdg-open", [parsed.href]];
+  const child = spawnProcess(command, args, { detached: true, stdio: "ignore", shell: false, windowsHide: true });
+  child.on?.("error", () => {});
+  child.unref?.();
+  return parsed.href;
+}
+
 // Runs the native Windows setup window (scripts/windows-setup.ps1) against the
 // local setup server and resolves with its exit code. Rejects if PowerShell
 // cannot be started, so the caller can fall back to the browser page.

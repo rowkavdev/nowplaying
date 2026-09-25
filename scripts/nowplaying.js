@@ -1,23 +1,20 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createAppLogger } from "../src/app-log.js";
 import { StartupError, resolveAppPort, startAppFromConfig } from "../src/app-config.js";
 import { appPaths } from "../src/app-paths.js";
 import { createCredentialStore } from "../src/credential-store.js";
-import { ensureConfigured, runBrowserSetup } from "../src/first-run.js";
 import { createHostedCredentials } from "../src/hosted-credentials.js";
 import { createPlatformCredentialAdapter } from "../src/platform-credential-adapter.js";
-import { loadOrCreateDeviceId, openSetupUrl, startSetupApp } from "../src/setup-app.js";
+import { loadOrCreateDeviceId, openLocalSettingsUrl } from "../src/setup-app.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 
 // Linux and macOS entry point (#215): the server and card without the tray.
-// Setup runs in the browser, sign-ins go to the OS keychain and files live
+// Settings open in the browser, sign-ins go to the OS keychain and files live
 // where appPaths puts them. Windows keeps scripts/windows-entry.js.
 
-const USAGE = `Usage: nowplaying start [--no-setup]   (opens setup in the browser the first time)
-       nowplaying setup [--no-open]
+const USAGE = `Usage: nowplaying start [--no-setup]   (opens WebUI Settings the first time)
        nowplaying --version
        nowplaying --help`;
 
@@ -25,13 +22,15 @@ const manifestFile = new URL("../package.json", import.meta.url);
 const command = process.argv[2] ?? "help";
 const args = process.argv.slice(3);
 let recovery;
+let liveApp = null;
 
 if (command === "--version" || command === "version") {
   console.log(JSON.parse(await readFile(manifestFile, "utf8")).version);
 } else if (command === "start") {
   await start();
 } else if (command === "setup") {
-  await setup();
+  console.error("Setup is in the WebUI. Run `nowplaying start` and open Settings.");
+  process.exitCode = 2;
 } else if (command === "help" || command === "--help") {
   console.log(USAGE);
 } else {
@@ -47,12 +46,9 @@ async function start() {
   await logger.event("startup", "starting");
   let app;
   try {
-    if (!args.includes("--no-setup") && !existsSync(paths.configFile)) {
-      console.log("NowPlaying isn't set up yet. Opening setup in your browser...");
-      const outcome = await ensureConfigured({ configExists: () => existsSync(paths.configFile), runSetup: () => browserSetup(paths) });
-      await logger.event("startup", "first_run_setup", { code: outcome });
-    }
     app = await guardedStart(paths);
+    liveApp = app;
+    if (app.firstRun && !args.includes("--no-setup")) openLocalSettingsUrl(`${app.url}/settings`);
     if (app.safeMode) await logger.event("startup", "degraded", { level: "warn", code: `SAFE_MODE_${String(recovery?.recovery?.subsystem ?? "unknown").toUpperCase()}` });
   } catch (error) {
     await logger.event("startup", "failed", { level: "error", code: error?.startupCode ?? "START_FAILED" });
@@ -67,22 +63,11 @@ async function start() {
   const close = async () => {
     // A deliberate stop after a successful start is not a crash (#497).
     await recovery?.cleanShutdown?.();
-    await app.close();
+    await liveApp.close();
     await logger.event("startup", "stopped");
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
-}
-
-async function setup() {
-  const unknown = args.find((arg) => arg !== "--no-open");
-  if (unknown) { console.error(`nowplaying: unknown setup option: ${unknown}`); process.exit(2); }
-  const server = await startSetup(dataPaths());
-  const close = async () => { await server.close(); };
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
-  console.log(`NowPlaying setup is open at ${server.url}`);
-  if (!args.includes("--no-open")) openSetupUrl(server.url);
 }
 
 async function version() {
@@ -90,32 +75,12 @@ async function version() {
   catch { return null; }
 }
 
-// HOME can be missing (stripped environments, some service managers): say so
-// plainly instead of dying on a TypeError stack (#500).
+// A missing HOME is a configuration error, not a raw TypeError.
 function dataPaths() {
   try { return appPaths(); }
   catch {
     console.error("nowplaying: HOME is not set, so NowPlaying cannot find its data folder. Set HOME and retry.");
     process.exit(1);
-  }
-}
-
-async function startSetup(paths) {
-  const deviceId = await loadOrCreateDeviceId(paths.deviceIdFile);
-  const adapter = createPlatformCredentialAdapter();
-  const credentialStore = createCredentialStore({ adapter });
-  return startSetupApp({ draftFile: paths.draftFile, configFile: paths.configFile, credentialStore, hostedCredentials: createHostedCredentials({ adapter }), deviceId, version: await version() });
-}
-
-// Opens the setup page and resolves once setup has written the config (or timed out).
-async function browserSetup(paths) {
-  const server = await startSetup(paths);
-  // Printed too, for headless boxes where no browser opens.
-  console.log(`Setup: ${server.url}`);
-  try {
-    return await runBrowserSetup({ url: server.url, openUrl: (url) => openSetupUrl(url), configExists: () => existsSync(paths.configFile) });
-  } finally {
-    await server.close();
   }
 }
 
@@ -130,7 +95,10 @@ async function guardedStart(paths) {
 
 async function startFromConfig(paths, { safeMode = false } = {}) {
   const adapter = createPlatformCredentialAdapter();
+  const deviceId = await loadOrCreateDeviceId(paths.deviceIdFile);
   const app = await startAppFromConfig({
+    deviceId,
+    onConfigured: () => { void restartAfterConfiguration(paths); },
     configFile: paths.configFile,
     credentialStore: createCredentialStore({ adapter }),
     hostedCredentials: createHostedCredentials({ adapter }),
@@ -140,8 +108,25 @@ async function startFromConfig(paths, { safeMode = false } = {}) {
     safeMode,
     logFile: paths.logFile,
   });
+  if (app.firstRun) { console.log(`NowPlaying Settings: ${app.url}/settings`); return app; }
   console.log(safeMode
-    ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Run \`nowplaying setup\` to go back to normal. Card: ${app.url}/card.svg`
+    ? `NowPlaying started in safe mode after repeated failed starts: Discord and hosted uploads are off. Use WebUI Settings to go back to normal. Card: ${app.url}/card.svg`
     : `NowPlaying is running. Card: ${app.url}/card.svg`);
   return app;
+}
+
+// A successful server save has already answered the browser before this fires.
+let restarting = false;
+async function restartAfterConfiguration(paths) {
+  if (restarting) return;
+  restarting = true;
+  try {
+    await liveApp.close();
+    await recovery?.retryNormal();
+    const next = await guardedStart(paths);
+    liveApp = next;
+    console.log(next.firstRun ? `NowPlaying Settings: ${next.url}/settings` : `NowPlaying is running. Card: ${next.url}/card.svg`);
+  } catch (error) {
+    console.error(`NowPlaying couldn't restart after the settings changed: ${error.message}`);
+  } finally { restarting = false; }
 }
