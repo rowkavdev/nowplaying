@@ -1,6 +1,5 @@
 // On-demand LAN discovery for the browser Settings page. Never scans public,
 // VPN or large subnets, follows redirects, or sends credentials to a candidate.
-import { networkInterfaces as osNetworkInterfaces } from "node:os";
 import { classifyJellyfinOrEmby, classifyPlex, classifySubsonic, discoverLocalServers, mergeServers } from "./setup-discovery.js";
 
 const PORTS = Object.freeze([
@@ -11,27 +10,20 @@ const PORTS = Object.freeze([
 ]);
 const MAX_REPLY = 64 * 1024;
 
-export function subnetCandidates(networkInterfaces = osNetworkInterfaces) {
-  const segments = new Set();
-  let interfaces;
-  try { interfaces = networkInterfaces() ?? {}; } catch { return []; }
-  for (const [name, addresses] of Object.entries(interfaces)) for (const entry of addresses ?? []) {
-    if (/(?:^|[-_ ])(?:tun|tap|utun|ppp|wg|tailscale|zerotier|zt|warp|vpn)(?:\d|[-_ ]|$)/i.test(name) || /^(?:tun|tap|utun|ppp|wg|tailscale|zt|warp|vpn)/i.test(name)) continue;
-    if (!entry || entry.internal || (entry.family !== "IPv4" && entry.family !== 4)) continue;
-    const octets = String(entry.address).split(".").map(Number);
-    if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) continue;
-    const [a, b, c] = octets;
-    if (!(a === 10 || a === 192 && b === 168 || a === 172 && b >= 16 && b <= 31)) continue;
-    // Limit each interface to its local /24 even if the interface advertises a
-    // larger netmask. No more than two segments and no more than 508 hosts.
-    segments.add(`${a}.${b}.${c}`);
-  }
-  return [...segments].slice(0, 2).flatMap((prefix) => Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`));
+// No implicit subnet enumeration: a VPN can look like any RFC1918 interface.
+// The user must explicitly supply the private /24 they want probed.
+export function subnetCandidates(subnet) {
+  if (subnet === undefined || subnet === null || subnet === "") return [];
+  if (typeof subnet !== "string" || !/^(?:\d{1,3}\.){3}(?:0\/24|\d{1,3})$/.test(subnet)) throw new TypeError("enter a private IPv4 subnet (x.y.z.0/24)");
+  const address = subnet.replace(/\/24$/, "");
+  if (!isPrivateHost(address)) throw new TypeError("subnet must be private");
+  const parts = address.split(".");
+  return Array.from({ length: 254 }, (_, i) => `${parts.slice(0, 3).join(".")}.${i + 1}`);
 }
 
-export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = subnetCandidates(), signal, timeoutMs = 220, concurrency = 64 } = {}) {
+export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64 } = {}) {
   if (signal?.aborted) return [];
-  if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 508 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
+  if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 254 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
   const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal }).catch(() => []);
   if (signal?.aborted) return [];
   const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => PORTS.map((probe) => ({ host, probe })));

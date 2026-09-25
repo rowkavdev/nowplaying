@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import { discoverSettingsServers, subnetCandidates } from "../src/settings-discovery.js";
 const reply = (text) => ({ status: 200, headers: { get: () => null }, text: async () => text });
 
-test("caps private network candidates and excludes public and VPN interfaces", () => {
-  const hosts = subnetCandidates(() => ({ a: [{ address: "192.168.7.42", family: "IPv4" }], b: [{ address: "10.4.2.18", family: 4 }], c: [{ address: "172.21.1.4", family: 4 }], d: [{ address: "100.64.1.2", family: 4 }], e: [{ address: "8.8.8.8", family: 4 }], tun0: [{ address: "10.8.0.42", family: 4 }], "WireGuard VPN": [{ address: "192.168.99.2", family: 4 }] }));
-  assert.equal(hosts.length, 508);
-  assert.deepEqual([hosts[0], hosts[253], hosts[254], hosts.at(-1)], ["192.168.7.1", "192.168.7.254", "10.4.2.1", "10.4.2.254"]);
+test("does not enumerate interfaces; scans only an explicitly selected private /24", () => {
+  assert.deepEqual(subnetCandidates(), []);
+  assert.deepEqual(subnetCandidates(""), []);
+  const hosts = subnetCandidates("192.168.7.0/24");
+  assert.equal(hosts.length, 254);
+  assert.equal(hosts[0], "192.168.7.1");
+  assert.equal(hosts.at(-1), "192.168.7.254");
+  assert.throws(() => subnetCandidates("8.8.8.0/24"), /private/);
+  assert.throws(() => subnetCandidates("10.1.0.0/16"), /private IPv4 subnet/);
 });
 test("probes known ports without credentials or redirect, finds a server and ignores public hosts", async () => {
   const calls = [];
