@@ -13,6 +13,11 @@ for (const [name, input, forbidden] of [
   ["JSON password with spaces", '{"password": "correct horse"}', "correct horse"],
   ["camelCase access token", "AccessToken=abc123secret", "abc123secret"],
   ["quoted camelCase key", '"accessToken": "abc123secret"', "abc123secret"],
+  ["JSON refresh token", '{"refresh_token":"LEAK"}', "LEAK"],
+  ["JSON client secret", '{"client_secret":"LEAK"}', "LEAK"],
+  ["camelCase API key", '{"apiKey":"LEAK"}', "LEAK"],
+  ["escaped quoted JSON credential", '{"refresh_token":"one\\\"two"}', "one"],
+  ["single-quoted escaped credential", "'client_secret': 'one\\'two'", "one"],
   ["webhook secret", "webhook=https://discord.test/hooks/private", "discord.test"],
   ["private URL", "provider failed at https://media.lan:32400/status?id=7", "media.lan"],
   ["IPv4 address", "connect ECONNREFUSED 192.168.1.12:8096", "192.168.1.12"],
@@ -63,4 +68,14 @@ test("rejects unsafe structured labels instead of copying free-form data", () =>
 
 test("requires sensitiveValues to be an array", () => {
   assert.throws(() => redactDiagnosticText("error", { sensitiveValues: "secret" }), /expected an array/);
+});
+
+test("redaction keeps JSON parseable and leaves harmless keys untouched", () => {
+  const input = '{"refresh_token":"one\\\"two","client_secret":"LEAK","apiKey":"LEAK","tokens":"safe","title":"media"}';
+  const parsed = JSON.parse(redactDiagnosticText(input));
+  assert.equal(parsed.refresh_token, "[redacted]");
+  assert.equal(parsed.client_secret, "[redacted]");
+  assert.equal(parsed.apiKey, "[redacted]");
+  assert.equal(parsed.tokens, "safe");
+  assert.equal(parsed.title, "media");
 });

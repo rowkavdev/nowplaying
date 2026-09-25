@@ -9,8 +9,15 @@ const REDACTED = "[redacted]";
 export function redactDiagnosticText(value, { sensitiveValues = [] } = {}) {
   let text = String(value ?? "");
   text = text.replace(/\b(?:bearer|basic)\s+[a-z0-9._~+/=-]+/gi, `${REDACTED}-credential`);
-  // Also JSON-style keys ("token": "x") and camelCase ones (accessToken=x).
-  text = text.replace(/(?:\b|(?<=[a-z]))(token|api[-_ ]?key|secret|password|authorization|webhook)\b["']?\s*[:=]\s*(?:"[^"]*"?|'[^']*'?|[^\s,;}]+)/gi, (_match, key) => `${key}=${REDACTED}`);
+  // Keep JSON syntax intact while redacting snake_case, camelCase and
+  // quoted keys, including escaped quotes within a quoted value. A broad
+  // key scan avoids splitting accessToken or refresh_token mid-identifier.
+  text = text.replace(/(["']?)([a-z][a-z0-9_-]*)(\1\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)/gi, (match, quote, key, separator, value) => {
+    const normalized = key.replace(/[-_]/g, "").toLowerCase();
+    if (!/(?:token|apikey|secret|password|authorization|webhook|credential)$/.test(normalized)) return match;
+    const valueQuote = value[0] === '"' || value[0] === "'" ? value[0] : "";
+    return `${quote}${key}${separator}${valueQuote}${REDACTED}${valueQuote}`;
+  });
   text = text.replace(/\b(?:https?|wss?):\/\/[^\s<>'"`]+/gi, `${REDACTED}-url`);
   text = text.replace(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g, `${REDACTED}-ip`);
   text = text.replace(/(?<![\w:])(?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}(?![\w:])/gi, `${REDACTED}-ip`);
