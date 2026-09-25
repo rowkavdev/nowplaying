@@ -109,7 +109,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   // plain default, so it never collides with reordered or centred text.
   // It's left out when the two wouldn't both fit (narrow cards, long films).
   const dot = visibility.state && presence.state === "playing" && edge !== "middle";
-  const timeCandidate = presence.durationMs > 0 && presence.positionMs != null ? `${clock(presence.positionMs)} / ${clock(presence.durationMs)}` : "";
+  const timeCandidate = presence.durationMs > 0 && Number.isFinite(presence.positionMs) ? `${clock(Math.min(Math.max(0, presence.positionMs), presence.durationMs))} / ${clock(presence.durationMs)}` : "";
   const timeFits = (dot ? 14 : 0) + estimateWidth(status, 11, 0.64, 1.1) + 16 + estimateWidth(timeCandidate, 11, 0.6, 0) <= contentWidth;
   const showTime = Boolean(timeCandidate) && timeFits && visibility.progress && visibility.state && !customOrder && textAlign === "start";
   const timeX = rtl ? contentX : contentX + contentWidth;
@@ -147,7 +147,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
 
 
 function bounded(value, fallback, min, max, path) { const resolved = value ?? fallback; if (!Number.isInteger(resolved) || resolved < min || resolved > max) throw new RangeError(`${path}: expected an integer from ${min} to ${max}`); return resolved; }
-function progressWidth(presence, available) { if (!presence.durationMs || presence.positionMs == null) return 0; return Math.round(available * Math.min(1, presence.positionMs / presence.durationMs)); }
+function progressWidth(presence, available) { if (!(presence.durationMs > 0) || !Number.isFinite(presence.positionMs)) return 0; return Math.round(available * Math.min(1, Math.max(0, presence.positionMs / presence.durationMs))); }
 // TV and films (#143): an episode reads "Show Name" / "S02E05 · Episode
 // Title", a film "Film Title (2024)". Anything missing (or hidden by the
 // privacy settings) falls back to the provider's plain title and subtitle.
