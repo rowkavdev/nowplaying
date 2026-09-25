@@ -224,3 +224,43 @@ test("app wiring: a stuck track cannot stay on Discord past the timeout (#153)",
     await d.stop();
   }
 });
+
+test("overlapping ticks publish in order, so an older poll never overwrites a newer one", async () => {
+  const client = fakeClient();
+  const first = { ...playing, title: "Old song" };
+  const second = { ...playing, title: "New song" };
+  const presences = [first, second];
+  let i = 0;
+  // The old song's artwork is slow (MusicBrainz miss); the new one is instant.
+  const artwork = { resolve: async (p) => { if (p.title === "Old song") await new Promise((r) => setTimeout(r, 20)); return { strategy: "fallback" }; } };
+  const l = createDiscordPresenceLoop({ client, artwork, getPresence: async () => presences[i++] });
+  await Promise.all([l.tick(), l.tick()]);
+  assert.deepEqual(client.calls.map((a) => a.details), ["Old song", "New song"]);
+});
+
+test("stop drains an in-flight tick and drops a queued tick before clearing", async () => {
+  const client = fakeClient();
+  let releaseFirst;
+  let enteredFirst;
+  const firstEntered = new Promise((resolve) => { enteredFirst = resolve; });
+  const firstReleased = new Promise((resolve) => { releaseFirst = resolve; });
+  let polls = 0;
+  const l = createDiscordPresenceLoop({ client, getPresence: async () => {
+    polls += 1;
+    if (polls === 1) { enteredFirst(); await firstReleased; }
+    return { ...playing, title: polls === 1 ? "Old song" : "New song" };
+  } });
+  const old = l.tick();
+  await firstEntered;
+  const queued = l.tick();
+  const stopping = l.stop();
+  assert.equal(client.calls.length, 0, "stop waits rather than clearing during the active poll");
+  releaseFirst();
+  assert.equal((await old).action, "publish");
+  assert.equal((await queued).action, "stopped");
+  await stopping;
+  assert.equal(polls, 1, "queued work never polls after shutdown starts");
+  assert.deepEqual(client.calls.map((a) => a?.details ?? (a === null ? "CLEAR" : a === "close" ? "CLOSE" : a)),
+    ["Old song", "CLEAR", "CLOSE"]);
+  assert.equal((await l.tick()).action, "stopped", "later manual ticks cannot publish to a closed client");
+});

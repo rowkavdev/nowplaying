@@ -29,6 +29,7 @@ export function createDiscordPresenceLoop({
   let idleSince = null;
   let timer = null;
   let stopped = true;
+  let closing = false;
   let running = null;
   let stuck = null;
 
@@ -47,7 +48,20 @@ export function createDiscordPresenceLoop({
     return now() - stuck.since >= stuckAfterMs;
   }
 
-  async function tick() {
+  // Ticks run one at a time (a Refresh artwork tick can land during a
+  // scheduled one). Otherwise an older poll whose artwork lookup is slow
+  // publishes after a newer one and Discord shows the previous track.
+  let queue = Promise.resolve();
+  function tick({ startup = false } = {}) {
+    const next = queue.then(() => runTick(startup));
+    queue = next.catch(() => {});
+    return next;
+  }
+
+  async function runTick(startup) {
+    // stop() drains the queue before clearing Discord; queued work must not
+    // start a fresh poll after shutdown has begun.
+    if (closing && !startup) return Object.freeze({ action: "stopped" });
     let presence;
     try { presence = await getPresence(); } catch { presence = null; }
     // A server we can't reach counts as idle, so a stale status never lingers.
@@ -82,12 +96,17 @@ export function createDiscordPresenceLoop({
     start() {
       if (!stopped) return;
       stopped = false;
-      running = tick().catch(() => null).finally(() => { running = null; schedule(); });
+      closing = false;
+      running = tick({ startup: true }).catch(() => null).finally(() => { running = null; schedule(); });
     },
     async stop() {
       stopped = true;
+      closing = true;
       if (timer) clearTimer(timer);
       timer = null;
+      // Wait for every in-flight tick, including manual Refresh artwork ticks,
+      // before the final clear and close. queue absorbs tick failures.
+      await queue;
       if (running) await running;
       try { await client.publish(null); } catch { /* Discord may already be gone */ }
       if (typeof client.close === "function") await client.close();
