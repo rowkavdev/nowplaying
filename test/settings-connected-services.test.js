@@ -69,3 +69,18 @@ test("hosted preview/check are available on first run and reflect privacy", asyn
   assert.equal(seen[0].opts.redirect,"error");
   assert.equal((await svc.handler({url:"/api/settings/services",headers:{"sec-fetch-site":"cross-site"}})).status,403);
 });
+
+
+test("Spotify completes without restarting before the browser receives success", async () => {
+  const file = await configFile(); let finish; let restartCount = 0;
+  const svc = createSettingsConnectedServices({ file, credentialStore: { save: async () => {} }, onConfigured: async () => { restartCount++; },
+    spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) });
+  const started = await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
+  const flowId = JSON.parse(started.body).flowId;
+  finish({ refreshToken: "secret", identity: { id: "rowan", displayName: "Rowan" } });
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  assert.equal(restartCount, 0, "must stay alive past the old 500ms restart window");
+  assert.equal(JSON.parse((await svc.handler(post("/api/setup/spotify", { action: "poll", flowId }))).body).status, "signed_in");
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  assert.equal(restartCount, 1, "restart only once the result was delivered");
+});

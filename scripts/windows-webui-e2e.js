@@ -6,11 +6,11 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chromium } from "playwright-core";
 
 const bundle = process.argv[2];
 const out = process.argv[3];
 if (process.platform !== "win32" || !bundle || !out) throw new Error("Windows bundle and artifact directory required");
+const { chromium } = await import("playwright-core");
 const temp = await mkdtemp(join(tmpdir(), "np-webui-e2e-"));
 const media = createServer((request, response) => {
   const path = new URL(request.url, "http://127.0.0.1").pathname;

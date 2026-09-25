@@ -42,7 +42,7 @@ jobs:
           npm install --no-save --package-lock=false playwright-core
           New-Item -ItemType Directory -Force windows-webui-evidence | Out-Null
           $version = (Get-Content package.json | ConvertFrom-Json).version
-          node test/windows-webui-e2e.js "dist/windows/nowplaying-v$version-windows-x64" windows-webui-evidence
+          node scripts/windows-webui-e2e.js "dist/windows/nowplaying-v$version-windows-x64" windows-webui-evidence
       - name: Upload Windows WebUI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

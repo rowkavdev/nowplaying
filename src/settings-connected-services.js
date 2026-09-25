@@ -27,7 +27,8 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     if (!config) { pendingSpotify = account; return; }
     await store.updateSpotify(account);
     pendingSpotify = null;
-    restart();
+    // The flow result is only returned on poll. Restarting here can destroy
+    // the handler before the browser sees its signed-in result.
   }
   async function saveHosted(url) {
     const config = await current();
@@ -51,7 +52,14 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     if (path !== ROUTE && path !== "/api/setup/spotify" && !path.startsWith("/api/setup/hosted/")) return null;
     const site = request.headers?.["sec-fetch-site"];
     if (site !== undefined && !SAFE.has(String(site).toLowerCase())) return json(403, { error: "forbidden" });
-    if (path === "/api/setup/spotify") return spotify(request);
+    if (path === "/api/setup/spotify") {
+      const result = await spotify(request);
+      if (request.method === "POST" && result?.status === 200) {
+        let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+        if (input.action === "poll" && JSON.parse(result.body).status === "signed_in" && await current()) restart();
+      }
+      return result;
+    }
     if (path.startsWith("/api/setup/hosted/")) {
       if (path === "/api/setup/hosted/signin") {
         let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
