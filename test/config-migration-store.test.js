@@ -82,3 +82,16 @@ test("requires a file and valid clock", () => {
   assert.throws(() => createConfigMigrationStore(), /file is required/);
   assert.throws(() => createConfigMigrationStore({ file: "config.json", clock: null }), /clock is required/);
 });
+
+test("migrates a config saved with a UTF-8 BOM (#532)", async () => {
+  const file = join(await mkdtemp(join(tmpdir(), "np-migrate-")), "config.json");
+  const store = createConfigMigrationStore({ file, currentVersion: 2, migrations: [null, (document) => ({ ...document, version: 2 })], validate: (document) => document });
+  await writeFile(file, `﻿${JSON.stringify({ version: 1, name: "old" })}`);
+  const result = await store.migrate();
+  assert.equal(result.status, "migrated");
+  assert.deepEqual(result.document, { version: 2, name: "old" });
+  // The saved file is clean JSON - no BOM carried into the migrated write.
+  const saved = await readFile(file, "utf8");
+  assert.notEqual(saved.charCodeAt(0), 0xfeff);
+  assert.deepEqual(JSON.parse(saved), { version: 2, name: "old" });
+});
