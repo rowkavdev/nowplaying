@@ -59,3 +59,29 @@ test("discovery requires explicit private CIDR for port sweep and cancels", asyn
   assert.equal((await mgmt.handler(post("/api/settings/servers/discover", { subnet: "192.168.1.0/24" }))).status, 200);
   assert.equal(hosts.length, 254);
 });
+
+test("adding a second server keeps current settings and never writes a password", async () => {
+  const file = await fixture();
+  await writeFile(file, serializeSetupConfig({
+    servers: [{ provider: "jellyfin", serverUrl: "http://192.168.1.20:8096", identity: { id: "first", displayName: "One" } }],
+    credentialStored: true, discordEnabled: false, discordIdleBehavior: "recent", discordArtworkLookup: "off",
+    privacy: { redactTitles: true }, card: { theme: "paper" }, hostedEnabled: false,
+  }));
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store, onConfigured: () => {}, signIn: {
+    signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "two", displayName: "Two" }, secret: "new-secret" }),
+  } });
+  const auth = await mgmt.handler(post("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://192.168.1.30:4533", username: "two", password: "unsaved-password" }));
+  assert.equal(auth.status, 200);
+  const config = JSON.parse(await readFile(file, "utf8"));
+  assert.equal(config.servers.length, 2);
+  assert.equal(config.servers[0].identity.id, "first");
+  assert.equal(config.servers[1].identity.id, "two");
+  assert.equal(config.discord.enabled, false);
+  assert.equal(config.discord.idleBehavior, "recent");
+  assert.equal(config.privacy.redactTitles, true);
+  assert.equal(config.card.theme, "paper");
+  assert.doesNotMatch(JSON.stringify(config), /new-secret|unsaved-password/);
+  const last = await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "jellyfin", id: "first" }) });
+  assert.equal(last.status, 200);
+  assert.equal((await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: "two" }) })).status, 409);
+});
