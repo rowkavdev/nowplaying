@@ -119,12 +119,9 @@ test("a missing or unreadable sign-in says to sign in again", async () => {
   await assert.rejects(startAppFromConfig({ configFile: file, credentialStore: { read: async () => { throw new Error("vault s3cret"); } }, port: 0 }), (error) => code("CREDENTIAL_READ_FAILED")(error) && !/s3cret/.test(error.message));
 });
 
-test("a port the OS refuses is reported with how to pick another", async (t) => {
-  // Port 1 needs admin rights on Linux and macOS; skip where the probe binds.
-  const probe = createServer();
-  const refused = await new Promise((resolve) => probe.once("error", (error) => resolve(error.code === "EACCES")).listen(1, "127.0.0.1", () => probe.close(() => resolve(false))));
-  if (!refused) { t.skip("port 1 is bindable here"); return; }
-  await assert.rejects(startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 1 }), (error) => code("PORT_BLOCKED")(error) && error.message.includes("port 1") && error.message.includes("NOWPLAYING_PORT"));
+test("a port the OS refuses is reported with how to pick another", async () => {
+  const createServer = () => ({ listen: async () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); } });
+  await assert.rejects(startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 47832, createServer }), (error) => code("PORT_BLOCKED")(error) && error.message.includes("port 47832") && error.message.includes("NOWPLAYING_PORT") && !error.message.includes("Windows"));
 });
 
 test("a busy port is reported plainly", async () => {

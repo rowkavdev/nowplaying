@@ -275,7 +275,7 @@ export function youtubeForDiscord(source) {
   });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, createServer = createHttpServer } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   const config = await loadAppConfig(configFile);
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
@@ -443,15 +443,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // or web page can't change settings.
   // The bridge checks its own pairing token and extension origin, so it
   // skips the session check the settings pages use.
-  const server = createHttpServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: youtube ? [YOUTUBE_BRIDGE_PATH] : [] });
+  const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: youtube ? [YOUTUBE_BRIDGE_PATH] : [] });
   let address;
   try {
     address = await server.listen();
   } catch (error) {
     if (error?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use. Close the other program using it and try again.`);
-    // Windows reserves port ranges for Hyper-V, WSL and Docker; binding one of
-    // those (or a port the OS won't allow) fails with EACCES, not EADDRINUSE.
-    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `Windows won't let NowPlaying use port ${port}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
+    // Reserved ports and OS permissions can reject a bind on any platform.
+    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `The OS won't let NowPlaying use port ${port}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
     throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
   }
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
