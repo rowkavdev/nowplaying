@@ -22,7 +22,7 @@ Success looks like: the card image on your README shows what's playing.
 
 By default each PC gets its own card link with a random ID. If you have more than one PC, sign in to share one card:
 
-1. Open **Settings > Spotify and hosted card** from the tray, check the card service address, and choose **Sign in with GitHub**.
+1. Open **Settings > Spotify and hosted card > Hosted card** from the tray, check the card service address, and choose **Sign in with GitHub**. This works on the first-run page or later in Settings; there is no separate setup wizard to reopen.
 2. Open the GitHub link shown and enter the code. GitHub only tells nowplaying your username - no other permissions.
 3. Your card link becomes `https://nowplaying-hosted.vercel.app/u/<your-username>.svg`. Sign in on each PC; whichever is playing updates the card.
 

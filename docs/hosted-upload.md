@@ -34,7 +34,7 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 
 ### Signed in with GitHub (one card for all your PCs)
 
-- WebUI Settings > Spotify and hosted card > "Sign in with GitHub" shows a short code. You approve it on github.com. The app asks GitHub for no permissions beyond your public profile.
+- In WebUI **Settings > Spotify and hosted card > Hosted card**, check the service address and choose **Sign in with GitHub**. Open the GitHub link displayed there and enter its code. You can do this on first run or later, after connecting a media server; you do not need to start setup again. The app asks GitHub for no permissions beyond your public profile.
 - The app hands GitHub's sign-in to the card service once. The service asks GitHub who you are, then throws it away. Neither your PC nor the service keeps it.
 - The service stores your GitHub user ID and username, and the names of the PCs you've signed in (you can rename them). That's all it knows about you.
 - Your card link is `https://nowplaying-hosted.vercel.app/u/<your-github-username>.svg`. It's public, like the README it sits in, so anyone can see that you have a card. Only your signed-in PCs can change it.
@@ -44,7 +44,7 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 ### Without signing in
 
 - Your card link uses a random ID. It can't be traced to your email, server or username. Each PC gets its own card.
-- If you sign in with GitHub later, the old random link keeps working and shows your new card.
+- To sign in later, open **Settings > Spotify and hosted card > Hosted card** and choose **Sign in with GitHub**. The old random link keeps working and shows your new card.
 
 In both cases, each PC gets its own device key. It's kept in the system's credential store (Windows Credential Manager on Windows), not in `config.json`, and the service only stores a hash of it.
 

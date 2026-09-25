@@ -17,15 +17,12 @@ Write down the build number and version from the release title, for example `dev
 
 ## 3. First launch
 
-- [ ] Starting nowplaying with no saved config opens the setup page in your default browser, with no console window. After you finish setup, nowplaying starts. Later launches do not open the browser.
-- [ ] Connect your media server and sign in.
-- [ ] If you run more than one: "Add another server" signs in to a second server (up to eight). Both stay connected after you finish setup.
-- [ ] Turn on Discord and pick an idle behaviour.
-- [ ] Optional Spotify: paste a Client ID from your own app in the Spotify developer dashboard (redirect URI `http://127.0.0.1/spotify/callback`) and choose "Sign in with Spotify". After you approve, setup shows "Connected as" your account, and `config.json` holds no token.
-- [ ] Finish setup. `%LOCALAPPDATA%\nowplaying\config.json` now exists and holds no password or token.
-- [ ] The setup review step shows made-up example cards for Music, TV episode and Film, drawn in your card's look. (The native setup window links to them instead of embedding.)
+- [ ] Starting nowplaying with no saved config opens WebUI Settings in your default browser, with no console window. After connecting a media server, nowplaying starts. Later launches do not open the browser automatically.
+- [ ] In **Media servers**, connect your server and sign in. Add a second server if available; both remain listed after nowplaying starts.
+- [ ] Optional Spotify: in **Spotify and hosted card**, paste a Client ID from your own app in the Spotify developer dashboard (redirect URI `http://127.0.0.1/spotify/callback`) and choose **Sign in with Spotify**. You can do this before the first server. After you approve, Settings shows **Connected as** your account and `config.json` holds no token. Connect a server and confirm the Spotify account remains connected after restart.
+- [ ] `%LOCALAPPDATA%\nowplaying\config.json` now exists and holds no password or token. In configured Settings, turn on Discord and pick an idle behaviour; the Card preview shows a made-up example.
 - [ ] A made-up server name fails with "Couldn't find a server with that name", a self-signed https server with a certificate message, and a dead address with a timeout or unreachable message - never an offer to skip certificate checks.
-- [ ] "Test Discord" in setup flashes a test status; with Discord closed it says to open the desktop app.
+- [ ] With Discord closed, Settings shows its disconnected state rather than claiming Rich Presence is active.
 
 ## 4. Running
 
@@ -33,7 +30,7 @@ Write down the build number and version from the release title, for example `dev
 - [ ] `http://127.0.0.1:47832/healthz` returns `ok`.
 - [ ] Play something. `http://127.0.0.1:47832/card.svg` shows it.
 - [ ] With the Discord desktop app open, your status shows NowPlaying with what's playing.
-- [ ] With Spotify signed in, play music or a podcast in any Spotify app: the card and hosted card show it and Discord does not. "Disconnect Spotify" in setup unlinks it.
+- [ ] With Spotify signed in, play music or a podcast in any Spotify app: the card and hosted card show it and Discord does not. **Disconnect Spotify** in Settings unlinks it; if token deletion fails, Settings says so instead of claiming the token is gone.
 - [ ] With a media server and Spotify both playing, the card shows whichever started most recently, and Discord keeps showing the media server.
 - [ ] Play a TV episode: the card shows the series name with the episode code and title, like `Lost` / `S04E05 · The Constant`. Play a film: the card shows `Title (year)`.
 - [ ] Stop playback. The status follows the idle behaviour you picked (clear, clear after a short wait, "Nothing playing", or the last item).
@@ -53,28 +50,29 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Pick Light, 520 px, press Save. Open the card link from the Status page: the card is light and wider. Nothing restarted.
 - [ ] Quit and reopen nowplaying. Settings > Card still shows Light and 520, and the card still looks the same.
 - [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
-- [ ] Setup > Card hosting: choose NowPlaying's hosted service, then "Sign in with GitHub" and enter the code. The card link becomes `/u/<your-username>.svg`. Settings > Hosted card devices lists this PC; rename works and "Sign out" stops it updating.
+- [ ] Before or after the first server, **Settings > Spotify and hosted card > Hosted card** has **Sign in with GitHub**. Open the link and enter the code. The card link becomes `/u/<your-username>.svg`. Settings > Hosted card devices lists this PC; rename works and **Sign out** stops it updating.
+- [ ] On an existing installation that has never used GitHub sign-in, open configured Settings and confirm the same button is visible without rerunning setup.
 - [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
 - [ ] With artwork showing, the card background picks up the cover's colour. Set `card.artworkTint` to `false` in `config.json`: the background goes back to the plain theme colour.
 - [ ] The status page lists every connected server, each with its own connection state.
-- [ ] Settings > Servers lists every server. "Add or remove servers" opens setup; remove one there, Finish, and nowplaying restarts with it gone - the other servers keep feeding the card and Discord.
-- [ ] Re-run setup and Finish without changing anything: your servers, Spotify sign-in and card, privacy and hosted settings all survive.
+- [ ] Settings > Media servers lists every server. Remove one there (not the last one); nowplaying restarts with the other servers still feeding the card and Discord.
+- [ ] Restart nowplaying: the servers, Spotify sign-in and card, privacy and hosted settings survive.
 - [ ] Settings shows a YouTube section with a pairing code and port. "Make a new code" warns the old code stops working.
 - [ ] With the YouTube extension paired, playing a YouTube video shows it on the card and in Discord. A Short shows nothing.
 - [ ] Status page > Reporting a problem: "See exactly what's in the report" shows the redacted report before it is copied.
-- [ ] "Run setup again" opens setup, and the change you save takes effect.
+- [ ] Open Settings again from the tray and save a change; it takes effect.
 - [ ] Quit closes nowplaying. The icon goes, and Discord clears your status.
 
 ## 6. Start with Windows
 
 - [ ] Sign out and back in (or restart). nowplaying starts on its own and the tray icon shows.
 - [ ] `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\nowplaying.lnk` exists.
-- [ ] Turn Start with Windows off in setup and sign in again. nowplaying doesn't start.
+- [ ] Turn **Start NowPlaying when I sign in to Windows** off in Settings and sign in again. nowplaying doesn't start.
 
 ## 7. Uninstall
 
 - [ ] Uninstall from Settings > Apps.
-- [ ] The Startup shortcut is gone, even if you turned Start with Windows on in setup rather than in the installer. nowplaying doesn't start at the next sign-in.
+- [ ] The Startup shortcut is gone, even if you turned Start with Windows on in Settings rather than in the installer. nowplaying doesn't start at the next sign-in.
 
 ## Reporting a problem
 
