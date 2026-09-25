@@ -13,13 +13,15 @@ export const LAN_PROBES = Object.freeze([
 const MAX_REPLY = 4 * 1024;
 const MAX_SERVERS = 32;
 
-export async function discoverLanServers({ timeoutMs = 1500, broadcastAddress = "255.255.255.255", port = LAN_DISCOVERY_PORT, probes = LAN_PROBES, socketFactory = () => createSocket({ type: "udp4", reuseAddr: true }) } = {}) {
+export async function discoverLanServers({ timeoutMs = 1500, broadcastAddress = "255.255.255.255", port = LAN_DISCOVERY_PORT, probes = LAN_PROBES, socketFactory = () => createSocket({ type: "udp4", reuseAddr: true }), signal } = {}) {
+  if (signal?.aborted) return Object.freeze([]);
   const found = new Map();
   const sockets = [];
   const listen = (probe) => new Promise((resolve) => {
     let socket;
     try { socket = socketFactory(); } catch { resolve(); return; }
     sockets.push(socket);
+    if (signal?.aborted) { socket.close(); resolve(); return; }
     socket.on("error", () => resolve());
     socket.on("message", (buffer) => {
       if (found.size >= MAX_SERVERS) return;
@@ -27,19 +29,27 @@ export async function discoverLanServers({ timeoutMs = 1500, broadcastAddress = 
       if (server && !found.has(server.baseUrl)) found.set(server.baseUrl, server);
     });
     socket.bind(0, () => {
+      if (signal?.aborted) { resolve(); return; }
       try {
         socket.setBroadcast(true);
         socket.send(Buffer.from(probe.message, "utf8"), port, broadcastAddress, () => resolve());
       } catch { resolve(); }
     });
   });
+  const abort = () => { for (const socket of sockets) { try { socket.close(); } catch { /* already closed */ } } };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
     await Promise.all(probes.map(listen));
-    await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+    if (!signal?.aborted) await new Promise((resolve) => {
+      const timer = setTimeout(done, timeoutMs);
+      function done() { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); }
+      signal?.addEventListener("abort", done, { once: true });
+    });
   } finally {
+    signal?.removeEventListener("abort", abort);
     for (const socket of sockets) { try { socket.close(); } catch { /* already closed */ } }
   }
-  return Object.freeze([...found.values()]);
+  return Object.freeze(signal?.aborted ? [] : [...found.values()]);
 }
 
 export function parseDiscoveryReply(buffer, provider) {
