@@ -1,7 +1,7 @@
 // Windows CI visual smoke test of the packaged first-run path. This runs a
 // throwaway local Subsonic server and never touches a real media account.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,6 +45,7 @@ try {
   await page.goto(`${appUrl}/settings`);
   await page.getByRole("heading", { name: "Set up NowPlaying" }).waitFor();
   await page.screenshot({ path: join(out, "windows-first-run.png"), fullPage: true });
+  console.log("Windows WebUI: first-run screenshot saved");
   await page.locator("#manual-add summary").click();
   await page.locator("#server-provider").selectOption("navidrome");
   await page.locator("#server-url").fill(mediaUrl);
@@ -52,6 +53,7 @@ try {
   await page.locator("#signin-username").fill("ci-user");
   await page.locator("#signin-password").fill("ci-demo-password");
   await page.screenshot({ path: join(out, "windows-sign-in.png"), fullPage: true });
+  console.log("Windows WebUI: sign-in screenshot saved");
   await page.locator("#signin-button").click();
   await page.getByRole("heading", { name: "Set up NowPlaying" }).waitFor({ state: "detached", timeout: 30000 });
   await page.locator("h1").filter({ hasText: /^Settings$/ }).waitFor({ timeout: 15000 });
@@ -60,12 +62,16 @@ try {
   assert.equal(state.servers[0].provider, "navidrome");
   assert.match(await page.locator("#servers-list").innerText(), /ci-user/);
   await page.screenshot({ path: join(out, "windows-provider-active.png"), fullPage: true });
+  console.log("Windows WebUI: provider-active screenshot saved");
   const config = await readFile(join(temp, "nowplaying", "config.json"), "utf8");
   assert.doesNotMatch(config, /ci-demo-password/);
   assert.doesNotMatch(output, /ci-demo-password/);
   console.log("Packaged Windows first-run -> sign-in -> provider activation verified; screenshots saved.");
 } finally {
   await browser?.close();
-  child.kill();
+  // The launcher waits for its bundled Node child. Killing only the launcher
+  // leaves that child polling our fake server, preventing media.close().
+  spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
+  media.closeAllConnections();
   await new Promise((done) => media.close(done));
 }
