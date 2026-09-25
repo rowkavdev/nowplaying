@@ -7,8 +7,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const bundle = process.argv[2];
-const out = process.argv[3];
+const bundle = process.argv[2] ? join(process.cwd(), process.argv[2]) : null;
+const out = process.argv[3] ? join(process.cwd(), process.argv[3]) : null;
 if (process.platform !== "win32" || !bundle || !out) throw new Error("Windows bundle and artifact directory required");
 const { chromium } = await import("playwright-core");
 const temp = await mkdtemp(join(tmpdir(), "np-webui-e2e-"));
