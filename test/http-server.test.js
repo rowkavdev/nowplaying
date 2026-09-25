@@ -294,3 +294,28 @@ test("open write paths skip the origin and session checks but stay JSON-only (#1
   });
   assert.throws(() => createHttpServer({ handler: async () => null, openWritePaths: ["bridge"] }), /openWritePaths/);
 });
+
+test("a response that fails after its headers are set drops the connection instead of crashing the app", { timeout: 5000 }, async () => {
+  const rejections = [];
+  const onRejection = (error) => rejections.push(error);
+  process.on("unhandledRejection", onRejection);
+  let calls = 0;
+  const app = createHttpServer({
+    port: 0,
+    handler: async () => (++calls === 1
+      ? { status: 200, headers: { "Content-Type": "text/plain" }, body: { not: "a string" } }
+      : { status: 200, headers: { "Content-Type": "text/plain" }, body: "ok" }),
+  });
+  const { port } = await app.listen();
+  try {
+    await assert.rejects(get(port, "/broken"));
+    const next = await get(port, "/fine");
+    assert.equal(next.status, 200);
+    assert.equal(next.body, "ok");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(rejections, []);
+  } finally {
+    process.off("unhandledRejection", onRejection);
+    await app.close();
+  }
+});
