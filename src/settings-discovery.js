@@ -10,12 +10,12 @@ const PORTS = Object.freeze([
 ]);
 const MAX_REPLY = 64 * 1024;
 
-// No implicit subnet enumeration: a VPN can look like any RFC1918 interface.
+// No implicit subnet or gateway enumeration: a VPN can look like any RFC1918 interface.
 // The user must explicitly supply the private /24 they want probed.
 export function subnetCandidates(subnet) {
   if (subnet === undefined || subnet === null || subnet === "") return [];
-  if (typeof subnet !== "string" || !/^(?:\d{1,3}\.){3}(?:0\/24|\d{1,3})$/.test(subnet)) throw new TypeError("enter a private IPv4 subnet (x.y.z.0/24)");
-  const address = subnet.replace(/\/24$/, "");
+  if (typeof subnet !== "string" || !/^(?:\d{1,3}\.){3}0\/24$/.test(subnet)) throw new TypeError("enter a private IPv4 subnet (x.y.z.0/24)");
+  const address = subnet.slice(0, -3);
   if (!isPrivateHost(address)) throw new TypeError("subnet must be private");
   const parts = address.split(".");
   return Array.from({ length: 254 }, (_, i) => `${parts.slice(0, 3).join(".")}.${i + 1}`);
@@ -24,7 +24,7 @@ export function subnetCandidates(subnet) {
 export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64 } = {}) {
   if (signal?.aborted) return [];
   if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 254 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
-  const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal }).catch(() => []);
+  const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal, networkHosts: [] }).catch(() => []);
   if (signal?.aborted) return [];
   const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => PORTS.map((probe) => ({ host, probe })));
   const results = [];

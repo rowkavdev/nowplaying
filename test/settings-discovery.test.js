@@ -12,6 +12,7 @@ test("does not enumerate interfaces; scans only an explicitly selected private /
   assert.equal(hosts.at(-1), "192.168.7.254");
   assert.throws(() => subnetCandidates("8.8.8.0/24"), /private/);
   assert.throws(() => subnetCandidates("10.1.0.0/16"), /private IPv4 subnet/);
+  assert.throws(() => subnetCandidates("10.8.0.42"), /private IPv4 subnet/);
 });
 test("probes known ports without credentials or redirect, finds a server and ignores public hosts", async () => {
   const calls = [];
@@ -34,8 +35,9 @@ test("aborted scan schedules no further probes", async () => {
 
 test("cancels local gateway and UDP discovery before LAN probes", async () => {
   const controller = new AbortController();
-  let receivedSignal;
-  const servers = await discoverSettingsServers({ hosts: ["192.168.1.42"], signal: controller.signal, localDiscover: async ({ signal }) => { receivedSignal = signal; controller.abort(); return []; }, fetchImpl: async () => { throw new Error("LAN scan must not start"); } });
+  let receivedSignal; let receivedHosts;
+  const servers = await discoverSettingsServers({ hosts: ["192.168.1.42"], signal: controller.signal, localDiscover: async ({ signal, networkHosts }) => { receivedSignal = signal; receivedHosts = networkHosts; controller.abort(); return []; }, fetchImpl: async () => { throw new Error("LAN scan must not start"); } });
   assert.equal(receivedSignal, controller.signal);
+  assert.deepEqual(receivedHosts, []);
   assert.deepEqual(servers, []);
 });
