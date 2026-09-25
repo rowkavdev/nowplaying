@@ -24,7 +24,7 @@ Two ways to run nowplaying on Windows. The installer is the easy path; the porta
 
 ## After install
 
-The first launch with no saved settings opens the setup page in your browser. Continue with the [Quick start](Quick-Start) from step 2.
+The first launch with no saved settings opens WebUI Settings in your browser. Continue with the [Quick start](Quick-Start) from step 2.
 
 ## Uninstall
 

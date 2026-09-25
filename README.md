@@ -17,8 +17,8 @@ Show what you are playing from Plex, Jellyfin, Navidrome or Emby in a GitHub REA
    Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
    ```
 
-2. Run the installer, or extract the ZIP and run `nowplaying.exe` without separating it from the other extracted files. On first launch, the setup page opens in your browser. Connect a media server and run its connection test. You can add more than one server.
-3. Turn on Discord in setup if you want Rich Presence. Keep the Discord desktop app open. Play something and check the app's local status page (`http://127.0.0.1:47832/`). The local card is at [`/card.svg`](http://127.0.0.1:47832/card.svg); [`/healthz`](http://127.0.0.1:47832/healthz) checks only whether the app responds.
+2. Run the installer, or extract the ZIP and run `nowplaying.exe` without separating it from the other extracted files. On first launch, WebUI Settings opens in your browser. Connect a discovered media server, or enter its address. You can add more than one server.
+3. Turn on Discord in Settings if you want Rich Presence. Keep the Discord desktop app open. Play something and check the app's local status page (`http://127.0.0.1:47832/`). The local card is at [`/card.svg`](http://127.0.0.1:47832/card.svg); [`/healthz`](http://127.0.0.1:47832/healthz) checks only whether the app responds.
 4. To put a card in a README, enable the hosted card in Settings and copy the generated Markdown snippet. You can optionally sign in with GitHub to use one card across your PCs. Your media server does not need a public port.
 
 Start with the [step-by-step guide](docs/wiki/Quick-Start.md) if you need provider sign-in instructions. [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Connect-Jellyfin.md) · [Navidrome](docs/wiki/Connect-Navidrome.md) · [Emby](docs/wiki/Connect-Emby.md) · [Spotify](docs/wiki/Connect-Spotify.md) · [YouTube extension](docs/wiki/Connect-YouTube.md).
@@ -35,7 +35,7 @@ The hosted card is opt-in. It receives the fields you have allowed for the card,
 
 ## Settings and problems
 
-Use the tray icon to open Settings, change privacy and card appearance, or run setup again. Settings, connection state and logs are served locally on `127.0.0.1` by default. See [customization](docs/customization.md) for supported controls and [troubleshooting](docs/wiki/Troubleshooting.md) for connection, card and Discord problems. GitHub caches README images, so compare a stale README card with the card URL opened directly.
+Use the tray icon to open Settings, change privacy and card appearance, or manage servers there. Settings, connection state and logs are served locally on `127.0.0.1` by default. See [customization](docs/customization.md) for supported controls and [troubleshooting](docs/wiki/Troubleshooting.md) for connection, card and Discord problems. GitHub caches README images, so compare a stale README card with the card URL opened directly.
 
 ## Develop
 

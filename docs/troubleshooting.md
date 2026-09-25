@@ -84,7 +84,7 @@ Discord fetches images itself, so it can only show public HTTPS artwork. Covers 
 
 If nowplaying fails to start three times in a row (or crashes within a minute of starting), the next start is in safe mode. Safe mode is offline: it doesn't read your saved sign-in or contact your media server, and Discord presence, hosted card uploads and update checks stay off. The card shows nothing playing. The status page still opens from the tray, with Settings, Logs and **Download** diagnostics. The log records `SAFE_MODE_<PART>`, where the part is whatever failed last, for example `SAFE_MODE_CONFIGURATION`.
 
-To leave safe mode, right-click the tray icon and choose **Run setup again**. The next start is a normal one. If it keeps failing, export diagnostics from the status page and include them when you report the problem.
+To leave safe mode, change and save a server in WebUI Settings, or quit and restart the app. The next start is a normal one. If it keeps failing, export diagnostics from the status page and include them when you report the problem.
 
 ## Update check fails
 
@@ -100,7 +100,7 @@ The updater is notify-only unless install behavior has been explicitly enabled.
 NowPlaying keeps its settings in `config.json` (on Windows: `%LOCALAPPDATA%\nowplaying\config.json`). When a new version changes the config format, NowPlaying upgrades the file at start-up. Before it changes anything, it saves a copy next to it as `config.json.backup-<date and time>`. The new file only replaces the old one after it has been checked.
 
 - If the upgrade fails, the original file is left exactly as it was.
-- If the config was saved by a newer NowPlaying (for example after going back to an older version), the app won't start and says so, and the file is not changed. Update NowPlaying, or run `nowplaying.exe setup` to start again.
+- If the config was saved by a newer NowPlaying (for example after going back to an older version), the app won't start and says so, and the file is not changed. Update NowPlaying; if you need to restore an older backup, follow the steps below.
 - To go back to a backup: close NowPlaying, delete `config.json`, rename the backup you want to `config.json`, then start NowPlaying again.
 
 Backups never contain your sign-in. That stays in Windows Credential Manager.

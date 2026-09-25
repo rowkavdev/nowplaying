@@ -1,6 +1,6 @@
 # Advanced configuration
 
-Everything here is optional. The setup page and Settings cover normal use; this page is for people who want the file and command line.
+Everything here is optional. WebUI Settings covers normal use; this page is for people who want the file and command line.
 
 ## The settings file
 
