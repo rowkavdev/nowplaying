@@ -17,14 +17,16 @@ export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 32400, path: "/identity", classify: classifyPlex }),
 ]);
 
-export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT } = {}) {
+export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT, signal } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
+  if (signal?.aborted) return [];
   const jobs = probes.map((probe) => ({ host: HOST, probe }));
   for (const host of networkHosts) for (const probe of probes) if (NETWORK_PORTS.includes(probe.port)) jobs.push({ host, probe });
   const [results, lan] = await Promise.all([
-    runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs)),
-    typeof discoverLan === "function" ? discoverLan({ timeoutMs }).catch(() => []) : [],
+    runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs, signal), signal),
+    typeof discoverLan === "function" ? discoverLan({ timeoutMs, signal }).catch(() => []) : [],
   ]);
+  if (signal?.aborted) return [];
   const found = results.filter(Boolean);
   return mergeServers(found.filter((s) => s.baseUrl.startsWith(`http://${HOST}:`)), [...found.filter((s) => !s.baseUrl.startsWith(`http://${HOST}:`)), ...(Array.isArray(lan) ? lan : [])]);
 }
@@ -49,11 +51,11 @@ export function gatewayCandidates(networkInterfaces = osNetworkInterfaces) {
 
 function isPrivate([a, b]) { return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168); }
 
-async function runLimited(items, limit, worker) {
+async function runLimited(items, limit, worker, signal) {
   const results = new Array(items.length);
   let next = 0;
   const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-    while (next < items.length) { const i = next++; results[i] = await worker(items[i]); }
+    while (next < items.length && !signal?.aborted) { const i = next++; results[i] = await worker(items[i]); }
   });
   await Promise.all(lanes);
   return results;
@@ -75,10 +77,13 @@ export function mergeServers(local, lan) {
   return Object.freeze(merged);
 }
 
-async function runProbe(host, probe, fetchImpl, timeoutMs) {
+async function runProbe(host, probe, fetchImpl, timeoutMs, signal) {
   const baseUrl = `http://${host}:${probe.port}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) controller.abort();
+  const timer = setTimeout(abort, timeoutMs);
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const declared = Number(response.headers?.get?.("content-length"));
@@ -93,6 +98,7 @@ async function runProbe(host, probe, fetchImpl, timeoutMs) {
     return null;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
   }
 }
 

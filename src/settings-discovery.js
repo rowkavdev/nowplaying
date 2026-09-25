@@ -15,7 +15,8 @@ export function subnetCandidates(networkInterfaces = osNetworkInterfaces) {
   const segments = new Set();
   let interfaces;
   try { interfaces = networkInterfaces() ?? {}; } catch { return []; }
-  for (const addresses of Object.values(interfaces)) for (const entry of addresses ?? []) {
+  for (const [name, addresses] of Object.entries(interfaces)) for (const entry of addresses ?? []) {
+    if (/(?:^|[-_ ])(?:tun|tap|utun|ppp|wg|tailscale|zerotier|zt|warp|vpn)(?:\d|[-_ ]|$)/i.test(name) || /^(?:tun|tap|utun|ppp|wg|tailscale|zt|warp|vpn)/i.test(name)) continue;
     if (!entry || entry.internal || (entry.family !== "IPv4" && entry.family !== 4)) continue;
     const octets = String(entry.address).split(".").map(Number);
     if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) continue;
@@ -31,7 +32,7 @@ export function subnetCandidates(networkInterfaces = osNetworkInterfaces) {
 export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = subnetCandidates(), signal, timeoutMs = 220, concurrency = 64 } = {}) {
   if (signal?.aborted) return [];
   if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 508 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
-  const local = await localDiscover({ fetchImpl, timeoutMs: 1200 }).catch(() => []);
+  const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal }).catch(() => []);
   if (signal?.aborted) return [];
   const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => PORTS.map((probe) => ({ host, probe })));
   const results = [];
