@@ -182,6 +182,8 @@ export function createAppSettingsStore({ file, renameFile = rename, renameRetryD
     return run;
   }
   return Object.freeze({
+    // A server add/remove shares this queue with ordinary Settings saves.
+    serial: queued,
     // One write at a time: two quick saves never race each other.
     updateDiscord: (changes) => queued(() => update(applyDiscordChanges, changes)),
     updateHosted: (changes) => queued(() => update(applyHostedChanges, changes)),

@@ -452,7 +452,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     fallback: logsHandler,
   });
   const management = deviceId && typeof credentialStore.save === "function"
-    ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
+    ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: settingsStore.serial, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
     : null;
   const pageHandler = createSettingsPageHandler({ settings, fallback: management ? (request) => management.handler(request).then((result) => result ?? devicesHandler(request)) : devicesHandler });
   const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;

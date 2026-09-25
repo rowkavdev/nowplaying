@@ -11,13 +11,14 @@ import { discoverSettingsServers, subnetCandidates } from "./settings-discovery.
 const SAFE = new Set(["same-origin", "none"]);
 const PROVIDERS = new Set(["plex", "jellyfin", "emby", "navidrome"]);
 
-export function createSettingsServers({ file, credentialStore, deviceId, version, onConfigured = async () => {}, discover = discoverSettingsServers, signIn } = {}) {
+export function createSettingsServers({ file, credentialStore, deviceId, version, onConfigured = async () => {}, discover = discoverSettingsServers, signIn, fileQueue } = {}) {
   if (!file || typeof credentialStore?.save !== "function" || typeof credentialStore?.read !== "function") throw new TypeError("server management needs config file and credential store");
   let queue = Promise.resolve();
   let scan = null;
   let cached = null;
   let configured = false;
   function serial(job) {
+    if (fileQueue) return fileQueue(job);
     const run = queue.then(job);
     queue = run.catch(() => {});
     return run;
