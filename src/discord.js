@@ -82,8 +82,16 @@ function timestampFields(presence, mode) {
 // ("details length must be at least 2 characters long"), so a track called
 // "i" or an album called "?" would never show. Pad with a blank Braille
 // character, which Discord shows as empty space.
+// The 128 limit counts UTF-16 units (JavaScript string length), so an emoji
+// uses two. Cut whole code points only, so a surrogate pair is never split.
 function trimDiscordText(value) {
-  const chars = [...value].slice(0, 128);
+  const chars = [];
+  let units = 0;
+  for (const char of value) {
+    if (units + char.length > 128) break;
+    chars.push(char);
+    units += char.length;
+  }
   if (chars.length === 1) chars.push("\u2800");
   return chars.join("");
 }
