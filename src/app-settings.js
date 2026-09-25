@@ -73,7 +73,7 @@ function checkChanges(changes, allowed, name) {
 }
 
 // serializeSetupConfig validates every value the same way setup does.
-function rewrite(config, { servers = config.servers, discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card } = {}) {
+function rewrite(config, { servers = config.servers, discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card, spotify = config.spotify } = {}) {
   const text = serializeSetupConfig({
     // Every server is kept; settings changes never drop one (#252).
     servers: servers.map(({ provider, serverUrl, identity }) => ({ provider, ...(serverUrl ? { serverUrl } : {}), identity })),
@@ -86,7 +86,7 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     ...(privacy ? { privacy } : {}),
     ...(card ? { card } : {}),
     // Settings changes never drop the Spotify connection (#135).
-    ...(config.spotify ? { spotify: { clientId: config.spotify.clientId, identity: config.spotify.identity } } : {}),
+    ...(spotify ? { spotify: { clientId: spotify.clientId, identity: spotify.identity } } : {}),
   });
   return Object.freeze({ text, config: parseAppConfig(text) });
 }
@@ -95,6 +95,15 @@ export function applyDiscordChanges(config, changes) {
   checkChanges(changes, DISCORD_KEYS, "discord");
   if (changes.idleBehavior !== undefined && !IDLE_BEHAVIORS.includes(changes.idleBehavior)) throw new TypeError("discord settings: idleBehavior is invalid");
   return rewrite(config, { discord: { ...discordSettingsView(config), ...changes } });
+}
+
+export function applySpotifyChanges(config, spotify) {
+  if (spotify !== null && (!spotify || typeof spotify !== "object" || !/^[0-9a-f]{32}$/i.test(spotify.clientId ?? "") || !spotify.identity)) throw new TypeError("invalid Spotify account");
+  return rewrite(config, { spotify });
+}
+export function applyHostedDestinationChanges(config, changes) {
+  if (!changes || changes.enabled !== true || (changes.url !== null && changes.url !== undefined && typeof changes.url !== "string")) throw new TypeError("invalid hosted destination");
+  return rewrite(config, { hosted: { enabled: true, ...(changes.url ? { url: changes.url } : {}) } });
 }
 
 // Only on/off: the service address stays whatever setup or config.json says.
@@ -182,10 +191,14 @@ export function createAppSettingsStore({ file, renameFile = rename, renameRetryD
     return run;
   }
   return Object.freeze({
+    // A server add/remove shares this queue with ordinary Settings saves.
+    serial: queued,
     // One write at a time: two quick saves never race each other.
     updateDiscord: (changes) => queued(() => update(applyDiscordChanges, changes)),
     updateHosted: (changes) => queued(() => update(applyHostedChanges, changes)),
     updatePrivacy: (changes) => queued(() => update(applyPrivacyChanges, changes)),
     updateCard: (changes) => queued(() => update(applyCardChanges, changes)),
+    updateSpotify: (changes) => queued(() => update(applySpotifyChanges, changes)),
+    updateHostedDestination: (changes) => queued(() => update(applyHostedDestinationChanges, changes)),
   });
 }

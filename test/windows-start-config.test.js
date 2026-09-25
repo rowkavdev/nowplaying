@@ -9,7 +9,7 @@ import { createCredentialStore } from "../src/credential-store.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 
-// Windows round trip: a config like the wizard writes, a sign-in in the real
+// Windows round trip: a compatible config, a sign-in in the real
 // Credential Manager, then `start` (no argument) through the real entry point.
 const ENTRY = fileURLToPath(new URL("../scripts/windows-entry.js", import.meta.url));
 const windows = { skip: process.platform !== "win32" };
@@ -24,11 +24,21 @@ function runStart(localAppData, cwd, args = []) {
   return { child, exited, output: () => ({ stdout, stderr }) };
 }
 
-test("start --no-setup with no config tells the user to run setup", windows, async () => {
+test("start --no-setup with no config serves WebUI Settings", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-start-"));
   const run = runStart(dir, dir, ["--no-setup"]);
-  assert.equal(await run.exited, 1);
-  assert.match(run.output().stderr, /nowplaying\.exe setup/);
+  try {
+    const url = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`WebUI did not come up: ${JSON.stringify(run.output())}`)), 20000);
+      run.child.stdout.on("data", () => {
+        const match = run.output().stdout.match(/NowPlaying Settings: (http:\/\/127\.0\.0\.1:\d+\/settings)/);
+        if (match) { clearTimeout(timer); resolve(match[1]); }
+      });
+      run.exited.then((code) => { clearTimeout(timer); reject(new Error(`start exited ${code}: ${JSON.stringify(run.output())}`)); });
+    });
+    assert.equal((await fetch(url)).status, 200);
+    assert.equal((await (await fetch(new URL("/api/settings/servers", url))).json()).firstRun, true);
+  } finally { run.child.kill(); await run.exited; }
 });
 
 test("start rejects unknown options", windows, async () => {
@@ -38,7 +48,7 @@ test("start rejects unknown options", windows, async () => {
   assert.match(run.output().stderr, /unknown start option: --bogus/);
 });
 
-test("start runs from the wizard config and the real Credential Manager", windows, async () => {
+test("start runs from the saved config and the real Credential Manager", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-start-"));
   const identityId = `ci-${process.pid}-${Date.now()}`;
   const store = createCredentialStore({ adapter: createWindowsCredentialAdapter() });
@@ -85,7 +95,7 @@ function runWithoutLocalAppData(args) {
 }
 
 test("start and setup without LOCALAPPDATA say so plainly, no stack trace (#500)", async () => {
-  for (const args of [["start"], ["start", "--no-setup"], ["setup"]]) {
+  for (const args of [["start"], ["start", "--no-setup"]]) {
     const run = runWithoutLocalAppData(args);
     assert.equal(await run.exited, 1, args.join(" "));
     assert.match(run.output().stderr, /LOCALAPPDATA is not set/);

@@ -22,13 +22,13 @@ Spotify asks each nowplaying user to register their own "app" (free, takes two m
    Spotify refuses `localhost` here; it must be `127.0.0.1`.
 4. Save, then copy the app's **Client ID** (a 32-character string of letters and numbers).
 
-## 2. Sign in from setup
+## 2. Sign in from Settings
 
-1. Open setup - it opens in your browser on first launch, or choose **Run setup again** from the tray icon - and find the **Spotify** section.
+1. Open **Settings** from the tray icon and find **Spotify and hosted card > Spotify**. On a new install, connect a media server first, then use Settings.
 2. Paste your **Client ID** and choose **Sign in with Spotify**.
-3. Spotify opens in your browser. Approve the access request. The setup page updates itself when sign-in completes.
+3. Spotify opens in your browser. Approve the access request. The Settings page updates itself when sign-in completes.
 
-Success looks like: setup shows **Connected as** your Spotify account, and the summary at the end reads **Spotify on your card: On**. Play music or a podcast in any Spotify app and it shows up.
+Success looks like: Settings shows **Connected as** your Spotify account. Play music or a podcast in any Spotify app and it shows up.
 
 To unlink later, use **Disconnect Spotify** in the same section.
 

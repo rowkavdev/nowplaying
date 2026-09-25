@@ -6,6 +6,7 @@
 
 import { normalizeCard } from "./setup-config.js";
 import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
+import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,11 +14,8 @@ const PAGE = `<!doctype html>
 <body><main>
 <nav><a href="/">Status</a> <span aria-current="page">Settings</span> <a href="/logs">Logs</a></nav>
 <h1>Settings</h1>
-<section id="servers-section" aria-labelledby="h-servers"><h2 id="h-servers">Servers</h2>
-<ul id="servers-list" class="plain"><li>Loading...</li></ul>
-<p id="servers-setup-row" class="row" hidden><button type="button" id="servers-setup">Add or remove servers</button> <span id="servers-result" role="status" aria-live="polite"></span></p>
-<p id="servers-setup-hint" class="hint">Adding or removing a server opens setup. NowPlaying restarts with the new servers when you finish.</p>
-</section>
+${serverPanel()}
+${servicePanel()}
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
@@ -147,7 +145,8 @@ const PAGE = `<!doctype html>
 </main><script src="/settings.js"></script></body></html>
 `;
 
-const CSS = `ul.plain{list-style:none;padding:0;margin:0 0 12px}ul.plain li{margin:0 0 6px}
+const CSS = `${SERVER_CSS}
+ul.plain{list-style:none;padding:0;margin:0 0 12px}ul.plain li{margin:0 0 6px}
 .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label[for]{min-width:184px;color:#555}
 select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 .hint{color:#555;font-size:13px;margin:0 0 12px}.hint a{color:inherit}
@@ -376,55 +375,6 @@ document.getElementById("youtube-reset").addEventListener("click", async (event)
 loadYouTube();
 // Servers (#253): the list comes from the status API; changes go through
 // setup, which the app's tray session opens and then restarts the app.
-const SERVER_WORDS = { playing: "playing", paused: "paused", idle: "connected", connected: "connected", waiting: "waiting for first check", error: "can't reach it", unavailable: "sign-in missing" };
-function serverItem(row) {
-  const li = document.createElement("li");
-  const name = document.createElement("strong");
-  name.textContent = row.type || "Server";
-  li.append(name, " " + [row.user ? "as " + row.user : null, row.address || null].filter(Boolean).join(" - "));
-  const state = document.createElement("span");
-  const word = SERVER_WORDS[row.state] || row.state || "";
-  state.textContent = word ? " - " + word + (row.reason ? " (" + row.reason + ")" : "") : "";
-  state.className = row.state === "error" || row.state === "unavailable" ? "bad" : "";
-  li.append(state);
-  return li;
-}
-async function loadServers() {
-  const list = document.getElementById("servers-list");
-  try {
-    const [statusRes, settingsRes] = await Promise.all([
-      fetch("/api/status", { cache: "no-store", headers: { Accept: "application/json" } }),
-      fetch("/api/settings", { cache: "no-store", headers: { Accept: "application/json" } }),
-    ]);
-    if (!statusRes.ok || !settingsRes.ok) throw new Error("load");
-    const status = await statusRes.json();
-    const all = await settingsRes.json();
-    const rows = Array.isArray(status.servers) && status.servers.length ? status.servers : status.server ? [status.server] : [];
-    list.replaceChildren(...(rows.length ? rows.map(serverItem) : [Object.assign(document.createElement("li"), { textContent: "No servers set up yet." })]));
-    const canOpen = Boolean(all.setup && all.setup.available);
-    document.getElementById("servers-setup-row").hidden = !canOpen;
-    document.getElementById("servers-setup-hint").textContent = canOpen
-      ? "Adding or removing a server opens setup. NowPlaying restarts with the new servers when you finish."
-      : "To add or remove a server, run nowplaying.exe setup.";
-  } catch {
-    list.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Can't load your servers. Reload the page to try again." }));
-  }
-}
-document.getElementById("servers-setup").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const say = (text, tone) => { const el = document.getElementById("servers-result"); el.textContent = text; el.className = tone || ""; };
-  button.disabled = true;
-  say("Opening setup...", "warn");
-  try {
-    const res = await fetch("/api/settings/servers/setup", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: "{}" });
-    if (!res.ok) throw new Error(String(res.status));
-    say("Setup is open in its own window. Reload this page when you have finished.", "ok");
-  } catch {
-    button.disabled = false;
-    say("Couldn't open setup. Try the tray menu's Run setup again.", "bad");
-  }
-});
-loadServers();
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
 function startupSay(text, tone) { const el = document.getElementById("startup-result"); el.textContent = text; el.className = tone || ""; }
 function showStartup(s) { startup.form.hidden = !s || !s.available; if (s) startup.enabled.checked = s.startWithWindows; }
@@ -557,12 +507,13 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
   if (typeof fallback !== "function") throw new TypeError("fallback: expected a handler");
   const assets = {
     "/settings": { body: PAGE, type: "text/html; charset=utf-8", page: true },
+    "/servers.js": { body: SERVER_SCRIPT, type: "text/javascript; charset=utf-8" },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
-    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}`, type: "text/javascript; charset=utf-8" },
+    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, type: "text/javascript; charset=utf-8" },
   };
   const read = async () => {
     const value = await settings.read();
-    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}), ...(typeof settings.openSetup === "function" ? { setup: { available: true } } : {}) };
+    return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}) };
   };
   async function preview(request, method, url) {
     if (typeof settings.previewCard !== "function") return response(404, "Not Found");
@@ -576,16 +527,8 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     if (typeof svg !== "string" || !svg.includes("<svg")) return response(503, "Preview unavailable", { "Cache-Control": "no-store" });
     return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
   }
-  // "Add or remove servers" (#253): asks the app's host to open setup. The
-  // app restarts once setup closes, so this answers straight away.
-  async function openSetup(request, method) {
-    if (typeof settings.openSetup !== "function") return response(404, "Not Found");
-    if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
-    const site = header(request?.headers, "sec-fetch-site");
-    if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
-    try { settings.openSetup(); } catch { return json(500, { error: "open_failed" }); }
-    return json(202, { opening: true });
-  }
+  // The old button opened a separate wizard. It is intentionally gone.
+  async function openSetup() { return response(410, "Use Settings to add servers"); }
   // YouTube extension pairing token (#136). POST even for reading, so the
   // server's session check applies and only this app's own page gets the
   // token. Reset makes a new one.
@@ -659,3 +602,19 @@ function header(headers, name) {
   return key ? headers[key] : undefined;
 }
 function response(status, body, headers = {}) { return Object.freeze({ status, headers: Object.freeze(headers), body }); }
+
+// No-config first run uses the same server panel and assets as configured Settings.
+export function createFirstRunSettingsHandler({ servers } = {}) {
+  if (typeof servers !== "function") throw new TypeError("servers handler required");
+  const assets = { "/settings": [ONBOARDING_HTML, "text/html; charset=utf-8", true], "/settings.css": [CSS, "text/css; charset=utf-8"], "/status.css": ["body{font:15px/1.5 Segoe UI,system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#f6f6f8;color:#1b1b1f}section{background:#fff;padding:16px;border:1px solid #ddd;border-radius:8px;margin:16px 0}button{font:inherit;padding:6px 12px;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#444}}", "text/css; charset=utf-8"], "/servers.js": [`${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, "text/javascript; charset=utf-8"] };
+  return async (request) => {
+    const path = new URL(request?.url || "/", "http://127.0.0.1").pathname;
+    if (path === "/") return { status: 302, headers: { Location: "/settings" }, body: "" };
+    if (assets[path]) {
+      if (!["GET", "HEAD"].includes(request?.method ?? "GET")) return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
+      const [body, type, page] = assets[path];
+      return { ...response(200, request?.method === "HEAD" ? "" : body, { "Content-Type": type }), ...(page ? { page: true } : {}) };
+    }
+    return servers(request);
+  };
+}
