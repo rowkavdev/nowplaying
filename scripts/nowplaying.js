@@ -42,7 +42,7 @@ if (command === "--version" || command === "version") {
 async function start() {
   const unknown = args.find((arg) => arg !== "--no-setup");
   if (unknown) { console.error(`nowplaying: unknown start option: ${unknown}`); process.exit(2); }
-  const paths = appPaths();
+  const paths = dataPaths();
   const logger = createAppLogger({ file: paths.logFile });
   await logger.event("startup", "starting");
   let app;
@@ -77,7 +77,7 @@ async function start() {
 async function setup() {
   const unknown = args.find((arg) => arg !== "--no-open");
   if (unknown) { console.error(`nowplaying: unknown setup option: ${unknown}`); process.exit(2); }
-  const server = await startSetup(appPaths());
+  const server = await startSetup(dataPaths());
   const close = async () => { await server.close(); };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
@@ -88,6 +88,16 @@ async function setup() {
 async function version() {
   try { return JSON.parse(await readFile(manifestFile, "utf8")).version ?? null; }
   catch { return null; }
+}
+
+// HOME can be missing (stripped environments, some service managers): say so
+// plainly instead of dying on a TypeError stack (#500).
+function dataPaths() {
+  try { return appPaths(); }
+  catch {
+    console.error("nowplaying: HOME is not set, so NowPlaying cannot find its data folder. Set HOME and retry.");
+    process.exit(1);
+  }
 }
 
 async function startSetup(paths) {
