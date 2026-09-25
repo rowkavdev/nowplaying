@@ -4,15 +4,15 @@ Two ways to run nowplaying on Windows. The installer is the easy path; the porta
 
 ## Installer (recommended)
 
-1. Open the [latest release](https://github.com/rowkavdev/nowplaying/releases/latest) and download the `...-setup.exe` and `SHA256SUMS`.
+1. For the current development build, open the [rolling dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev) and download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS`. This prerelease is still being tested.
 2. Check the download in PowerShell:
 
    ```powershell
-   Get-FileHash .\nowplaying-0.1.0-windows-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
    ```
 
    The hash must match the file's line in `SHA256SUMS`.
-3. Run the installer. Windows may show a SmartScreen warning (the app isn't code-signed yet): **More info**, then **Run anyway**.
+3. Run the installer. It is not code-signed, so Windows may show a SmartScreen warning. Only continue after checking the hash and trusting the release source.
 4. On the Startup step, tick **Start nowplaying when I sign in** if you want it always on.
 5. It installs for your user only, no admin prompt, usually to `%LOCALAPPDATA%\Programs\nowplaying`.
 
