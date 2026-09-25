@@ -84,3 +84,13 @@ test("Spotify completes without restarting before the browser receives success",
   await new Promise((resolve) => setTimeout(resolve, 550));
   assert.equal(restartCount, 1, "restart only once the result was delivered");
 });
+
+
+test("Spotify disconnect reports OS keychain removal failure without keeping config reference", async () => {
+  const file=await configFile();
+  const svc=createSettingsConnectedServices({file,credentialStore:{save:async()=>{},remove:async()=>{throw new Error("keychain unavailable");}},spotifySignIn:()=>Promise.resolve(null)});
+  await writeFile(file, serializeSetupConfig({provider:"jellyfin",serverUrl:"http://127.0.0.1:8096",identity:{id:"u1",displayName:"R"},credentialStored:true,spotify:{clientId:CID,identity:{id:"rowan",displayName:"Rowan"}}}));
+  const result=await svc.handler(post("/api/settings/services",{action:"remove-spotify"}));
+  assert.deepEqual(JSON.parse(result.body),{removed:true,tokenRemoved:false});
+  assert.equal(JSON.parse(await readFile(file,"utf8")).spotify,undefined);
+});
