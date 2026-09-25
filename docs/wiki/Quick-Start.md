@@ -18,7 +18,7 @@ Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This gu
 
 The first time nowplaying starts with no saved settings, it opens WebUI Settings in your web browser. There is no console window and nothing to type in a terminal.
 
-1. **Connect your media server.** Choose a discovered server or enter its address, then follow the sign-in guide for [Plex](Connect-Plex), [Jellyfin](Connect-Jellyfin), [Navidrome](Connect-Navidrome) or [Emby](Connect-Emby). The server appears in Settings after sign-in; add or remove servers there later. [Spotify](Connect-Spotify) and the [YouTube extension](Connect-YouTube) are optional sources. Spotify does not appear in Discord.
+1. **Connect your media server.** Choose a discovered server or enter its address, then follow the sign-in guide for [Plex](Connect-Plex), [Jellyfin](Connect-Jellyfin), [Navidrome](Connect-Navidrome) or [Emby](Connect-Emby). The server appears in Settings after sign-in; add or remove servers there later. **Spotify and hosted card** sign-ins are optional and available on this same first-run page and in Settings later. [Spotify](Connect-Spotify) does not appear in Discord. The [YouTube extension](Connect-YouTube) is another optional source.
 
 2. **Turn on Discord.** Keep the Discord desktop app open, enable Discord in Settings after connecting your server, and use the card preview to check how it looks.
 3. Once a server is connected, the app starts. Your settings are saved on your PC. Sign-ins live in Windows Credential Manager, not in the settings file.

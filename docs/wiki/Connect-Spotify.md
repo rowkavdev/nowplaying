@@ -24,13 +24,13 @@ Spotify asks each nowplaying user to register their own "app" (free, takes two m
 
 ## 2. Sign in from Settings
 
-1. Open **Settings** from the tray icon and find **Spotify and hosted card > Spotify**. On a new install, connect a media server first, then use Settings.
+1. Open **Settings** from the tray icon and find **Spotify and hosted card > Spotify**. On a new install, you can sign in here before connecting a media server; the connection takes effect once the server starts.
 2. Paste your **Client ID** and choose **Sign in with Spotify**.
 3. Spotify opens in your browser. Approve the access request. The Settings page updates itself when sign-in completes.
 
 Success looks like: Settings shows **Connected as** your Spotify account. Play music or a podcast in any Spotify app and it shows up.
 
-To unlink later, use **Disconnect Spotify** in the same section.
+To unlink later, use **Disconnect Spotify** in the same section. If Settings says the saved token could not be deleted, the card is disconnected but the token remains in your operating system credential manager. Remove the `nowplaying` Spotify entry there and revoke nowplaying access in your Spotify account settings.
 
 ## What nowplaying can see
 
