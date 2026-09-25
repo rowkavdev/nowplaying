@@ -1,5 +1,6 @@
-// On-demand LAN discovery for the browser Settings page. Never scans public,
-// VPN or large subnets, follows redirects, or sends credentials to a candidate.
+// On-demand server discovery for the browser Settings page. Does not enumerate
+// private interfaces. Explicit private /24 scans may still target a VPN.
+// Never follows redirects or sends credentials to a candidate.
 import { classifyJellyfinOrEmby, classifyPlex, classifySubsonic, discoverLocalServers, mergeServers } from "./setup-discovery.js";
 
 const PORTS = Object.freeze([

@@ -7,7 +7,8 @@ import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
 import { createAppStatus } from "./app-status.js";
 import { createStatusPageHandler } from "./status-page-handler.js";
-import { createSettingsPageHandler } from "./settings-page-handler.js";
+import { createFirstRunSettingsHandler, createSettingsPageHandler } from "./settings-page-handler.js";
+import { createSettingsServers } from "./settings-servers.js";
 import { createHostedDevicesClient, createHostedDevicesHandler } from "./hosted-devices.js";
 import { createLogsPageHandler } from "./logs-page-handler.js";
 import { readLogTail } from "./log-tail.js";
@@ -275,9 +276,22 @@ export function youtubeForDiscord(source) {
   });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, createServer = createHttpServer } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, deviceId = null, onConfigured = async () => {}, discoverServers, signIn, createServer = createHttpServer } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
-  const config = await loadAppConfig(configFile);
+  let config;
+  try { config = await loadAppConfig(configFile); }
+  catch (error) {
+    if (error?.startupCode !== "CONFIG_MISSING" || !configFile) throw error;
+    if (typeof credentialStore.save !== "function" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId ?? "")) throw new StartupError("SETUP_UNAVAILABLE", "A credential store and stable device ID are needed to connect a server. Run `nowplaying setup` or install the desktop app.");
+    const management = createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) });
+    const handler = createFirstRunSettingsHandler({ servers: management.handler });
+    const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
+    let address;
+    try { address = await server.listen(); }
+    catch (listenError) { if (listenError?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use.`); throw listenError; }
+    const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
+    return Object.freeze({ firstRun: true, url: `http://${authority}:${address.port}`, close: () => server.close() });
+  }
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
   // broken sign-in or an unreachable server can't keep the start crashing. The
   // card shows idle; the status, settings and logs pages still work.
@@ -437,7 +451,10 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     onSignedOut: () => settings.disconnectHosted(),
     fallback: logsHandler,
   });
-  const pageHandler = createSettingsPageHandler({ settings, fallback: devicesHandler });
+  const management = deviceId && typeof credentialStore.save === "function"
+    ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
+    : null;
+  const pageHandler = createSettingsPageHandler({ settings, fallback: management ? (request) => management.handler(request).then((result) => result ?? devicesHandler(request)) : devicesHandler });
   const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
