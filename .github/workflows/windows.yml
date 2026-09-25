@@ -36,6 +36,21 @@ jobs:
       - name: Build and smoke-test EXE bundle
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Packaged WebUI first-run and provider activation screenshots
+        shell: pwsh
+        run: |
+          npm install --no-save --package-lock=false playwright-core
+          New-Item -ItemType Directory -Force windows-webui-evidence | Out-Null
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          node test/windows-webui-e2e.js "dist/windows/nowplaying-v$version-windows-x64" windows-webui-evidence
+      - name: Upload Windows WebUI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nowplaying-windows-webui-evidence
+          path: windows-webui-evidence/*.png
+          if-no-files-found: warn
+          retention-days: 14
       - name: Credential Manager round-trip
         run: node --test test/windows-credential-adapter.test.js
       - name: Native setup window self-test
