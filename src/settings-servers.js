@@ -11,7 +11,7 @@ import { discoverSettingsServers, subnetCandidates } from "./settings-discovery.
 const SAFE = new Set(["same-origin", "none"]);
 const PROVIDERS = new Set(["plex", "jellyfin", "emby", "navidrome"]);
 
-export function createSettingsServers({ file, credentialStore, deviceId, version, onConfigured = async () => {}, discover = discoverSettingsServers, signIn, fileQueue } = {}) {
+export function createSettingsServers({ file, credentialStore, deviceId, version, onConfigured = async () => {}, discover = discoverSettingsServers, signIn, fileQueue, beforeRestart = async () => {} } = {}) {
   if (!file || typeof credentialStore?.save !== "function" || typeof credentialStore?.read !== "function") throw new TypeError("server management needs config file and credential store");
   let queue = Promise.resolve();
   let scan = null;
@@ -55,6 +55,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
         servers[i] = { provider, serverUrl, identity };
       }
       await save(servers, existing);
+      await beforeRestart();
       configured = true;
       setTimeout(() => { Promise.resolve(onConfigured()).catch(() => {}); }, 500);
     }),

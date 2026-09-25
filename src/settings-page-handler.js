@@ -6,7 +6,7 @@
 
 import { normalizeCard } from "./setup-config.js";
 import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
-import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, serverPanel } from "./settings-onboarding-page.js";
+import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,6 +15,7 @@ const PAGE = `<!doctype html>
 <nav><a href="/">Status</a> <span aria-current="page">Settings</span> <a href="/logs">Logs</a></nav>
 <h1>Settings</h1>
 ${serverPanel()}
+${servicePanel()}
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
@@ -508,7 +509,7 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     "/settings": { body: PAGE, type: "text/html; charset=utf-8", page: true },
     "/servers.js": { body: SERVER_SCRIPT, type: "text/javascript; charset=utf-8" },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
-    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}`, type: "text/javascript; charset=utf-8" },
+    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, type: "text/javascript; charset=utf-8" },
   };
   const read = async () => {
     const value = await settings.read();
@@ -605,7 +606,7 @@ function response(status, body, headers = {}) { return Object.freeze({ status, h
 // No-config first run uses the same server panel and assets as configured Settings.
 export function createFirstRunSettingsHandler({ servers } = {}) {
   if (typeof servers !== "function") throw new TypeError("servers handler required");
-  const assets = { "/settings": [ONBOARDING_HTML, "text/html; charset=utf-8", true], "/settings.css": [CSS, "text/css; charset=utf-8"], "/status.css": ["body{font:15px/1.5 Segoe UI,system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#f6f6f8;color:#1b1b1f}section{background:#fff;padding:16px;border:1px solid #ddd;border-radius:8px;margin:16px 0}button{font:inherit;padding:6px 12px;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#444}}", "text/css; charset=utf-8"], "/servers.js": [SERVER_SCRIPT, "text/javascript; charset=utf-8"] };
+  const assets = { "/settings": [ONBOARDING_HTML, "text/html; charset=utf-8", true], "/settings.css": [CSS, "text/css; charset=utf-8"], "/status.css": ["body{font:15px/1.5 Segoe UI,system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#f6f6f8;color:#1b1b1f}section{background:#fff;padding:16px;border:1px solid #ddd;border-radius:8px;margin:16px 0}button{font:inherit;padding:6px 12px;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#444}}", "text/css; charset=utf-8"], "/servers.js": [`${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, "text/javascript; charset=utf-8"] };
   return async (request) => {
     const path = new URL(request?.url || "/", "http://127.0.0.1").pathname;
     if (path === "/") return { status: 302, headers: { Location: "/settings" }, body: "" };
