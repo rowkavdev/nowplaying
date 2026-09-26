@@ -6,6 +6,8 @@
 // whose playback started or resumed last wins; playing beats paused. With
 // nothing playing anywhere the first server's result shows, as before, so a
 // one-server setup behaves exactly the same.
+import { classifyFailure } from "./resilient-card.js";
+
 export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   if (!Array.isArray(entries) || entries.length < 1) throw new TypeError("servers: expected at least one server");
   for (const entry of entries) {
@@ -85,7 +87,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
         displayName: entry.server.identity?.displayName ?? null,
         state: result.state === "ok" ? (result.presence?.state ?? "idle") : result.state,
         ...(result.reason ? { reason: result.reason } : {}),
-        ...(result.state === "error" && typeof result.error?.code === "string" ? { reason: result.error.code } : {}),
+        ...(result.state === "error" ? { reason: classifyFailure(result.error) } : {}),
         checkedAt: result.at,
       });
     }));
