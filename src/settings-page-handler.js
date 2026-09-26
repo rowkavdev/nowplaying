@@ -109,7 +109,7 @@ ${servicePanel()}
 <option value="rtl">Right to left</option>
 <option value="auto">Match the title</option>
 </select></p>
-<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings"><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p></div>
+<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings"><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
 <p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
@@ -241,7 +241,7 @@ privacy.form.addEventListener("submit", async (event) => {
 });
 const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
-const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note") };
+const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note"), scaleNote: document.getElementById("card-artwork-scale-note") };
 const cardField = (key) => document.getElementById("card-" + key);
 // Artwork size stays automatic (picked by media kind) until a slider moves.
 const ART_AUTO = { artworkWidth: true, artworkHeight: true };
@@ -255,6 +255,14 @@ function cardValues() {
 function cardValid(values) {
   return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => (ART_AUTO[key] && values[key] === null) || (Number.isInteger(values[key]) && values[key] >= min && values[key] <= max));
 }
+// The preview uses a sample track with artwork. Mirror only the renderer's
+// width cap here to explain why its artwork can differ from the saved slider.
+function previewArtworkScale(values) {
+  if (values.theme === "compact") return null;
+  const requested = values.artworkWidth ?? 100; // sample track's auto width
+  const rendered = Math.min(requested, values.width - values.padding * 2 - 24 - 100);
+  return rendered < requested ? { requested, rendered } : null;
+}
 let previewTimer;
 function cardChanged() {
   for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = ART_AUTO[key] ? "Auto" : cardField(key).value + " px";
@@ -262,16 +270,20 @@ function cardChanged() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
     const values = cardValues();
-    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
+    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; card.scaleNote.hidden = true; return; }
     card.save.disabled = false;
     if (document.getElementById("card-result").className === "bad") cardSay("");
     const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0", fieldOrder: values.fieldOrder.join(",") });
     for (const key of Object.keys(ART_AUTO)) if (values[key] === null) query.delete(key);
+    const scale = previewArtworkScale(values);
+    card.scaleNote.hidden = true;
+    card.scaleNote.textContent = scale ? "Preview artwork is " + scale.rendered + " px wide (" + scale.requested + " px selected) to keep the text readable. Your selected width is still saved." : "";
+    card.preview.dataset.artworkScaled = scale ? "yes" : "no";
     card.preview.src = "/api/settings/card/preview.svg?" + query;
   }, 200);
 }
-card.preview.addEventListener("load", () => { card.preview.hidden = false; card.note.hidden = true; });
-card.preview.addEventListener("error", () => { card.preview.hidden = true; card.note.hidden = false; });
+card.preview.addEventListener("load", () => { card.preview.hidden = false; card.note.hidden = true; card.scaleNote.hidden = card.preview.dataset.artworkScaled !== "yes"; });
+card.preview.addEventListener("error", () => { card.preview.hidden = true; card.note.hidden = false; card.scaleNote.hidden = true; });
 function showCard(c) {
   card.form.hidden = !c;
   if (!c) return;
