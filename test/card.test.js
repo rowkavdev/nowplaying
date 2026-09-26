@@ -104,3 +104,20 @@ test("a negative, NaN or overrun position never draws a negative bar or a broken
   const over = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 250000, durationMs: 200000 });
   assert.match(over, /3:20 \/ 3:20/);
 });
+
+
+test("narrow cards shrink artwork to preserve a readable text column (#539)", () => {
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
+  const artworkDataUri = "data:image/png;base64,AAAA";
+  for (const artworkPosition of ["left", "right"]) {
+    const svg = renderCard(presence, { width: 280, artworkDataUri, layout: { padding: 48, artworkWidth: 160, artworkPosition } });
+    assert.match(svg, /<clipPath id="txt"><rect x="\d+" y="0" width="104"/);
+    assert.match(svg, /<clipPath id="art"><rect x="\d+" y="48" width="60"/);
+    assert.match(svg, />Song<\/text>/);
+    assert.match(svg, />Artist<\/text>/);
+  }
+  const wide = renderCard(presence, { width: 440, artworkDataUri, layout: { padding: 48, artworkWidth: 160 } });
+  assert.match(wide, /<clipPath id="art"><rect x="48" y="48" width="160"/);
+  const hidden = renderCard(presence, { width: 280, artworkDataUri, show: { artwork: false }, layout: { padding: 48, artworkWidth: 160 } });
+  assert.match(hidden, /<clipPath id="txt"><rect x="46" y="0" width="188"/);
+});

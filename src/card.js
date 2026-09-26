@@ -44,7 +44,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const artworkPosition = layout.artworkPosition ?? (rtl ? "right" : "left");
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
   // Album art is square; posters and episode stills keep the 2:3 shape.
-  const artworkWidth = bounded(layout.artworkWidth, presence.kind === "track" ? 100 : 68, 48, 160, "layout.artworkWidth");
+  const requestedArtworkWidth = bounded(layout.artworkWidth, presence.kind === "track" ? 100 : 68, 48, 160, "layout.artworkWidth");
   const artworkHeight = bounded(layout.artworkHeight, 100, 48, 180, "layout.artworkHeight");
   const fieldOrder = layout.fieldOrder ?? DEFAULT_FIELD_ORDER;
   if (!Array.isArray(fieldOrder) || fieldOrder.length !== 3 || new Set(fieldOrder).size !== 3 || !fieldOrder.every((field) => DEFAULT_FIELD_ORDER.includes(field))) throw new TypeError("layout.fieldOrder: expected state, title and subtitle, each once");
@@ -64,6 +64,10 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const palette = resolveCardTheme(theme, colors);
   if (tint !== null && (typeof tint !== "string" || !COLOR_PATTERN.test(tint))) throw new TypeError("tint must be a six-digit hex color");
   const hasArtwork = visibility.artwork && artworkDataUri !== null;
+  // Give titles room at the narrowest card width even when both padding and
+  // artwork are set to their individual maximums. Keep the saved preference;
+  // only the artwork rendered at this width is scaled down.
+  const artworkWidth = hasArtwork ? Math.min(requestedArtworkWidth, width - padding * 2 - 24 - 100) : requestedArtworkWidth;
   const artworkX = artworkPosition === "right" ? width - padding - artworkWidth : padding;
   const contentX = hasArtwork && artworkPosition === "left" ? padding + artworkWidth + 24 : padding;
   const contentWidth = width - contentX - padding - (hasArtwork && artworkPosition === "right" ? artworkWidth + 24 : 0);

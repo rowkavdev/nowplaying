@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="196" role="img" aria-labelledby="title desc">
+  <title id="title">NOW PLAYING: Blue Monday</title><desc id="desc">New Order</desc>
+  <defs><clipPath id="txt"><rect x="130" y="0" width="104" height="196"/></clipPath><clipPath id="art"><rect x="48" y="48" width="60" height="100" rx="8"/></clipPath></defs>
+  <rect x="0.5" y="0.5" width="279" height="195" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC" x="48" y="48" width="60" height="100" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/><rect x="48.5" y="48.5" width="59" height="99" rx="8" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+  <circle cx="136" cy="50" r="3.5" fill="#58a6ff"/>
+  <text x="146" y="54" fill="#58a6ff" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-weight="700" letter-spacing="1.1">NOW PLAYING</text>
+  
+  <text x="132" y="88" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">Blue M…</text>
+  <text x="132" y="112" fill="#9aa7b7" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" clip-path="url(#txt)">New Order</text>
+  <rect x="132" y="148" width="100" height="4" rx="2" fill="#30363d"/><rect x="132" y="148" width="19" height="4" rx="2" fill="#58a6ff"/>
+</svg>
