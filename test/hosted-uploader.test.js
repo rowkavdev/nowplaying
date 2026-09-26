@@ -174,3 +174,31 @@ test("hosted URL must be HTTPS without credentials or query", () => {
     assert.throws(() => normalizeHostedUrl(bad), TypeError, bad);
   }
 });
+
+test("offline disconnect keeps the revocation key, blocks uploads, then retry revokes the old token", async () => {
+  const env = setup(); const up = env.uploader();
+  await up.push(track({ title: "Sensitive Track" }));
+  const { cardId, token } = env.stored();
+  env.setOffline(true);
+  await assert.rejects(up.disconnect(), { code: "network_error" });
+  assert.equal(env.stored().token, token, "protected revocation key must survive offline failure");
+  assert.deepEqual(up.status(), { state: "disconnect_pending", lastError: "network_error", lastSuccessAt: null, pending: false });
+  assert.deepEqual(await up.push(track({ title: "New Track" })), { sent: false, reason: "disconnect_pending" });
+  assert.equal(await up.cardUrl(), null, "must not register a replacement card during pending deletion");
+  assert.equal((await env.service.readCardState(cardId)).title, "Sensitive Track", "remote deletion is not complete");
+  env.setOffline(false);
+  assert.deepEqual(await up.disconnect(), { disconnected: true });
+  assert.equal(env.stored(), null);
+  assert.equal((await env.service.readCardState(cardId)).state, "idle");
+  await assert.rejects(env.service.ingest({ token, payload: { state: "idle", seq: 1, observedAt: env.now() } }), (error) => error.status === 401);
+});
+
+test("already-revoked hosted key is cleared without re-registering", async () => {
+  const env = setup(); const up = env.uploader();
+  await up.push(track());
+  const token = env.stored().token;
+  await env.service.revoke({ token });
+  assert.deepEqual(await up.disconnect(), { disconnected: true });
+  assert.equal(env.stored(), null);
+  assert.equal(env.calls.filter((c) => c.url.endsWith("/api/register")).length, 1);
+});

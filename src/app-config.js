@@ -359,11 +359,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // Discord changes from the settings page are saved to config.json first,
   // then the Discord loop restarts with them; no app restart needed.
   const settingsStore = createAppSettingsStore({ file: configFile });
-  // Hosted card on/off works the same way. Disconnect revokes this PC's device
-  // key on the service, deletes it from Credential Manager and turns upload off.
+  // Hosted card on/off works the same way. Disconnect stops uploads and
+  // revokes the device remotely before deleting its protected local key.
+  let revokePending = false;
+  const pendingRevoke = async () => revokePending || (!current.hosted?.enabled && typeof hostedCredentials?.load === "function" && Boolean(await hostedCredentials.load()));
   const hostedView = async () => {
-    const view = { ...hostedSettingsView(current), state: hosted.status, lastSuccessAt: null, error: null, cardUrl: null };
-    if (hosted.status !== "on") return view;
+    const pending = await pendingRevoke();
+    const view = { ...hostedSettingsView(current), state: pending ? "disconnect_pending" : hosted.status, lastSuccessAt: null, error: null, cardUrl: null };
+    if (pending || hosted.status !== "on") return view;
     const connection = hosted.connection() ?? {};
     let cardUrl = null;
     try { cardUrl = await hosted.cardUrl(); } catch { cardUrl = null; }
@@ -436,6 +439,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       },
     } : {}),
     async updateHosted(changes) {
+      if (changes?.enabled === true && await pendingRevoke()) throw new Error("hosted disconnect is pending");
       const next = await settingsStore.updateHosted(changes);
       current = next;
       await hosted.stop().catch(() => {});
@@ -445,9 +449,18 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       const running = hosted;
       await running.stop().catch(() => {});
       hosted = offHosted;
-      if (typeof running.disconnect === "function") await running.disconnect();
-      else if (typeof hostedCredentials?.load === "function") await createHostedUploader({ baseUrl: current.hosted?.url ?? DEFAULT_HOSTED_URL, credentials: hostedCredentials, fetchImpl }).disconnect();
-      if (current.hosted?.enabled) current = await settingsStore.updateHosted({ enabled: false });
+      // Pause future uploads durably before attempting remote deletion. On a
+      // network failure the card can still be live remotely; preserve the
+      // protected revocation key and let Disconnect this PC retry later.
+      if (current.hosted?.enabled) {
+        try { current = await settingsStore.updateHosted({ enabled: false }); }
+        catch (error) { revokePending = true; throw error; }
+      }
+      try {
+        if (typeof running.disconnect === "function") await running.disconnect();
+        else if (typeof hostedCredentials?.load === "function") await createHostedUploader({ baseUrl: current.hosted?.url ?? DEFAULT_HOSTED_URL, credentials: hostedCredentials, fetchImpl }).disconnect();
+        revokePending = false;
+      } catch (error) { revokePending = true; throw error; }
     },
   });
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard, cacheControl: "no-store" }) });

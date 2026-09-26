@@ -139,6 +139,7 @@ export function createHostedUploader({
 
   async function push(presence) {
     if (status.state === "unauthorized") return { sent: false, reason: "unauthorized" };
+    if (status.state === "disconnect_pending") return { sent: false, reason: "disconnect_pending" };
     pending = presence; // only the newest state is kept
     if (now() < retryAt) return { sent: false, reason: "backoff" };
     const current = pending;
@@ -173,18 +174,27 @@ export function createHostedUploader({
   }
 
   async function disconnect() {
-    const stored = registration ?? await credentials.load();
-    registration = null; pending = null; lastSent = null;
+    const stored = await credentials.load();
+    pending = null; lastSent = null;
     if (validRegistration(stored)) {
       try { await request("/api/revoke", { method: "DELETE", token: stored.token }); }
-      catch (error) { if (error.status !== 401) { await credentials.clear(); status = { state: "idle", lastError: error.code, lastSuccessAt: null }; throw error; } }
+      catch (error) {
+        if (error.status !== 401) {
+          // Keep the protected key so the user can retry revocation. Do not
+          // send another upload or register a replacement card in this run.
+          status = { state: "disconnect_pending", lastError: error.code, lastSuccessAt: null };
+          throw error;
+        }
+      }
     }
     await credentials.clear();
+    registration = null;
     status = { state: "idle", lastError: null, lastSuccessAt: null };
     return { disconnected: true };
   }
 
   async function cardUrl() {
+    if (status.state === "disconnect_pending") return null;
     const device = await ensureRegistered();
     return device.login ? `${origin}/u/${device.login}.svg` : `${origin}/card/${device.cardId}.svg`;
   }
