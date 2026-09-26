@@ -271,3 +271,44 @@ test("a save retries while Windows briefly locks config.json, then gives up clea
   await assert.rejects(other.updateDiscord({ timestamps: "both" }), { code: "ENOSPC" });
   assert.equal(otherCalls, 1);
 });
+
+test("offline hosted disconnect keeps the key, stops local uploads, and can retry after recovery", async () => {
+  const file = await configFile({ ...JELLYFIN, hostedEnabled: true });
+  const service = fakeHostedService();
+  let offline = false;
+  const fetchImpl = async (url, init) => {
+    if (offline && new URL(url).pathname === "/api/revoke") throw new TypeError("offline");
+    return service.fetchImpl(url, init);
+  };
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, hostedCredentials: service.credentials, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const call = (path, body) => fetch(`${app.url}${path}`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
+    for (let i = 0; i < 30 && !service.stored(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(service.stored());
+    const token = service.stored().token;
+    offline = true;
+    const failed = await call("/api/settings/hosted/disconnect", {});
+    assert.deepEqual([failed.status, await failed.json()], [502, { error: "disconnect_failed" }]);
+    assert.equal(service.stored().token, token);
+    assert.equal(app.hosted, "off");
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).hosted.enabled, false);
+    const pending = (await (await fetch(`${app.url}/api/settings`)).json()).hosted;
+    assert.deepEqual({ enabled: pending.enabled, state: pending.state }, { enabled: false, state: "disconnect_pending" });
+    const enable = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ hosted: { enabled: true } }) });
+    assert.notEqual(enable.status, 200, "cannot register a new card while old revocation is pending");
+    // The pending state and guarded key survive an app restart.
+    const restarted = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, hostedCredentials: service.credentials, discord: { env: {}, builtInClientId: "" } });
+    try {
+      const resumed = (await (await fetch(`${restarted.url}/api/settings`)).json()).hosted;
+      assert.deepEqual({ enabled: resumed.enabled, state: resumed.state }, { enabled: false, state: "disconnect_pending" });
+      assert.equal(service.stored().token, token);
+    } finally { await restarted.close(); }
+    offline = false;
+    const done = await call("/api/settings/hosted/disconnect", {});
+    assert.equal(done.status, 200);
+    assert.equal((await done.json()).hosted.state, "off");
+    assert.equal(service.stored(), null);
+    assert.equal(service.calls.filter((c) => c === "DELETE /api/revoke").length, 1);
+  } finally { await app.close(); }
+});

@@ -445,7 +445,7 @@ startup.form.addEventListener("submit", async (event) => {
     startup.save.disabled = false;
   }
 });
-const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], off: ["Off", ""] };
+const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], disconnect_pending: ["Uploads stopped; remote card deletion pending. Retry Disconnect this PC when online.", "bad"], off: ["Off", ""] };
 // The hosted card takes its look from the link (#94, #414, #421). Only
 // non-default settings are added. Artwork options are left out because the
 // hosted card never draws artwork.
@@ -484,7 +484,8 @@ function showHosted(h) {
   link.href = url || "#";
   document.getElementById("hosted-markdown").textContent = url ? "![Now playing](" + url + ")" : "-";
   document.getElementById("copy-url").disabled = document.getElementById("copy-markdown").disabled = !h.cardUrl;
-  document.getElementById("hosted-details").hidden = !h.enabled;
+  document.getElementById("hosted-details").hidden = !h.enabled && h.state !== "disconnect_pending";
+  hosted.save.disabled = h.state === "disconnect_pending";
 }
 async function copy(id) {
   try { await navigator.clipboard.writeText(document.getElementById(id).textContent); hostedSay("Copied.", "ok"); }
@@ -518,7 +519,9 @@ hosted.disconnect.addEventListener("click", async () => {
     showHosted((await send("/api/settings/hosted/disconnect", "POST", {})).hosted);
     hostedSay("Disconnected. The service has deleted this PC's card.", "ok");
   } catch {
-    hostedSay("Couldn't reach the service. Try again when you're online.", "bad");
+    let pending = false;
+    try { const state = await fetch("/api/settings", { cache: "no-store", headers: { Accept: "application/json" } }); if (state.ok) { const view = (await state.json()).hosted; showHosted(view); pending = view.state === "disconnect_pending"; } } catch {}
+    hostedSay(pending ? "Remote deletion is pending. This PC stopped uploading, but the old card may still be visible. Your saved key is kept so you can press Disconnect this PC again when you're online." : "Could not disconnect this PC. Check the hosted card status and try again.", "bad");
   } finally {
     hosted.disconnect.disabled = false;
   }
