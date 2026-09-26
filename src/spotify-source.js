@@ -30,16 +30,18 @@ export function createSpotifySource(config, credentialStore, { fetchImpl = fetch
 // recently; "server" or "spotify" always pick that side. Nothing playing on
 // either side shows the media server's state, as before; if the server
 // fails, Spotify can still show.
-export function combinePresence({ primary, secondary, prefer = "recent", now = Date.now }) {
+export function combinePresence({ primary, secondary, prefer = "recent" }) {
   if (typeof primary?.getPresence !== "function" || typeof secondary?.getPresence !== "function") throw new TypeError("primary and secondary providers are required");
   if (!["recent", "server", "spotify"].includes(prefer)) throw new TypeError("prefer must be recent, server or spotify");
-  // When each side started its current item (reset when it stops or changes).
+  // Process-local activity order survives adjustments to the PC wall clock.
+  // Reset a side when it stops; an unchanged item keeps its earlier priority.
   const started = { server: null, other: null };
+  let nextActivityOrder = 0;
   function track(side, result) {
     const value = result.status === "fulfilled" ? result.value : null;
     if (value?.state !== "playing") { started[side] = null; return; }
     const key = JSON.stringify([value.kind, value.title, value.subtitle]);
-    if (started[side]?.key !== key) started[side] = { key, at: now() };
+    if (started[side]?.key !== key) started[side] = { key, order: ++nextActivityOrder };
   }
   return Object.freeze({
     async getPresence() {
@@ -50,7 +52,7 @@ export function combinePresence({ primary, secondary, prefer = "recent", now = D
       if (playing(server) && playing(other)) {
         if (prefer === "server") return server.value;
         if (prefer === "spotify") return other.value;
-        return started.other.at > started.server.at ? other.value : server.value;
+        return started.other.order > started.server.order ? other.value : server.value;
       }
       if (playing(server)) return server.value;
       if (playing(other)) return other.value;

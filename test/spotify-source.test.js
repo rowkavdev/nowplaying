@@ -38,20 +38,40 @@ test("Spotify source reads and saves the refresh token through the credential st
 });
 
 test("by default the most recently started side wins when both play (Rowan's call)", async () => {
-  let t = 0;
   let server = { state: "playing", title: "Server A" };
   let spotify = { state: "idle" };
-  const card = combinePresence({ primary: { getPresence: async () => server }, secondary: { getPresence: async () => spotify }, now: () => t });
+  const card = combinePresence({ primary: { getPresence: async () => server }, secondary: { getPresence: async () => spotify } });
   assert.equal((await card.getPresence()).title, "Server A");
-  t = 10; spotify = { state: "playing", title: "Spotify B" };
+  spotify = { state: "playing", title: "Spotify B" };
   assert.equal((await card.getPresence()).title, "Spotify B");
-  t = 20; assert.equal((await card.getPresence()).title, "Spotify B");
-  t = 30; server = { state: "playing", title: "Server C" };
-  assert.equal((await card.getPresence()).title, "Server C");
-  t = 40; spotify = { state: "paused", title: "Spotify B" };
-  assert.equal((await card.getPresence()).title, "Server C");
-  t = 50; spotify = { state: "playing", title: "Spotify B" };
   assert.equal((await card.getPresence()).title, "Spotify B");
+  server = { state: "playing", title: "Server C" };
+  assert.equal((await card.getPresence()).title, "Server C");
+  spotify = { state: "paused", title: "Spotify B" };
+  assert.equal((await card.getPresence()).title, "Server C");
+  spotify = { state: "playing", title: "Spotify B" };
+  assert.equal((await card.getPresence()).title, "Spotify B");
+});
+
+test("server's newer item wins over Spotify after a backward wall-clock correction", async () => {
+  let wall = 1_800_000_000_000;
+  let server = { state: "playing", kind: "track", title: "Server old" };
+  let spotify = { state: "idle" };
+  const card = combinePresence({ primary: { getPresence: async () => server }, secondary: { getPresence: async () => spotify } });
+  assert.equal((await card.getPresence()).title, "Server old");
+  wall += 1000;
+  spotify = { state: "playing", kind: "track", title: "Spotify newer" };
+  assert.equal((await card.getPresence()).title, "Spotify newer");
+  wall -= 60 * 60_000;
+  wall += 1000;
+  assert.equal((await card.getPresence()).title, "Spotify newer", "unchanged tracks do not reset priority");
+  server = { state: "playing", kind: "track", title: "Server latest after rollback" };
+  assert.equal((await card.getPresence()).title, "Server latest after rollback");
+  assert.ok(wall < 1_800_000_000_000);
+  spotify = { state: "paused", kind: "track", title: "Spotify newer" };
+  assert.equal((await card.getPresence()).title, "Server latest after rollback");
+  spotify = { state: "playing", kind: "track", title: "Spotify newer" };
+  assert.equal((await card.getPresence()).title, "Spotify newer", "resume counts as newer activity");
 });
 
 test("a 401 from Spotify drops the cached access token so the next poll refreshes", async () => {
