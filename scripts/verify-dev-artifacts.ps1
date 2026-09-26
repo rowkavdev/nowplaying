@@ -28,6 +28,7 @@ foreach ($name in $files[0..1]) {
 function Test-Bundle($dir, $label) {
   $exe = Join-Path $dir 'nowplaying.exe'
   if (-not (Test-Path $exe)) { throw "$label has no launcher" }
+  Write-Host "Testing $label bundle at $dir"
   Push-Location $dir
   try {
     $version = (& $exe --version | Out-String).Trim()
@@ -44,10 +45,10 @@ function Test-Bundle($dir, $label) {
       $ready = $false
       for ($i = 0; $i -lt 100; $i++) {
         if ($app.HasExited) { throw "$label exited $($app.ExitCode): $(Get-Content $stderr -Raw)" }
-        try { if ((Invoke-WebRequest "$base/healthz" -UseBasicParsing -TimeoutSec 2).Content -eq "ok`n") { $ready = $true; break } } catch {}
+        try { if ((Invoke-WebRequest "$base/healthz" -UseBasicParsing -TimeoutSec 2).Content.Trim() -eq "ok") { $ready = $true; break } } catch {}
         Start-Sleep -Milliseconds 300
       }
-      if (-not $ready) { throw "$label did not serve healthz: $(Get-Content $stderr -Raw)" }
+      if (-not $ready) { throw "$label did not serve healthz: stdout=$(Get-Content $stdout -Raw); stderr=$(Get-Content $stderr -Raw); process=$($app.HasExited)" }
       $page = Invoke-WebRequest "$base/settings" -UseBasicParsing
       if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'Set up NowPlaying') { throw "$label first-run WebUI missing" }
       $servers = Invoke-RestMethod "$base/api/settings/servers"
