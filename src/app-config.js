@@ -413,7 +413,9 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is fetched for /card.svg (#449).
-      return renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
+      const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
+      const automaticWidth = presence.kind === "track" ? 100 : 68;
+      return svg.replace("<svg ", `<svg data-preview-artwork-width="${card.artworkWidth ?? automaticWidth}" `);
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),

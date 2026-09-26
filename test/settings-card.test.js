@@ -117,7 +117,7 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-progressWidth", "card-direction", "card-preview", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-progressWidth", "card-direction", "card-preview", "card-artwork-scale-note", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
   assert.equal(page.match(/<option value="(?:state|title|subtitle),(?:state|title|subtitle),(?:state|title|subtitle)">/g).length, 6);
@@ -146,4 +146,37 @@ test("the hosted link follows the saved card style, width and progress bar", asy
     `${base}?progressHeight=8&fieldOrder=title,subtitle,state&textAlign=middle&progressPosition=text&progressWidth=full&direction=auto`);
   assert.equal(hostedLink({ ...DEFAULTS, showProgress: false, progressHeight: 8, progressPosition: "text", progressWidth: "full" })(base), `${base}?show=mediaType,state,subtitle`, "bar options drop when the bar is off");
   assert.equal(hostedLink(DEFAULTS)(""), "");
+});
+
+
+test("live movie preview keeps the live title and reports its automatic art width (#559)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-preview-movie-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false }));
+  const fetchImpl = async (url) => String(url).endsWith("/Sessions")
+    ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "movie-1", Name: "Example movie", Type: "Movie", ProductionYear: 2024 }, PlayState: { IsPaused: false } }])
+    : Response.json([]);
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const live = await (await fetch(app.url + "/card.svg")).text();
+    assert.match(live, /Example movie/);
+    const path = "/api/settings/card/preview.svg?width=300&padding=48";
+    const svg = await (await fetch(app.url + path)).text();
+    assert.match(svg, /Example movie/);
+    assert.doesNotMatch(svg, /Sample track/);
+    assert.match(svg, /data-preview-artwork-width="68"/);
+    assert.match(svg, /<image[^>]*width="68"/);
+    const narrower = await (await fetch(app.url + "/api/settings/card/preview.svg?width=280&padding=48")).text();
+    assert.match(narrower, /Example movie/);
+    assert.match(narrower, /data-preview-artwork-width="68"/);
+    assert.match(narrower, /<image[^>]*width="60"/);
+  } finally { await app.close(); }
+});
+
+test("preview scale hint reads the actual track and movie SVG (#559)", async () => {
+  const script = (await handler()({ url: "/settings.js" })).body;
+  assert.match(script, /previewArtworkScale\(svg, values.artworkWidth\)/);
+  assert.match(script, /data-preview-artwork-width/);
+  assert.match(script, /Your selected width is still saved/);
+  assert.match(script, /card.scaleNote.hidden = true/);
 });
