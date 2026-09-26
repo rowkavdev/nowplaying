@@ -22,6 +22,7 @@ const FILM = { state: "playing", kind: "movie", title: "Dune: Part Two", subtitl
 export const PRESETS = [
   { file: "default.svg", presence: MUSIC, options: { artworkDataUri: ART } },
   { file: "default-no-artwork.svg", presence: MUSIC, options: {} },
+  { file: "narrow-max-artwork.svg", presence: MUSIC, options: { width: 280, artworkDataUri: ART, layout: { padding: 48, artworkWidth: 160 } } },
   { file: "paper-artwork-right.svg", presence: MUSIC, options: { theme: "paper", artworkDataUri: ART, layout: { artworkPosition: "right", artworkWidth: 120, artworkHeight: 120 } } },
   { file: "compact.svg", presence: MUSIC, options: { theme: "compact", width: 320 } },
   { file: "centred-reordered.svg", presence: MUSIC, options: { layout: { fieldOrder: ["title", "subtitle", "state"], textAlign: "middle" } } },
