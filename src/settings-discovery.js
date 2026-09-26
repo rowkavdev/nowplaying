@@ -18,8 +18,10 @@ export function subnetCandidates(subnet) {
   if (typeof subnet !== "string" || !/^(?:\d{1,3}\.){3}0\/24$/.test(subnet)) throw new TypeError("enter a private IPv4 subnet (x.y.z.0/24)");
   const address = subnet.slice(0, -3);
   if (!isPrivateHost(address)) throw new TypeError("subnet must be private");
-  const parts = address.split(".");
-  return Array.from({ length: 254 }, (_, i) => `${parts.slice(0, 3).join(".")}.${i + 1}`);
+  // Rebuild from parsed decimal octets. WHATWG URLs read zero-padded IPv4
+  // text as octal, which can turn a validated private 010.x into public 8.x.
+  const prefix = address.split(".").slice(0, 3).map(Number).join(".");
+  return Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
 }
 
 export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64 } = {}) {
@@ -27,7 +29,12 @@ export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, lo
   if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 254 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
   const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal, networkHosts: [] }).catch(() => []);
   if (signal?.aborted) return [];
-  const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => PORTS.map((probe) => ({ host, probe })));
+  const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => {
+    // Callers can supply hosts directly, not only via subnetCandidates.
+    // Normalize here too before a URL parser gets an octal-looking address.
+    const decimalHost = host.split(".").map(Number).join(".");
+    return PORTS.map((probe) => ({ host: decimalHost, probe }));
+  });
   const results = [];
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
