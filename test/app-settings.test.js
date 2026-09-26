@@ -176,6 +176,29 @@ test("the settings page turns Start with Windows on and off through the shared s
   }
 });
 
+test("moved Windows install reports a broken shortcut without exposing its path", async () => {
+  const file = await configFile();
+  let broken = true;
+  const startup = {
+    status: async () => ({ enabled: !broken, broken }),
+    isEnabled: async () => !broken,
+    setEnabled: async (enabled) => { broken = !enabled; },
+  };
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" }, startup });
+  try {
+    const page = await fetch(`${app.url}/settings`);
+    assert.match(await page.text(), /id="startup-result"/);
+    assert.match(await (await fetch(`${app.url}/settings.js`)).text(), /Startup shortcut points to another install/);
+    const cookie = page.headers.get("set-cookie").split(";")[0];
+    const old = await (await fetch(`${app.url}/api/settings`)).json();
+    assert.deepEqual(old.startup, { available: true, startWithWindows: false, shortcutBroken: true });
+    assert.doesNotMatch(JSON.stringify(old.startup), /\\old|\\new|exe/i);
+    const response = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { startWithWindows: true } }) });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).startup, { available: true, startWithWindows: true });
+  } finally { await app.close(); }
+});
+
 test("Start with Windows is hidden when the build can't offer it", async () => {
   const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" } });
   try {

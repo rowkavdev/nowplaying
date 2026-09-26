@@ -377,7 +377,12 @@ loadYouTube();
 // setup, which the app's tray session opens and then restarts the app.
 const startup = { form: document.getElementById("startup-form"), enabled: document.getElementById("startup-enabled"), save: document.getElementById("startup-save") };
 function startupSay(text, tone) { const el = document.getElementById("startup-result"); el.textContent = text; el.className = tone || ""; }
-function showStartup(s) { startup.form.hidden = !s || !s.available; if (s) startup.enabled.checked = s.startWithWindows; }
+function showStartup(s) {
+  startup.form.hidden = !s || !s.available;
+  if (!s) return;
+  startup.enabled.checked = s.startWithWindows;
+  startupSay(s.shortcutBroken ? "Startup shortcut points to another install. Check the box and Save to fix it." : "", s.shortcutBroken ? "warn" : "");
+}
 startup.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   startup.save.disabled = true;
