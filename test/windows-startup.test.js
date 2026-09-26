@@ -86,3 +86,20 @@ test("moved portable folder reports a stale shortcut and repairs it on Save", wi
     assert.deepEqual(await moved.status(), { enabled: true, broken: false });
   } finally { await moved.setEnabled(false); }
 });
+
+
+test("a different existing executable never counts as this install", windows, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-startup-other-"));
+  const oldDir = join(dir, "old");
+  const newDir = join(dir, "new");
+  await mkdir(oldDir); await mkdir(newDir);
+  await writeFile(join(oldDir, "nowplayingw.exe"), "old");
+  await writeFile(join(newDir, "nowplayingw.exe"), "new");
+  const old = createWindowsStartup({ appData: dir, exePath: join(oldDir, "nowplayingw.exe") });
+  const other = createWindowsStartup({ appData: dir, exePath: join(newDir, "nowplayingw.exe") });
+  await old.setEnabled(true);
+  try {
+    assert.deepEqual(await old.status(), { enabled: true, broken: false });
+    assert.deepEqual(await other.status(), { enabled: false, broken: true });
+  } finally { await old.setEnabled(false); }
+});
