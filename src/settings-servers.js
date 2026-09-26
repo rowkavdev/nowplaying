@@ -17,6 +17,13 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
   let scan = null;
   let cached = null;
   let configured = false;
+  let activationFailed = false;
+  function scheduleRestart() {
+    activationFailed = false;
+    setTimeout(() => {
+      Promise.resolve().then(() => onConfigured()).catch(() => { activationFailed = true; });
+    }, 500);
+  }
   function serial(job) {
     if (fileQueue) return fileQueue(job);
     const run = queue.then(job);
@@ -57,7 +64,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       await save(servers, existing);
       await beforeRestart();
       configured = true;
-      setTimeout(() => { Promise.resolve(onConfigured()).catch(() => {}); }, 500);
+      scheduleRestart();
     }),
   });
   async function handler(request = {}) {
@@ -94,7 +101,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     }
     if (method === "GET") {
       const config = await read();
-      return json(200, { firstRun: !config, configured, servers: (config?.servers ?? []).map((s) => ({ provider: s.provider, id: s.identity.id, name: s.identity.displayName, baseUrl: s.serverUrl })), discovered: cached ?? [] });
+      return json(200, { firstRun: !config, configured, activationFailed, servers: (config?.servers ?? []).map((s) => ({ provider: s.provider, id: s.identity.id, name: s.identity.displayName, baseUrl: s.serverUrl })), discovered: cached ?? [] });
     }
     if (method !== "DELETE") return json(405, { error: "method_not_allowed" }, { Allow: "GET, DELETE" });
     let input;
@@ -108,7 +115,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       if (!servers.length) return json(409, { error: "last_server" });
       try { await save(servers, existing); }
       catch { return json(500, { error: "save_failed" }); }
-      setTimeout(() => { Promise.resolve(onConfigured()).catch(() => {}); }, 500);
+      scheduleRestart();
       return json(200, { removed: true });
     });
   }

@@ -128,3 +128,21 @@ test("cancelled discovery reports cancellation even when transport rejects on ab
   await mgmt.handler(post("/api/settings/servers/cancel", {}));
   assert.deepEqual(JSON.parse((await pending).body), { cancelled: true });
 });
+
+test("a rejected post-config restart is exposed to the first-run page", async () => {
+  const file = await fixture();
+  let attempted;
+  const restart = new Promise((resolve) => { attempted = resolve; });
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store,
+    onConfigured: () => { attempted(); throw Error("port in use"); },
+    signIn: { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "u1", displayName: "User" }, secret: "token" }) },
+  });
+  const auth = await mgmt.handler(post("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "u1", password: "password" }));
+  assert.equal(auth.status, 200);
+  await restart;
+  await new Promise((resolve) => setImmediate(resolve));
+  const state = JSON.parse((await mgmt.handler({ url: "/api/settings/servers" })).body);
+  assert.equal(state.configured, true);
+  assert.equal(state.activationFailed, true);
+  assert.equal(state.servers.length, 1);
+});

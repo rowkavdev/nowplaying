@@ -21,7 +21,7 @@ function page() {
   };
   const fetches = [];
   runInNewContext(SERVER_SCRIPT, {
-    document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "" }) },
+    document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", append() {} }) },
     fetch: (path, options) => { const request = deferred(); fetches.push({ path, options, ...request }); return request.promise; },
     setTimeout, clearTimeout, URL, confirm: () => true, window: { open: () => null },
   });
@@ -95,4 +95,33 @@ test("blocked Plex popup leaves a clickable same-origin sign-in link", async () 
   fetches[2].resolve(json({ status: "cancelled" }));
   await start;
   assert.equal(node("signin-open-link").hidden, true);
+});
+
+test("first-run page shows a recovery path when restart rejects", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ configured: true, activationFailed: true, servers: [] })); await tick();
+  assert.match(node("first-run-state").textContent, /couldn't start/);
+  assert.equal(node("activation-recovery").hidden, false);
+});
+
+test("first-run page stops polling with recovery after a startup deadline", async () => {
+  const elements = new Map(); const timers = []; let now = 0; const requests = [];
+  const node = (id) => {
+    if (!elements.has(id)) elements.set(id, { id, hidden: id === "activation-recovery", textContent: "", value: "", children: [],
+      addEventListener() {}, replaceChildren(...children) { this.children = children; } });
+    return elements.get(id);
+  };
+  runInNewContext(SERVER_SCRIPT, {
+    document: { getElementById: node, createElement: () => ({ append() {}, addEventListener() {} }) },
+    fetch: (path) => { requests.push(path); return Promise.resolve(json(path === "/api/settings/servers" ? { configured: true, servers: [] } : {}, path === "/api/settings/servers")); },
+    setTimeout: (fn) => { timers.push(fn); }, clearTimeout() {}, Date: { now: () => now }, URL, window: {},
+  });
+  await tick();
+  assert.equal(timers.length, 2);
+  now = 30001;
+  timers.shift()(); await tick();
+  assert.match(node("first-run-state").textContent, /couldn't start/);
+  assert.equal(node("activation-recovery").hidden, false);
+  timers.shift()(); await tick();
+  assert.deepEqual(requests, ["/api/settings/servers"]);
 });
