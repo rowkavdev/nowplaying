@@ -2,7 +2,7 @@
 
 Two audiences, two homes:
 
-- **Using nowplaying?** Start with the [user wiki](https://github.com/rowkavdev/nowplaying/wiki): quick start, install, provider sign-in, card and Discord setup, privacy and troubleshooting. The wiki is sourced from [docs/wiki/](wiki/) and lands through PRs like any other change.
+- **Using nowplaying?** Start with the [user wiki](https://github.com/rowkavdev/nowplaying/wiki): quick start in the browser-based first-run Settings page, install, provider sign-in, card and Discord setup, privacy and troubleshooting. There is no native setup wizard in the current dev build. The wiki is sourced from [docs/wiki/](wiki/) and lands through PRs like any other change.
 - **This folder** keeps the reference material: exact behaviour, configuration and design notes.
 
 ## Reference guides
