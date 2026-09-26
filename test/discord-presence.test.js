@@ -20,6 +20,14 @@ function loop(idleBehavior, presences, extra = {}) {
   return { l, client };
 }
 
+async function waitUntil(check, label) {
+  const deadline = Date.now() + 5000;
+  while (!check()) {
+    if (Date.now() >= deadline) assert.fail(`timed out waiting for ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test("publishes while playing and clears when idle by default", async () => {
   const { l, client } = loop("clear", [playing, idle]);
   assert.equal((await l.tick()).action, "publish");
@@ -126,7 +134,7 @@ test("startDiscordFromConfig exposes a privacy-safe connection status", async ()
   const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, { getPresence: async () => playing }, {
     env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport, intervalMs: 60_000,
   });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await waitUntil(() => d.connection().state === "ready" && d.connection().lastPublishedAt, "initial Discord status");
   const status = d.connection();
   assert.equal(status.state, "ready");
   assert.match(status.lastPublishedAt, /^\d{4}-\d{2}-\d{2}T/);
@@ -152,7 +160,7 @@ test("refreshArtwork drops cached covers and republishes straight away", async (
   const d = startDiscordFromConfig({ discord: { enabled: true, idleBehavior: "clear" } }, { getPresence: async () => playing }, {
     env: { NOWPLAYING_DISCORD_CLIENT_ID: "123456789012345678" }, createTransport: () => transport, createArtwork: () => artwork, intervalMs: 60_000,
   });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await waitUntil(() => resolves > 0, "initial artwork resolution");
   const before = resolves;
   assert.equal(await d.refreshArtwork(), 3);
   assert.equal(clears, 1);
@@ -209,7 +217,7 @@ test("app wiring: a stuck track cannot stay on Discord past the timeout (#153)",
     intervalMs: 3_600_000, stuckAfterMs: 300_000, now: () => time,
   });
   try {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitUntil(() => sets.length === 1, "initial Discord publish");
     assert.equal(sets.length, 1);
     for (let i = 0; i < 4; i += 1) { time += 60_000; await d.refreshArtwork(); }
     assert.equal(clears, 0, "still inside the timeout after 4 minutes");
