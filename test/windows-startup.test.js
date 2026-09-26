@@ -78,11 +78,7 @@ test("moved portable folder reports a stale shortcut and repairs it on Save", wi
   const moved = createWindowsStartup({ appData: dir, exePath: join(newDir, "nowplayingw.exe") });
   await old.setEnabled(true);
   try {
-    const { execFileSync } = await import("node:child_process");
-    const target = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-      "(New-Object -ComObject WScript.Shell).CreateShortcut($env:NP_SHORTCUT).TargetPath"],
-    { env: { ...process.env, NP_SHORTCUT: old.shortcut }, encoding: "utf8", windowsHide: true }).trim();
-    assert.deepEqual(await old.status(), { enabled: true, broken: false }, `target=${JSON.stringify(target)} expected=${JSON.stringify(join(oldDir, "nowplayingw.exe"))}`);
+    assert.deepEqual(await old.status(), { enabled: true, broken: false });
     await rename(oldDir, newDir);
     assert.deepEqual(await moved.status(), { enabled: false, broken: true });
     assert.equal(await moved.isEnabled(), false);

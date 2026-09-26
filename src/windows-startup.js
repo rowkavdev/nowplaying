@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, rm } from "node:fs/promises";
+import { access, rm, stat } from "node:fs/promises";
 import { win32 } from "node:path";
 
 // "Start with Windows" uses the same per-user Startup shortcut the installer's
@@ -58,8 +58,16 @@ export function createWindowsStartup({ appData, exePath, run = runPowerShell } =
     try { await access(shortcut); }
     catch (error) { if (error?.code === "ENOENT") return Object.freeze({ enabled: false, broken: false }); throw error; }
     const target = await run(READ_TARGET, { NP_SHORTCUT: shortcut });
-    const matches = typeof target === "string" && target.trim() &&
+    let matches = typeof target === "string" && target.trim() &&
       win32.normalize(target.trim()).toLowerCase() === win32.normalize(exePath).toLowerCase();
+    if (!matches && typeof target === "string" && target.trim()) {
+      // WScript expands an 8.3 path (RUNNER~1) to its long form on readback.
+      // Compare the actual file identity too; a moved shortcut target fails stat.
+      try {
+        const [linked, current] = await Promise.all([stat(target.trim()), stat(exePath)]);
+        matches = linked.dev === current.dev && linked.ino === current.ino;
+      } catch (error) { if (error?.code !== "ENOENT") throw error; }
+    }
     return Object.freeze({ enabled: Boolean(matches), broken: !matches });
   }
   return Object.freeze({
