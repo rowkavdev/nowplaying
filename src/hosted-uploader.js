@@ -41,6 +41,7 @@ export function createHostedUploader({
   settings = {},
   fetchImpl = fetch,
   now = () => Date.now(),
+  elapsedNow = () => performance.now(),
   heartbeatMs = HEARTBEAT_MS,
 } = {}) {
   if (typeof credentials?.load !== "function" || typeof credentials?.save !== "function" || typeof credentials?.clear !== "function") {
@@ -52,7 +53,7 @@ export function createHostedUploader({
   let serverClockOffset = 0;
   let lastSent = null; // { key, at }
   let pending = null;
-  let retryAt = 0;
+  let retryAt = 0; // process elapsed time, unaffected by clock corrections
   let failures = 0;
   let status = { state: "idle", lastError: null, lastSuccessAt: null };
 
@@ -152,7 +153,7 @@ export function createHostedUploader({
     if (status.state === "unauthorized") return { sent: false, reason: "unauthorized" };
     if (status.state === "disconnect_pending") return { sent: false, reason: "disconnect_pending" };
     pending = presence; // only the newest state is kept
-    if (now() < retryAt) return { sent: false, reason: "backoff" };
+    if (elapsedNow() < retryAt) return { sent: false, reason: "backoff" };
     const current = pending;
     try {
       const result = await send(current);
@@ -178,7 +179,7 @@ export function createHostedUploader({
         return { sent: false, reason: "unauthorized" };
       }
       failures += 1;
-      retryAt = now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (failures - 1));
+      retryAt = elapsedNow() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (failures - 1));
       status = { ...status, state: "retrying", lastError: code };
       return { sent: false, reason: code };
     }

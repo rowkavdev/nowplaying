@@ -13,6 +13,7 @@ const BASE = "https://cards.example.test";
 function setup({ start = 1_800_000_000_000 } = {}) {
   let clock = start;
   let serviceClock = start;
+  let elapsed = 0;
   const now = () => clock;
   const serverNow = () => serviceClock;
   const redis = createMemoryRedis({ now: serverNow });
@@ -40,11 +41,12 @@ function setup({ start = 1_800_000_000_000 } = {}) {
   return {
     service, calls, credentials, fetchImpl, now,
     stored: () => stored,
-    advance: (ms) => { clock += ms; serviceClock += ms; },
+    advance: (ms) => { clock += ms; serviceClock += ms; elapsed += ms; },
     advanceClient: (ms) => { clock += ms; },
     advanceServer: (ms) => { serviceClock += ms; },
+    advanceElapsed: (ms) => { elapsed += ms; },
     setOffline: (value) => { offline = value; },
-    uploader: (options = {}) => createHostedUploader({ baseUrl: BASE, credentials, fetchImpl, now, ...options }),
+    uploader: (options = {}) => createHostedUploader({ baseUrl: BASE, credentials, fetchImpl, now, elapsedNow: () => elapsed, ...options }),
   };
 }
 
@@ -118,7 +120,8 @@ test("recovers a rollback across restarts using the authenticated prior sequence
   assert.deepEqual(await env.uploader().push(track()), { sent: true });
   const { cardId, token } = env.stored();
   const firstSeq = ingests(env.calls)[0].body.seq;
-  env.advance(-60 * 60 * 1000);
+  env.advanceClient(-60 * 60 * 1000);
+  env.advanceServer(-60 * 60 * 1000);
   assert.deepEqual(await env.uploader().push(track({ title: "Temptation" })), { sent: true });
   const seqs = ingests(env.calls).map((call) => call.body.seq);
   assert.deepEqual(seqs, [firstSeq, firstSeq - 60 * 60 * 1000, firstSeq + 1]);
@@ -129,7 +132,8 @@ test("recovers a rollback across restarts using the authenticated prior sequence
 test("a stale server without a prior sequence reports recovery unavailable", async () => {
   const env = setup();
   await env.uploader().push(track());
-  env.advance(-60 * 60 * 1000);
+  env.advanceClient(-60 * 60 * 1000);
+  env.advanceServer(-60 * 60 * 1000);
   const fetchImpl = async (url, init) => {
     const result = await env.fetchImpl(url, init);
     if (result.status === 409) return { ...result, json: async () => ({ error: "stale_sequence" }) };
@@ -185,6 +189,45 @@ test("backs off when offline and sends only the newest state after", async () =>
   assert.equal((await up.push(track({ title: "Regret" }))).sent, true);
   assert.equal((await env.service.readCardState(env.stored().cardId)).title, "Regret");
   assert.equal(up.status().pending, false);
+});
+
+test("backoff recovers after client clock rollback and keeps the newest pending state", async () => {
+  const env = setup();
+  const up = env.uploader();
+  await up.push(track({ title: "Old Track" }));
+  const { cardId } = env.stored();
+  env.advance(1000);
+  env.setOffline(true);
+  assert.deepEqual(await up.push(track({ title: "Failed Track" })), { sent: false, reason: "network_error" });
+  const beforeRetry = ingests(env.calls).length;
+  env.setOffline(false);
+  env.advanceClient(-60 * 60_000);
+  env.advance(4_999);
+  assert.deepEqual(await up.push(track({ title: "Intermediate Track" })), { sent: false, reason: "backoff" });
+  assert.equal(ingests(env.calls).length, beforeRetry);
+  env.advance(1);
+  assert.deepEqual(await up.push(track({ title: "New Track" })), { sent: true });
+  assert.equal((await env.service.readCardState(cardId)).title, "New Track");
+  assert.equal(up.status().pending, false);
+  assert.equal(up.status().state, "connected");
+  assert.ok(ingests(env.calls).length > beforeRetry);
+  assert.equal(ingests(env.calls).at(-1).body.title, "New Track");
+});
+
+test("repeated offline failures keep exponential elapsed-time backoff", async () => {
+  const env = setup();
+  const up = env.uploader();
+  env.setOffline(true);
+  assert.equal((await up.push(track())).reason, "network_error");
+  env.advanceElapsed(4_999);
+  assert.equal((await up.push(track({ title: "Newest" }))).reason, "backoff");
+  env.advanceElapsed(1);
+  assert.equal((await up.push(track({ title: "Newest" }))).reason, "network_error");
+  env.advanceElapsed(9_999);
+  assert.equal((await up.push(track())).reason, "backoff");
+  env.advanceElapsed(1);
+  env.setOffline(false);
+  assert.equal((await up.push(track({ title: "Recovered" }))).sent, true);
 });
 
 test("a revoked token stops uploads and clears credentials", async () => {
