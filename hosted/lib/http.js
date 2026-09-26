@@ -13,7 +13,7 @@ export function sendJson(res, status, body, headers = {}) {
 }
 
 export function sendError(res, error) {
-  if (error instanceof ServiceError) return sendJson(res, error.status, { error: error.code });
+  if (error instanceof ServiceError) return sendJson(res, error.status, { error: error.code, ...error.details });
   // Never echo internal errors: they may carry request data.
   return sendJson(res, 500, { error: "internal_error" });
 }

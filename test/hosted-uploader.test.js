@@ -29,7 +29,7 @@ function setup({ start = 1_800_000_000_000 } = {}) {
       if (path === "/api/revoke") return reply(200, await service.revoke({ token }));
       return reply(404, { error: "not_found" });
     } catch (error) {
-      if (error instanceof ServiceError) return reply(error.status, { error: error.code });
+      if (error instanceof ServiceError) return reply(error.status, { error: error.code, ...error.details });
       throw error;
     }
   };
@@ -107,6 +107,33 @@ test("sequence keeps rising across restarts", async () => {
   assert.equal((await env.uploader().push(track())).sent, true);
   const seqs = ingests(env.calls).map((call) => call.body.seq);
   assert.ok(seqs[1] > seqs[0]);
+});
+
+test("recovers a rollback across restarts using the authenticated prior sequence", async () => {
+  const env = setup();
+  assert.deepEqual(await env.uploader().push(track()), { sent: true });
+  const { cardId, token } = env.stored();
+  const firstSeq = ingests(env.calls)[0].body.seq;
+  env.advance(-60 * 60 * 1000);
+  assert.deepEqual(await env.uploader().push(track({ title: "Temptation" })), { sent: true });
+  const seqs = ingests(env.calls).map((call) => call.body.seq);
+  assert.deepEqual(seqs, [firstSeq, firstSeq - 60 * 60 * 1000, firstSeq + 1]);
+  assert.equal((await env.service.readCardState(cardId)).title, "Temptation");
+  await assert.rejects(env.service.ingest({ token, payload: { ...ingests(env.calls)[0].body, observedAt: env.now() } }), { status: 409, code: "stale_sequence" });
+});
+
+test("a stale server without a prior sequence reports recovery unavailable", async () => {
+  const env = setup();
+  await env.uploader().push(track());
+  env.advance(-60 * 60 * 1000);
+  const fetchImpl = async (url, init) => {
+    const result = await env.fetchImpl(url, init);
+    if (result.status === 409) return { ...result, json: async () => ({ error: "stale_sequence" }) };
+    return result;
+  };
+  const restarted = env.uploader({ fetchImpl });
+  assert.deepEqual(await restarted.push(track({ title: "Temptation" })), { sent: false, reason: "sequence_recovery_unavailable" });
+  assert.equal(restarted.status().lastError, "sequence_recovery_unavailable");
 });
 
 test("disabled card fields and artwork never reach the wire", async () => {
