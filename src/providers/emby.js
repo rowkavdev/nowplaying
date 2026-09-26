@@ -11,14 +11,14 @@ export function createEmbyProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
     id: "emby",
     async getPresence({ username, userId } = {}) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/Sessions`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
-      if (!response.ok) throw new Error(`Emby sessions request failed: ${response.status} ${response.statusText}`);
+      if (!response.ok) throw Object.assign(new Error(`Emby sessions request failed: ${response.status} ${response.statusText}`), { status: response.status });
       const sessions = sessionList(await response.json(), "Emby");
       const session = pickSession(sessions, (candidate) => matchesSession(candidate, { username, userId }), (candidate) => Boolean(candidate.PlayState?.IsPaused));
       return session ? mapSession(session) : { state: "idle" };
     },
     async whoami() {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/Users/Me`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
-      if (!response.ok) throw new Error(`Emby user request failed: ${response.status} ${response.statusText}`);
+      if (!response.ok) throw Object.assign(new Error(`Emby user request failed: ${response.status} ${response.statusText}`), { status: response.status });
       const user = await response.json();
       return { id: typeof user?.Id === "string" ? user.Id : null, displayName: typeof user?.Name === "string" ? user.Name : null };
     },

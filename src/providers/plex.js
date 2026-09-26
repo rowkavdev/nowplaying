@@ -33,7 +33,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/status/sessions`, {
         headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
-      if (!response.ok) throw new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`);
+      if (!response.ok) throw Object.assign(new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`), { status: response.status });
       const payload = await response.json();
       const listed = payload?.MediaContainer?.Metadata ?? [];
       if (!Array.isArray(listed)) throw new Error("Plex sessions response was not a list");

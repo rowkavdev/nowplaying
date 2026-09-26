@@ -77,3 +77,28 @@ test("Navidrome says it is music-only, and the app keeps that through its wrappe
   const jellyfin = createProviderFromConfig(parseAppConfig(serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true })), "k", { fetchImpl: async () => Response.json([]) });
   assert.deepEqual([...jellyfin.mediaKinds], ["track", "episode", "movie"]);
 });
+
+test("HTTP authentication failures carry a safe status for sign-in guidance", async () => {
+  const { classifyFailure } = await import("../src/resilient-card.js");
+  for (const status of [401, 403, 503]) {
+    const provider = createNavidromeProvider({ baseUrl: "http://navidrome.test", username: "u", token: "t", salt: "s", fetchImpl: async () => ({ ok: false, status, statusText: status === 503 ? "Unavailable" : "Rejected" }) });
+    await assert.rejects(provider.getPresence(), (error) => {
+      assert.equal(error.status, status);
+      assert.equal(classifyFailure(error), status === 503 ? "error" : "unauthorized");
+      return true;
+    });
+  }
+});
+
+test("a Subsonic failed response with code 40 is an authentication failure", async () => {
+  const { classifyFailure } = await import("../src/resilient-card.js");
+  const provider = createNavidromeProvider({
+    baseUrl: "https://music.test", username: "u", token: "t", salt: "s",
+    fetchImpl: async () => ({ ok: true, json: async () => ({ "subsonic-response": { status: "failed", error: { code: 40, message: "Wrong username or password" } } }) }),
+  });
+  await assert.rejects(provider.getPresence(), (error) => {
+    assert.equal(error.status, 401);
+    assert.equal(classifyFailure(error), "unauthorized");
+    return true;
+  });
+});
