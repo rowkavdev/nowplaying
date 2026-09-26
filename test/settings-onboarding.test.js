@@ -193,4 +193,39 @@ test("at capacity, reconnecting an existing account succeeds but a different ide
   assert.equal(values.has("navidrome:new-account"), false);
   assert.equal(values.get("navidrome:u0"), "new-secret");
   assert.doesNotMatch(await readFile(file, "utf8"), /new-password|new-secret/);
-  assert.equal(JSON.parse(await readFile(file, "utf8")).servers.length, 8);});
+  assert.equal(JSON.parse(await readFile(file, "utf8")).servers.length, 8);
+});
+
+
+test("a failed pre-save callback leaves config and existing sign-in intact", async () => {
+  const file = await fixture();
+  const original = serializeSetupConfig({ servers: [{ provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "u1", displayName: "User" } }], credentialStored: true });
+  await writeFile(file, original);
+  const values = new Map([["navidrome:u1", "old-token"]]); const refKey = (ref) => `${ref.provider}:${ref.identityId}`;
+  let restarted = false;
+  const mgmt = createSettingsServers({ file, deviceId,
+    credentialStore: { read: async (ref) => values.get(refKey(ref)) ?? null, remove: async (ref) => values.delete(refKey(ref)), save: async (ref, secret) => { values.set(refKey(ref), secret); } },
+    beforeRestart: async () => { throw Error("optional services failed"); },
+    onConfigured: async () => { restarted = true; },
+    signIn: { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "u1", displayName: "User" }, secret: "signed-in-token" }) },
+  });
+  const response = await mgmt.handler(post("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "u1", password: "not-saved" }));
+  assert.deepEqual([response.status, JSON.parse(response.body)], [500, { error: "draft_update_failed" }]);
+  assert.equal(await readFile(file, "utf8"), original);
+  assert.equal(values.get("navidrome:u1"), "old-token");
+  assert.equal(restarted, false);
+});
+
+test("a failed pre-save callback removes a newly acquired credential", async () => {
+  const file = await fixture();
+  const values = new Map(); const refKey = (ref) => `${ref.provider}:${ref.identityId}`;
+  const mgmt = createSettingsServers({ file, deviceId,
+    credentialStore: { read: async (ref) => values.get(refKey(ref)) ?? null, remove: async (ref) => values.delete(refKey(ref)), save: async (ref, secret) => { values.set(refKey(ref), secret); } },
+    beforeRestart: async () => { throw Error("optional services failed"); },
+    signIn: { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "u1", displayName: "User" }, secret: "signed-in-token" }) },
+  });
+  const response = await mgmt.handler(post("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "u1", password: "not-saved" }));
+  assert.deepEqual([response.status, JSON.parse(response.body)], [500, { error: "draft_update_failed" }]);
+  assert.equal(values.has("navidrome:u1"), false);
+  await assert.rejects(readFile(file, "utf8"), { code: "ENOENT" });
+});

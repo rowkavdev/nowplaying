@@ -77,8 +77,11 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
         const i = servers.findIndex((s) => s.provider === provider && s.identity.id === identity.id);
         servers[i] = { provider, serverUrl, identity };
       }
-      await save(servers, existing);
+      // Optional connected services run before the server commit. If they
+      // fail, the server config is unchanged and finish() restores the old
+      // credential (or removes a newly acquired one).
       await beforeRestart();
+      await save(servers, existing);
       configured = true;
       scheduleRestart();
     }),
