@@ -67,6 +67,22 @@ test("hosted device sign-in retains selected URL and enables upload", async () =
   assert.equal(JSON.parse((await svc.handler({url:"/api/settings/services"})).body).hosted.login,"rowan");
 });
 
+test("abandoned hosted sign-in expires and allows a new start without restarting", async () => {
+  const file = await configFile(); let clock = 1000, starts = 0;
+  const svc = createSettingsConnectedServices({ file, now: () => clock, credentialStore: { save: async () => {} }, hostedCredentials: { load: async () => null, save: async () => {} },
+    hostedSignIn: () => ({ start: async () => { starts++; return { status: "started", expiresIn: 120, interval: 5 }; }, poll: async () => ({ status: "pending" }) }),
+  });
+  const start = () => svc.handler(post("/api/setup/hosted/signin", { action: "start", url: "https://cards.example" }));
+  assert.equal((await start()).status, 200);
+  clock += 119_000;
+  assert.equal((await start()).status, 409, "active flow must remain guarded");
+  assert.equal((await svc.handler(post("/api/setup/hosted/signin", { action: "poll" }))).status, 200);
+  clock += 1000;
+  assert.equal(JSON.parse((await start()).body).status, "started", "expired flow can be replaced without a poll");
+  assert.equal(starts, 2);
+  assert.equal((await start()).status, 409, "replacement flow is guarded again");
+});
+
 test("hosted preview/check are available on first run and reflect privacy", async () => {
   const file=await configFile(false);const seen=[];
   const svc=createSettingsConnectedServices({file,credentialStore:{save:async()=>{}},hostedCredentials:{load:async()=>null,save:async()=>{}},fetchImpl:async(url,opts)=>{seen.push({url,opts});return{status:200,text:async()=>"ok"};}});
