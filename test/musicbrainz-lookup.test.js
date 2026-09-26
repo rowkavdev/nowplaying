@@ -24,6 +24,7 @@ test("finds the Cover Art Archive front cover for the best confident match", asy
   assert.equal(await lookup({ title: "Teardrop", artist: "Massive Attack" }), `https://coverartarchive.org/release/${RELEASE}/front-250`);
   const search = new URL(net.calls[0].url);
   assert.equal(search.searchParams.get("query"), 'recording:"Teardrop" AND artist:"Massive Attack"');
+  assert.equal(MUSICBRAINZ_USER_AGENT, "nowplaying/0.2 ( https://github.com/rowkavdev/nowplaying )");
   assert.equal(net.calls[0].init.headers["User-Agent"], MUSICBRAINZ_USER_AGENT);
   assert.deepEqual(net.calls.slice(1).map((call) => call.init.method), ["HEAD", "HEAD"]);
 });

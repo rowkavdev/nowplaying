@@ -6,7 +6,7 @@
 const API = "https://musicbrainz.org/ws/2/recording";
 const COVERS = "https://coverartarchive.org/release";
 const MBID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const MUSICBRAINZ_USER_AGENT = "nowplaying/0.2 ( https://github.com/rowkav09/nowplaying )";
+export const MUSICBRAINZ_USER_AGENT = "nowplaying/0.2 ( https://github.com/rowkavdev/nowplaying )";
 
 export function luceneTerm(value) {
   return `"${String(value).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200).replace(/[\\"]/g, "\\$&")}"`;
