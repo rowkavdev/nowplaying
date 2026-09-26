@@ -10,6 +10,8 @@ test("does not enumerate interfaces; scans only an explicitly selected private /
   assert.equal(hosts.length, 254);
   assert.equal(hosts[0], "192.168.7.1");
   assert.equal(hosts.at(-1), "192.168.7.254");
+  assert.deepEqual(subnetCandidates("010.0.0.0/24").slice(0, 2), ["10.0.0.1", "10.0.0.2"]);
+  assert.deepEqual(subnetCandidates("192.168.001.0/24").slice(0, 2), ["192.168.1.1", "192.168.1.2"]);
   assert.throws(() => subnetCandidates("8.8.8.0/24"), /private/);
   assert.throws(() => subnetCandidates("10.1.0.0/16"), /private IPv4 subnet/);
   assert.throws(() => subnetCandidates("10.8.0.42"), /private IPv4 subnet/);
@@ -40,4 +42,26 @@ test("cancels local gateway and UDP discovery before LAN probes", async () => {
   assert.equal(receivedSignal, controller.signal);
   assert.deepEqual(receivedHosts, []);
   assert.deepEqual(servers, []);
+});
+
+
+test("zero-padded private subnet never probes the public octal reinterpretation", async () => {
+  const hosts = subnetCandidates("010.0.0.0/24");
+  const seen = new Set();
+  await discoverSettingsServers({ hosts, localDiscover: async () => [], fetchImpl: async (url) => {
+    const hostname = new URL(url).hostname;
+    assert.match(hostname, /^10\.0\.0\.(?:[1-9]|[1-9]\d|1\d\d|2[0-4]\d|25[0-4])$/);
+    seen.add(hostname);
+    throw new Error("recorded only - no network traffic");
+  } });
+  assert.equal(seen.size, 254);
+  assert.equal(seen.has("10.0.0.1"), true);
+  assert.equal(seen.has("10.0.0.254"), true);
+  assert.equal(seen.has("8.0.0.1"), false);
+});
+
+test("directly supplied zero-padded hosts are normalized too", async () => {
+  let seen;
+  await discoverSettingsServers({ hosts: ["010.0.0.1"], localDiscover: async () => [], fetchImpl: async (url) => { seen = new URL(url).hostname; throw Error("recorded"); } });
+  assert.equal(seen, "10.0.0.1");
 });

@@ -59,6 +59,11 @@ test("discovery requires explicit private CIDR for port sweep and cancels", asyn
   assert.deepEqual(hosts, []);
   assert.equal((await mgmt.handler(post("/api/settings/servers/discover", { subnet: "192.168.1.0/24" }))).status, 200);
   assert.equal(hosts.length, 254);
+  const padded = await mgmt.handler(post("/api/settings/servers/discover", { subnet: "010.0.0.0/24" }));
+  assert.equal(padded.status, 200);
+  assert.equal(hosts.length, 254);
+  assert.equal(hosts[0], "10.0.0.1");
+  assert.equal(hosts.at(-1), "10.0.0.254");
 });
 
 test("adding a second server keeps current settings and never writes a password", async () => {
