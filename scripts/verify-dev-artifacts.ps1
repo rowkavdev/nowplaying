@@ -1,13 +1,12 @@
 # Exercise the assets users download, not a fresh rebuild of the repository.
 $ErrorActionPreference = 'Stop'
 $repo = 'rowkavdev/nowplaying'
-$expectedSha = '4406f562f16a2b49d96d5a046dfd3152450c718b'
 $root = Join-Path $env:RUNNER_TEMP 'nowplaying-dev-artifact-check'
 New-Item -ItemType Directory -Path $root -Force | Out-Null
 $release = gh release view dev --repo $repo --json assets,tagName | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or $release.tagName -ne 'dev') { throw 'Dev release lookup failed' }
 $tag = (gh api "repos/$repo/git/ref/tags/dev" --jq '.object.sha').Trim()
-if ($LASTEXITCODE -ne 0 -or $tag -ne $expectedSha) { throw "Moving dev tag changed: $tag" }
+if ($LASTEXITCODE -ne 0 -or $tag -notmatch '^[a-f0-9]{40}$') { throw "Dev tag lookup failed: $tag" }
 $files = @('nowplaying-dev-windows-x64-setup.exe', 'nowplaying-dev-windows-x64.zip', 'SHA256SUMS')
 foreach ($name in $files) {
   $asset = @($release.assets | Where-Object name -eq $name)
@@ -28,6 +27,8 @@ foreach ($name in $files[0..1]) {
 function Test-Bundle($dir, $label) {
   $exe = Join-Path $dir 'nowplaying.exe'
   if (-not (Test-Path $exe)) { throw "$label has no launcher" }
+  $info = Get-Content (Join-Path $dir 'app/build-info.json') -Raw | ConvertFrom-Json
+  if ($info.commitSha -ne $tag) { throw "$label was built from $($info.commitSha), not dev tag $tag" }
   Write-Host "Testing $label bundle at $dir"
   Push-Location $dir
   try {
@@ -75,4 +76,6 @@ finally {
   $uninstall = Join-Path $installDir 'unins000.exe'
   if (Test-Path $uninstall) { $un = Start-Process -FilePath $uninstall -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait; if ($un.ExitCode -ne 0) { throw "Uninstall failed: $($un.ExitCode)" } }
 }
-Write-Host 'Both downloaded dev artifacts exercised on Windows.'
+$tagAfter = (gh api "repos/$repo/git/ref/tags/dev" --jq '.object.sha').Trim()
+if ($LASTEXITCODE -ne 0 -or $tagAfter -ne $tag) { throw "Dev tag moved during test ($tag -> $tagAfter); rerun for the new build" }
+Write-Host "Both downloaded dev artifacts exercised on Windows at $tag."
