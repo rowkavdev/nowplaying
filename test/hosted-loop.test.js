@@ -75,19 +75,21 @@ test("loop validates its inputs", () => {
 // #343: stale state on the hosted card.
 function staleSetup({ presence }) {
   let clock = 1_800_000_000_000;
+  let elapsed = 0;
   const pushed = [];
   let next = presence;
   let result = { sent: true };
   const loop = createHostedLoop({
     getPresence: async () => { if (next instanceof Error) throw next; return next; },
     uploader: { push: async (p) => { pushed.push(p); return result; } },
-    failAfterMs: 60_000, stuckAfterMs: 300_000, now: () => clock,
+    failAfterMs: 60_000, stuckAfterMs: 300_000, elapsedNow: () => elapsed,
   });
   return {
     loop, pushed,
     set: (value) => { next = value; },
     setResult: (value) => { result = value; },
-    advance: (ms) => { clock += ms; },
+    advance: (ms) => { clock += ms; elapsed += ms; },
+    rollback: (ms) => { clock -= ms; },
   };
 }
 
@@ -154,6 +156,54 @@ test("a playing session frozen at one position is uploaded as idle after the Dis
   assert.equal(env.pushed.at(-1).state, "idle");
   env.set(playingAt(43_000));
   env.advance(15_000);
+  await env.loop.tick();
+  assert.equal(env.pushed.at(-1).state, "playing");
+});
+
+test("frozen playback clears after five elapsed minutes despite a wall-clock rollback", async () => {
+  const env = staleSetup({ presence: playingAt(42_000) });
+  await env.loop.tick();
+  env.rollback(60 * 60_000);
+  for (let minute = 1; minute < 5; minute++) {
+    env.advance(60_000);
+    assert.notEqual((await env.loop.tick()).cleared, "stuck");
+  }
+  env.advance(60_000);
+  assert.equal((await env.loop.tick()).cleared, "stuck");
+  env.advance(60_000);
+  assert.equal((await env.loop.tick()).reason, "stuck");
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "playing", "playing", "playing", "playing", "idle"]);
+  env.set(playingAt(43_000));
+  assert.notEqual((await env.loop.tick()).cleared, "stuck");
+  assert.equal(env.pushed.at(-1).state, "playing");
+});
+
+test("frozen idle retries on upload failure, then stays quiet after success", async () => {
+  const env = staleSetup({ presence: playingAt(42_000) });
+  await env.loop.tick();
+  env.advance(300_000);
+  env.setResult({ sent: false, reason: "network_error" });
+  assert.equal((await env.loop.tick()).cleared, "stuck");
+  env.setResult({ sent: true });
+  assert.equal((await env.loop.tick()).cleared, "stuck");
+  assert.equal((await env.loop.tick()).reason, "stuck");
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle", "idle"]);
+});
+
+test("continuous provider failure clears once after one elapsed minute despite rollback", async () => {
+  const env = staleSetup({ presence: playingAt(42_000) });
+  await env.loop.tick();
+  env.set(new Error("down"));
+  await env.loop.tick();
+  env.rollback(60 * 60_000);
+  env.advance(59_000);
+  assert.equal((await env.loop.tick()).reason, "provider_error");
+  env.advance(1_000);
+  assert.equal((await env.loop.tick()).cleared, "provider_error");
+  env.advance(60_000);
+  await env.loop.tick();
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle"]);
+  env.set(playingAt(43_000));
   await env.loop.tick();
   assert.equal(env.pushed.at(-1).state, "playing");
 });
