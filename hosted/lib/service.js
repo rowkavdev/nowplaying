@@ -164,7 +164,15 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       await cmd("SET", userBucket, "0", "EX", 120, "NX");
       if (await cmd("INCR", userBucket) > USER_INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited");
     }
-    const update = validateIngest(payload, { now: now() });
+    let update;
+    const serverTime = now();
+    try { update = validateIngest(payload, { now: serverTime }); }
+    catch (error) {
+      // Authentication has already succeeded; disclose only the service clock
+      // so the device can correct a skewed observedAt without re-registering.
+      if (error instanceof ServiceError && error.code === "clock_skew") error.details = { serverTime };
+      throw error;
+    }
     const seqKey = `np:seq:${device.deviceId}`;
     const lastSeq = Number(await cmd("GET", seqKey) ?? -1);
     if (update.seq <= lastSeq) throw new ServiceError(409, "stale_sequence", { lastSeq });
