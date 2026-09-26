@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [0.2.0](https://github.com/rowkavdev/nowplaying/compare/v0.1.0...v0.2.0) (2026-09-26)
 
 
+### Current setup and delivery
+
+- Install the Windows build, then use the loopback WebUI for first-run sign-in, server discovery and management, Spotify Client ID or hosted GitHub sign-in, card and Discord settings, status and logs. The tray opens Settings. Older native and browser setup wizards were replaced before this release.
+- Windows installer and portable ZIP are the distributed builds; check the matching `SHA256SUMS` before installing. The hosted card never uploads artwork or private server details.
+
+The changes below describe what ships in 0.2.0; use the current Windows guide for setup steps.
+
 ### Features
 
 * accept same-origin JSON bodies on the localhost server ([#195](https://github.com/rowkavdev/nowplaying/issues/195)) ([25bbb37](https://github.com/rowkavdev/nowplaying/commit/25bbb37f9df40f0d0850696d5f87acbca2a45466))
@@ -20,7 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * add privacy-safe Discord artwork resolver ([#187](https://github.com/rowkavdev/nowplaying/issues/187)) ([d3a350d](https://github.com/rowkavdev/nowplaying/commit/d3a350d4be0312399ccb2074c021ab5c2baffc04))
 * add privacy-safe hosted-card stale diagnostics headers ([#189](https://github.com/rowkavdev/nowplaying/issues/189)) ([39e1d54](https://github.com/rowkavdev/nowplaying/commit/39e1d543955dea08d726f38486cb557fe0dd59af))
 * add privacy-safe tray health state ([#184](https://github.com/rowkavdev/nowplaying/issues/184)) ([d8cac95](https://github.com/rowkavdev/nowplaying/commit/d8cac953ace2e54e12a8154fd7e80d973ce60624))
-* add setup draft API for the first-run wizard ([#196](https://github.com/rowkavdev/nowplaying/issues/196)) ([e17599e](https://github.com/rowkavdev/nowplaying/commit/e17599e7e52c7dd92dc0785549fd538e8f2141a1))
 * add startup recovery state core ([#181](https://github.com/rowkavdev/nowplaying/issues/181)) ([b7b23d6](https://github.com/rowkavdev/nowplaying/commit/b7b23d6fa415ee1296e7831561c37be949635a81))
 * add versioned config migration core ([#182](https://github.com/rowkavdev/nowplaying/issues/182)) ([1175ff7](https://github.com/rowkavdev/nowplaying/commit/1175ff7a59de8bfffb29d04283d51418c38bf522))
 * **app:** first launch opens setup in the default browser ([#271](https://github.com/rowkavdev/nowplaying/issues/271)) ([#324](https://github.com/rowkavdev/nowplaying/issues/324)) ([ff09c13](https://github.com/rowkavdev/nowplaying/commit/ff09c13bf3cd44bc78706630e28baedcfe99e8b8))
@@ -33,7 +39,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * **app:** run config migrations at start-up, document backups ([#307](https://github.com/rowkavdev/nowplaying/issues/307)) ([b26760f](https://github.com/rowkavdev/nowplaying/commit/b26760f8e3dc53ef8bab2b70aac98a97e9f5ff5e))
 * **app:** start in safe mode after repeated failed starts ([#122](https://github.com/rowkavdev/nowplaying/issues/122)) ([#322](https://github.com/rowkavdev/nowplaying/issues/322)) ([883bfca](https://github.com/rowkavdev/nowplaying/commit/883bfcac47f9796c8a5d5d79904dcad5401946c9))
 * back up config before migration ([#183](https://github.com/rowkavdev/nowplaying/issues/183)) ([2bbb1ec](https://github.com/rowkavdev/nowplaying/commit/2bbb1eca6509dc062d5e7f26d8aaf1d5ceac3a2b))
-* browser-based first-run setup wizard page ([#198](https://github.com/rowkavdev/nowplaying/issues/198)) ([e885185](https://github.com/rowkavdev/nowplaying/commit/e885185b355f90b5b41863e1608335cff8159f6b))
 * **card:** artwork placement and size in the config.json card section ([#94](https://github.com/rowkavdev/nowplaying/issues/94)) ([#400](https://github.com/rowkavdev/nowplaying/issues/400)) ([3a1d55e](https://github.com/rowkavdev/nowplaying/commit/3a1d55ebae5e10f9a1af1f48d30ffef111919801))
 * **card:** field order and text alignment in the renderer ([#94](https://github.com/rowkavdev/nowplaying/issues/94)) ([#402](https://github.com/rowkavdev/nowplaying/issues/402)) ([219e4e6](https://github.com/rowkavdev/nowplaying/commit/219e4e6bba5f3cb6e230dc2c217fa6781490e6b2))
 * **card:** progress bar position and width in the renderer ([#94](https://github.com/rowkavdev/nowplaying/issues/94)) ([#408](https://github.com/rowkavdev/nowplaying/issues/408)) ([d0bd81f](https://github.com/rowkavdev/nowplaying/commit/d0bd81f5ae082a6a21ff2b424f03caf17f4daebc))
@@ -70,8 +75,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * **hosted:** Sign in with GitHub from setup, app side of one card per user ([#140](https://github.com/rowkavdev/nowplaying/issues/140)) ([#473](https://github.com/rowkavdev/nowplaying/issues/473)) ([d89e87b](https://github.com/rowkavdev/nowplaying/commit/d89e87baa3a67690b01427aa0e220cceb854a353))
 * **jellyfin, emby:** map series, season, episode and year ([#143](https://github.com/rowkavdev/nowplaying/issues/143)) ([#333](https://github.com/rowkavdev/nowplaying/issues/333)) ([026973a](https://github.com/rowkavdev/nowplaying/commit/026973a9dba3bd2191c822ce9cd763e8253a959a))
 * log Windows startup lifecycle ([#193](https://github.com/rowkavdev/nowplaying/issues/193)) ([a621e1e](https://github.com/rowkavdev/nowplaying/commit/a621e1e8798d90a3a8f12d20b88efb53ee125051))
-* native Windows setup window with local discovery ([#204](https://github.com/rowkavdev/nowplaying/issues/204)) ([0f959e0](https://github.com/rowkavdev/nowplaying/commit/0f959e05e2422689ef8f1600e3ca9039acb7e2f7))
-* nowplaying.exe setup opens the first-run wizard ([#199](https://github.com/rowkavdev/nowplaying/issues/199)) ([3bd7e53](https://github.com/rowkavdev/nowplaying/commit/3bd7e538e32d27ed95051d9a882b4d88e8b8fe27))
 * opt-in MusicBrainz artwork lookup for Discord ([#202](https://github.com/rowkavdev/nowplaying/issues/202)) ([f51c75f](https://github.com/rowkavdev/nowplaying/commit/f51c75f42e45bcad4f076f827092d5151ade348e))
 * opt-in page CSP and 404 fallback on the localhost server ([#197](https://github.com/rowkavdev/nowplaying/issues/197)) ([a30d205](https://github.com/rowkavdev/nowplaying/commit/a30d20507e9f938af73030184e481a3fa5b11c07))
 * **plex:** map series, season, episode and year ([#143](https://github.com/rowkavdev/nowplaying/issues/143)) ([#332](https://github.com/rowkavdev/nowplaying/issues/332)) ([e5222d6](https://github.com/rowkavdev/nowplaying/commit/e5222d6ea1701b235a70a4d2778b53445c52801c))
@@ -109,29 +112,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * **settings:** text direction in config.json and on the Card section ([#94](https://github.com/rowkavdev/nowplaying/issues/94)) ([#411](https://github.com/rowkavdev/nowplaying/issues/411)) ([d4ce2d4](https://github.com/rowkavdev/nowplaying/commit/d4ce2d4ef82225d115260a01bf3cd86571a37563))
 * **settings:** YouTube pairing code on the settings page ([#136](https://github.com/rowkavdev/nowplaying/issues/136)) ([#428](https://github.com/rowkavdev/nowplaying/issues/428)) ([f77c4f5](https://github.com/rowkavdev/nowplaying/commit/f77c4f5eafad0d16d305eb6ccb8dacacd39a5b5e))
 * setup API for provider sign-in that saves secrets to Credential Manager ([#221](https://github.com/rowkavdev/nowplaying/issues/221)) ([95cfbb2](https://github.com/rowkavdev/nowplaying/commit/95cfbb28cc03a3abe292d1dd015ae873bf6d625c))
-* **setup:** add, cancel and remove servers in the native Windows setup window ([#252](https://github.com/rowkavdev/nowplaying/issues/252)) ([#382](https://github.com/rowkavdev/nowplaying/issues/382)) ([a8a09b3](https://github.com/rowkavdev/nowplaying/commit/a8a09b331a21827019eff1e0b1c6754ff34927b4))
 * **setup:** add, cancel and remove servers on the browser setup page ([#252](https://github.com/rowkavdev/nowplaying/issues/252)) ([#381](https://github.com/rowkavdev/nowplaying/issues/381)) ([c832dd1](https://github.com/rowkavdev/nowplaying/commit/c832dd1de223d990c8949c7ee667783e5178b99e))
 * **setup:** find Jellyfin and Emby on the LAN with UDP discovery ([#269](https://github.com/rowkavdev/nowplaying/issues/269)) ([#286](https://github.com/rowkavdev/nowplaying/issues/286)) ([ecac482](https://github.com/rowkavdev/nowplaying/commit/ecac482ab6a5e4abbe483f801944b1a014c3dabb))
 * **setup:** Finish writes the app config ([#224](https://github.com/rowkavdev/nowplaying/issues/224)) ([909661e](https://github.com/rowkavdev/nowplaying/commit/909661e65104fd8af9a51ae5df19d0883cbf464a)), closes [#223](https://github.com/rowkavdev/nowplaying/issues/223)
-* **setup:** first launch opens setup; installer offers it on first install ([#230](https://github.com/rowkavdev/nowplaying/issues/230)) ([ff8fedb](https://github.com/rowkavdev/nowplaying/commit/ff8fedbcc9133aa2d6ff5095b2d6a3b6b1706e70))
 * **setup:** optional Spotify sign-in API for setup, writes config.spotify ([#135](https://github.com/rowkavdev/nowplaying/issues/135)) ([#396](https://github.com/rowkavdev/nowplaying/issues/396)) ([1b559b8](https://github.com/rowkavdev/nowplaying/commit/1b559b8c0bd186da58c59114abd71f0614320a41))
 * **setup:** probe the LAN gateway for Navidrome and Jellyfin/Emby ([#270](https://github.com/rowkavdev/nowplaying/issues/270)) ([#291](https://github.com/rowkavdev/nowplaying/issues/291)) ([124c966](https://github.com/rowkavdev/nowplaying/commit/124c966aa91b9e7153c955d597d68b21f525f3d2))
 * **setup:** rate-limit Test connection, test websocket refusal ([#173](https://github.com/rowkavdev/nowplaying/issues/173)) ([#254](https://github.com/rowkavdev/nowplaying/issues/254)) ([d74d407](https://github.com/rowkavdev/nowplaying/commit/d74d407edf0db67766328fe846f2b5d379f36c28))
-* **setup:** require the session secret on setup writes, native window sends it ([#173](https://github.com/rowkavdev/nowplaying/issues/173)) ([#293](https://github.com/rowkavdev/nowplaying/issues/293)) ([cc493ba](https://github.com/rowkavdev/nowplaying/commit/cc493ba5a8ff735ad8197f606af1137e28d496f6))
 * **setup:** sign in to more than one server during setup ([#252](https://github.com/rowkavdev/nowplaying/issues/252)) ([#378](https://github.com/rowkavdev/nowplaying/issues/378)) ([73c9a42](https://github.com/rowkavdev/nowplaying/commit/73c9a429e6ca180609c62256324ca8e2c147e302))
-* **setup:** sign in to the media server from the setup window ([#222](https://github.com/rowkavdev/nowplaying/issues/222)) ([f07b9bf](https://github.com/rowkavdev/nowplaying/commit/f07b9bfdee1587c447a9d38f51df172f59140781)), closes [#220](https://github.com/rowkavdev/nowplaying/issues/220)
-* **setup:** Spotify Client ID and sign-in in the native Windows setup window ([#135](https://github.com/rowkavdev/nowplaying/issues/135)) ([#403](https://github.com/rowkavdev/nowplaying/issues/403)) ([2aa6f57](https://github.com/rowkavdev/nowplaying/commit/2aa6f579d8baa5320cb61223b5cc83f1477da524))
 * **setup:** Spotify Client ID and sign-in on the browser setup page ([#135](https://github.com/rowkavdev/nowplaying/issues/135)) ([#399](https://github.com/rowkavdev/nowplaying/issues/399)) ([c6cdd36](https://github.com/rowkavdev/nowplaying/commit/c6cdd36355ca67e8e517efe71586f472a6e24e67))
-* **setup:** Start with Windows choice in the wizard ([#228](https://github.com/rowkavdev/nowplaying/issues/228)) ([89b611f](https://github.com/rowkavdev/nowplaying/commit/89b611fd7e031c1223a60f90ca0d885e37a62e01))
 * **setup:** test the signed-in provider connection before finishing ([#116](https://github.com/rowkavdev/nowplaying/issues/116)) ([#242](https://github.com/rowkavdev/nowplaying/issues/242)) ([064c59f](https://github.com/rowkavdev/nowplaying/commit/064c59fa1d14673ba4b10dca4e396521f1816356))
-* **setup:** user check in Test connection, and the button in the Windows wizard ([#249](https://github.com/rowkavdev/nowplaying/issues/249)) ([93cfc5d](https://github.com/rowkavdev/nowplaying/commit/93cfc5d3297ae62e020450f258dbc5eca1638ec3))
 * **start:** run from the setup config ([#225](https://github.com/rowkavdev/nowplaying/issues/225)) ([8f8f1d2](https://github.com/rowkavdev/nowplaying/commit/8f8f1d2ad974f1aa0910330c8a6f49067ea371ff)), closes [#223](https://github.com/rowkavdev/nowplaying/issues/223)
 * **status:** copy or download a privacy-safe diagnostics report ([#115](https://github.com/rowkavdev/nowplaying/issues/115)) ([#279](https://github.com/rowkavdev/nowplaying/issues/279)) ([31f5016](https://github.com/rowkavdev/nowplaying/commit/31f50164a5b85a21c6823a8483b4aac5b397cca3))
 * **status:** list every server on the status page, settings helpers to view and remove servers ([#252](https://github.com/rowkavdev/nowplaying/issues/252)) ([#388](https://github.com/rowkavdev/nowplaying/issues/388)) ([d5090f9](https://github.com/rowkavdev/nowplaying/commit/d5090f9e7f4d1de29192d7c09e1991205f2024c0))
 * **status:** show build commit, channel and signing in status and diagnostics ([#119](https://github.com/rowkavdev/nowplaying/issues/119)) ([#292](https://github.com/rowkavdev/nowplaying/issues/292)) ([7703695](https://github.com/rowkavdev/nowplaying/commit/77036957023853bd999d2cf47a93c62e72828562))
 * **tray:** app health in the tray tooltip and menu ([#314](https://github.com/rowkavdev/nowplaying/issues/314)) ([a5e0f3f](https://github.com/rowkavdev/nowplaying/commit/a5e0f3f413e26e9c0632398c9bd772244ad25de7))
 * **tray:** Settings item opens the settings page ([#253](https://github.com/rowkavdev/nowplaying/issues/253)) ([#341](https://github.com/rowkavdev/nowplaying/issues/341)) ([14f3f2a](https://github.com/rowkavdev/nowplaying/commit/14f3f2a28a8aac6c9dddec2ad61289a21acd4404))
-* **tray:** start runs the tray, with Run setup again and Quit ([#231](https://github.com/rowkavdev/nowplaying/issues/231)) ([1e4c944](https://github.com/rowkavdev/nowplaying/commit/1e4c944c01d2d70ffffe7eeeca93cfe0ce724e5c))
 * validate packaged build provenance ([#180](https://github.com/rowkavdev/nowplaying/issues/180)) ([8a503dd](https://github.com/rowkavdev/nowplaying/commit/8a503dd19561a446f20256669cdcc199285dd5aa))
 * Windows Credential Manager adapter for provider secrets ([#200](https://github.com/rowkavdev/nowplaying/issues/200)) ([0961cbe](https://github.com/rowkavdev/nowplaying/commit/0961cbe5de8eb5504f69fb2a399345fb181fc560))
 * **youtube:** browser extension skeleton for YouTube and YouTube Music ([#136](https://github.com/rowkavdev/nowplaying/issues/136)) ([#407](https://github.com/rowkavdev/nowplaying/issues/407)) ([4e8bc8f](https://github.com/rowkavdev/nowplaying/commit/4e8bc8f1fbbb78bc30db028a41b18097d8b959dd))
@@ -188,14 +183,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 * upgrade keeps Start with Windows when it was enabled from the app ([#520](https://github.com/rowkavdev/nowplaying/issues/520)) ([#521](https://github.com/rowkavdev/nowplaying/issues/521)) ([6ffde05](https://github.com/rowkavdev/nowplaying/commit/6ffde05a31a74c46792abf33e3261e6f2fca2afa))
 * use release metadata for update channels ([3fc6333](https://github.com/rowkavdev/nowplaying/commit/3fc6333d37663a44fc2f774d15ba74932b9517c1))
 * **windows:** detect moved portable startup shortcuts ([5d9c1b9](https://github.com/rowkavdev/nowplaying/commit/5d9c1b9a857604d94a3771786ce4d56d10d263ed))
-* **windows:** start the app after first-run setup, dedupe detected servers, trim repeated wizard text ([#250](https://github.com/rowkavdev/nowplaying/issues/250)) ([#251](https://github.com/rowkavdev/nowplaying/issues/251)) ([48806ea](https://github.com/rowkavdev/nowplaying/commit/48806ea60470562e25269193e83ff810eae05b0e))
-* **windows:** visible setup window, no console for users, clear install location ([#243](https://github.com/rowkavdev/nowplaying/issues/243)) ([#244](https://github.com/rowkavdev/nowplaying/issues/244)) ([76909fb](https://github.com/rowkavdev/nowplaying/commit/76909fb0edc6a6cabbfa1e337a7a3cce929f2f36))
 
 ## [Unreleased]
 
 ### Added
 
-- Production runtime, hosted card endpoint and first automated release remain in progress.
+- Follow-on updates remain in progress; see the current install and Settings guides for what ships in 0.2.0.
 
 ## [0.1.0] - Unreleased
 
