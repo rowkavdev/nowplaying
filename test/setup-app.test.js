@@ -36,7 +36,7 @@ test("serves the wizard page and draft API together on a free loopback port", as
 test("a sign-in saves the secret to the credential store and only the account to the draft", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
   const saved = [];
-  const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const credentialStore = { read: async () => null, remove: async () => true, save: async (key, secret) => { saved.push([key, secret]); } };
   const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "nd-secret" }) };
   const draftFile = join(dir, "draft.json");
   const configFile = join(dir, "config.json");
@@ -356,7 +356,7 @@ test("setup again can switch provider and keeps the card, privacy and hosted set
     credentialStored: true, hostedEnabled: true, card, privacy,
   }));
   const saved = [];
-  const credentialStore = { save: async (key, secret) => { saved.push([key, secret]); } };
+  const credentialStore = { read: async () => null, remove: async () => true, save: async (key, secret) => { saved.push([key, secret]); } };
   const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "nd-secret" }) };
   await rerunSetup({ configFile, draftFile: join(dir, "draft.json"), credentialStore, signIn }, async (api) => {
     await api("/api/setup/draft", { action: "next" });
@@ -388,7 +388,7 @@ test("signing in again replaces the stored secret and leaves the config pointing
   }));
   const before = await readFile(configFile, "utf8");
   const vault = new Map([["navidrome/rowan", "old-secret"]]);
-  const credentialStore = { save: async (key, secret) => { vault.set(`${key.provider}/${key.identityId}`, secret); } };
+  const credentialStore = { read: async (key) => vault.get(`${key.provider}/${key.identityId}`) ?? null, remove: async (key) => vault.delete(`${key.provider}/${key.identityId}`), save: async (key, secret) => { vault.set(`${key.provider}/${key.identityId}`, secret); } };
   const signIn = { signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "new-secret" }) };
   await rerunSetup({ configFile, draftFile: join(dir, "draft.json"), credentialStore, signIn }, async (api) => {
     await api("/api/setup/draft", { action: "next" });

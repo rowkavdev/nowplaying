@@ -4,8 +4,9 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parseAppConfig } from "./app-config.js";
-import { serializeSetupConfig } from "./setup-config.js";
+import { MAX_SERVERS, serializeSetupConfig } from "./setup-config.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
+import { SignInError } from "./provider-signin.js";
 import { discoverSettingsServers, subnetCandidates } from "./settings-discovery.js";
 
 const SAFE = new Set(["same-origin", "none"]);
@@ -51,7 +52,22 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     try { await writeFile(temp, body, { mode: 0o600, flag: "wx" }); await rename(temp, file); }
     catch (error) { await rm(temp, { force: true }).catch(() => {}); throw error; }
   }
-  const signin = createSetupSignInHandler({ credentialStore, deviceId, version, ...(signIn ? { signIn } : {}),
+  const signin = createSetupSignInHandler({ credentialStore, deviceId, version, requireServerUrl: true, ...(signIn ? { signIn } : {}),
+    beforeSignIn: async ({ provider, serverUrl }) => serial(async () => {
+      const existing = await read();
+      // At capacity allow reconnecting to an existing server address, then
+      // check the returned identity before writing anything. A new address
+      // fails here, before a Plex approval or a password exchange.
+      if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.serverUrl === serverUrl)) {
+        throw new SignInError("too_many_servers");
+      }
+    }),
+    beforeSignedIn: async ({ provider, identity }) => serial(async () => {
+      const existing = await read();
+      if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.identity.id === identity.id)) {
+        throw new SignInError("too_many_servers");
+      }
+    }),
     onSignedIn: async ({ provider, identity, serverUrl }) => serial(async () => {
       if (!PROVIDERS.has(provider) || !serverUrl) throw new TypeError("invalid server");
       const existing = await read();

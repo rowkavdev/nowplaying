@@ -22,6 +22,7 @@ export const DEFAULT_SIGNIN = Object.freeze({
 export function createSetupSignInHandler({
   credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, now = Date.now, onSignedIn = async () => {},
   flowTtlMs = 10 * 60_000, maxFlows = 4, newFlowId = () => randomBytes(18).toString("base64url"),
+  requireServerUrl = false, beforeSignIn = async () => {}, beforeSignedIn = async () => {},
 } = {}) {
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) throw new TypeError("deviceId is invalid");
@@ -33,18 +34,37 @@ export function createSetupSignInHandler({
   }
 
   async function finish(result, serverUrl) {
-    try {
-      await credentialStore.save({ provider: result.provider, identityId: result.identity.id }, result.secret);
-    } catch {
-      return json(500, { error: "credential_store_failed" });
-    }
+    const ref = { provider: result.provider, identityId: result.identity.id };
     const identity = { id: result.identity.id, displayName: result.identity.displayName };
-    try {
-      await onSignedIn({ provider: result.provider, identity, ...(serverUrl ? { serverUrl } : {}) });
-    } catch {
+    const event = { provider: result.provider, identity, ...(serverUrl ? { serverUrl } : {}) };
+    try { await beforeSignedIn(event); }
+    catch (error) {
+      if (error instanceof SignInError && error.status === "too_many_servers") return json(409, { error: error.status });
       return json(500, { error: "draft_update_failed" });
     }
-    return json(200, { status: "signed_in", provider: result.provider, identity: { id: result.identity.id, displayName: result.identity.displayName } });
+    // A repeat sign-in replaces the same OS credential. Keep the old value
+    // until the draft/config write succeeds so a failed write can restore it.
+    if (typeof credentialStore.read !== "function" || typeof credentialStore.remove !== "function") return json(500, { error: "credential_store_failed" });
+    let previous;
+    try { previous = await credentialStore.read(ref); }
+    catch { return json(500, { error: "credential_store_failed" }); }
+    async function restore() {
+      if (previous === null || previous === undefined) await credentialStore.remove(ref);
+      else await credentialStore.save(ref, previous);
+    }
+    try { await credentialStore.save(ref, result.secret); }
+    catch {
+      // Some adapters write before they report failure. Compensate anyway.
+      try { await restore(); } catch { /* The response cannot promise recovery. */ }
+      return json(500, { error: "credential_store_failed" });
+    }
+    try { await onSignedIn(event); }
+    catch {
+      try { await restore(); }
+      catch { return json(500, { error: "credential_store_failed" }); }
+      return json(500, { error: "draft_update_failed" });
+    }
+    return json(200, { status: "signed_in", provider: result.provider, identity });
   }
 
   async function start(input) {
@@ -55,14 +75,18 @@ export function createSetupSignInHandler({
     if (input.provider === "plex") {
       // Plex signs in through plex.tv; baseUrl is only the local server the
       // app will read from afterwards, remembered with the account.
+      if (requireServerUrl && input.baseUrl === undefined) return json(400, { error: "invalid_server_url" });
       const serverUrl = input.baseUrl === undefined ? undefined : normalizeServerUrl(input.baseUrl);
+      await beforeSignIn({ provider: "plex", serverUrl });
       const pin = await signIn.startPlexPin({ clientId: deviceId });
       flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: now() + flowTtlMs });
       return json(200, { status: "pending", flowId, provider: "plex", authUrl: pin.authUrl });
     }
     if (!text(input.baseUrl)) return json(400, { error: "invalid_request" });
+    const serverUrl = normalizeServerUrl(input.baseUrl);
+    await beforeSignIn({ provider: "jellyfin", serverUrl });
     const qc = await signIn.startJellyfinQuickConnect({ baseUrl: input.baseUrl, deviceId, version });
-    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl: normalizeServerUrl(input.baseUrl), secret: qc.secret, expiresAt: now() + flowTtlMs });
+    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, secret: qc.secret, expiresAt: now() + flowTtlMs });
     return json(200, { status: "pending", flowId, provider: "jellyfin", code: qc.code });
   }
 
@@ -88,10 +112,12 @@ export function createSetupSignInHandler({
   async function password(input) {
     if (!onlyKeys(input, ["action", "provider", "baseUrl", "username", "password"]) || !PASSWORD_PROVIDERS.has(input.provider)) return json(400, { error: "invalid_request" });
     if (!text(input.baseUrl) || !text(input.username) || typeof input.password !== "string" || input.password.length > MAX_FIELD) return json(400, { error: "invalid_request" });
+    const serverUrl = normalizeServerUrl(input.baseUrl);
+    await beforeSignIn({ provider: input.provider, serverUrl });
     const result = input.provider === "emby"
       ? await signIn.signInEmby({ baseUrl: input.baseUrl, username: input.username, password: input.password, deviceId, version })
       : await signIn.signInNavidrome({ baseUrl: input.baseUrl, username: input.username, password: input.password });
-    return finish(result, normalizeServerUrl(input.baseUrl));
+    return finish(result, serverUrl);
   }
 
   async function cancel(input) {
@@ -114,7 +140,7 @@ export function createSetupSignInHandler({
     try {
       return await actions[input.action](input);
     } catch (error) {
-      if (error instanceof SignInError) return json(NETWORK_FAILURES.includes(error.status) ? 502 : 400, { error: error.status });
+      if (error instanceof SignInError) return json(error.status === "too_many_servers" ? 409 : NETWORK_FAILURES.includes(error.status) ? 502 : 400, { error: error.status });
       return json(500, { error: "signin_failed" });
     }
   };

@@ -36,7 +36,7 @@ async function allFiles(dir) {
 test("a sign-in puts the secret only in the credential store, never in files setup writes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-leak-"));
   const stored = [];
-  const credentialStore = { save: async (key, secret) => { stored.push([key, secret]); } };
+  const credentialStore = { read: async () => null, remove: async () => true, save: async (key, secret) => { stored.push([key, secret]); } };
   const signIn = { signInNavidrome: async ({ password }) => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: `${TOKEN}:${password}` }) };
   const app = await startSetupApp({ draftFile: join(dir, "draft.json"), configFile: join(dir, "config.json"), credentialStore, deviceId: "device-0001", signIn });
   const replies = [];

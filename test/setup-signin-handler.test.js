@@ -10,8 +10,11 @@ import { loadOrCreateDeviceId, startSetupApp } from "../src/setup-app.js";
 const DEVICE = "device-0123456789";
 
 function fakeStore() {
-  const saved = [];
-  return { saved, save: async (input, secret) => { saved.push({ ...input, secret }); return { stored: true }; } };
+  const saved = []; const values = new Map();
+  const key = (ref) => `${ref.provider}:${ref.identityId}`;
+  return { saved, values, read: async (ref) => values.get(key(ref)) ?? null,
+    remove: async (ref) => values.delete(key(ref)),
+    save: async (input, secret) => { saved.push({ ...input, secret }); values.set(key(input), secret); return { stored: true }; } };
 }
 
 function fakeSignIn(overrides = {}) {
@@ -122,7 +125,7 @@ test("sign-in errors map to safe codes and end the flow", async () => {
 });
 
 test("a credential store failure is reported without the secret", async () => {
-  const handler = createSetupSignInHandler({ credentialStore: { save: async () => { throw new Error("CredWrite failed plex-token"); } }, deviceId: DEVICE, signIn: fakeSignIn(), newFlowId: () => "f" });
+  const handler = createSetupSignInHandler({ credentialStore: { read: async () => null, remove: async () => {}, save: async () => { throw new Error("CredWrite failed plex-token"); } }, deviceId: DEVICE, signIn: fakeSignIn(), newFlowId: () => "f" });
   await post(handler, { action: "start", provider: "plex" });
   const response = await post(handler, { action: "poll", flowId: "f" });
   assert.deepEqual([response.status, read(response)], [500, { error: "credential_store_failed" }]);
@@ -196,9 +199,39 @@ test("a sign-in reports the server address it used, never the secret", async () 
   assert.doesNotMatch(JSON.stringify(signedIn), SECRETS);
 });
 
-test("a failure to record the account is reported, after the secret is saved", async () => {
+test("a failure to record a new account removes its secret", async () => {
   const store = fakeStore();
   const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn(), onSignedIn: async () => { throw new Error("disk"); } });
   const response = await post(handler, { action: "password", provider: "emby", baseUrl: "http://x", username: "rowan", password: "hunter2" });
   assert.deepEqual([response.status, read(response)], [500, { error: "draft_update_failed" }]);
+  assert.equal(await store.read({ provider: "emby", identityId: "u1" }), null);
+});
+
+test("a failed re-sign-in restores the previous credential", async () => {
+  const store = fakeStore();
+  await store.save({ provider: "emby", identityId: "u1" }, "old-token");
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn(), onSignedIn: async () => { throw Error("disk"); } });
+  const response = await post(handler, { action: "password", provider: "emby", baseUrl: "http://x", username: "rowan", password: "hunter2" });
+  assert.deepEqual([response.status, read(response)], [500, { error: "draft_update_failed" }]);
+  assert.equal(await store.read({ provider: "emby", identityId: "u1" }), "old-token");
+});
+
+test("rollback failure does not falsely claim the secret was removed", async () => {
+  const store = fakeStore();
+  store.remove = async () => { throw Error("OS credential manager unavailable"); };
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn(), onSignedIn: async () => { throw Error("disk"); } });
+  const response = await post(handler, { action: "password", provider: "emby", baseUrl: "http://x", username: "rowan", password: "hunter2" });
+  assert.deepEqual([response.status, read(response)], [500, { error: "credential_store_failed" }]);
+  assert.doesNotMatch(response.body, /OS credential manager|emby-token/);
+});
+
+
+test("a credential write that throws after storing is compensated", async () => {
+  const store = fakeStore();
+  const save = store.save;
+  store.save = async (ref, secret) => { await save(ref, secret); throw Error("disk stopped after OS write"); };
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn() });
+  const response = await post(handler, { action: "password", provider: "emby", baseUrl: "http://x", username: "rowan", password: "hunter2" });
+  assert.deepEqual([response.status, read(response)], [500, { error: "credential_store_failed" }]);
+  assert.equal(await store.read({ provider: "emby", identityId: "u1" }), null);
 });

@@ -9,7 +9,7 @@ import { createFirstRunSettingsHandler } from "../src/settings-page-handler.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 
 async function fixture() { return join(await mkdtemp(join(tmpdir(), "np-onboard-")), "config.json"); }
-const store = { read: async () => "secret", save: async () => {} };
+const store = { read: async () => null, save: async () => {}, remove: async () => true };
 const deviceId = "onboarding-test-device-id";
 const post = (url, body) => ({ method: "POST", url, body: JSON.stringify(body), headers: { "sec-fetch-site": "same-origin" } });
 
@@ -31,7 +31,7 @@ test("missing config binds first-run Settings and explicit state", async () => {
 test("first signed-in server saves valid credential-free config and signals activation", async () => {
   const file = await fixture(); let callbacks = 0; const secrets = [];
   let activated; const activation = new Promise((resolve) => { activated = resolve; });
-  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { read: store.read, save: async (ref, secret) => { secrets.push({ ref, secret }); } }, onConfigured: () => { callbacks++; activated(); }, discover: async () => [], signIn: {
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { read: store.read, remove: store.remove, save: async (ref, secret) => { secrets.push({ ref, secret }); } }, onConfigured: () => { callbacks++; activated(); }, discover: async () => [], signIn: {
     signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "stored-credential" }),
   } });
   const handler = createFirstRunSettingsHandler({ servers: mgmt.handler });
@@ -146,3 +146,51 @@ test("a rejected post-config restart is exposed to the first-run page", async ()
   assert.equal(state.activationFailed, true);
   assert.equal(state.servers.length, 1);
 });
+
+test("a ninth server is rejected before Plex sign-in and saves no credential", async () => {
+  const file = await fixture();
+  const servers = Array.from({ length: 8 }, (_, i) => ({ provider: "plex", serverUrl: `http://127.0.0.1:${32400 + i}`, identity: { id: `u${i}`, displayName: `User ${i}` } }));
+  const original = serializeSetupConfig({ servers, credentialStored: true });
+  await writeFile(file, original);
+  let started = 0; const stored = [];
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { read: async () => null, remove: async () => true, save: async (ref) => { stored.push(ref); } },
+    signIn: { startPlexPin: async () => { started++; return { pinId: 123, authUrl: "https://app.plex.tv/auth#test" }; } } });
+  const response = await mgmt.handler(post("/api/setup/signin", { action: "start", provider: "plex", baseUrl: "http://127.0.0.1:32499" }));
+  assert.deepEqual([response.status, JSON.parse(response.body)], [409, { error: "too_many_servers" }]);
+  assert.equal(started, 0);
+  assert.deepEqual(stored, []);
+  assert.equal(await readFile(file, "utf8"), original);
+});
+
+test("Plex cannot start without an address in the Settings flow", async () => {
+  const file = await fixture(); let started = 0;
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store,
+    signIn: { startPlexPin: async () => { started++; return { pinId: 123, authUrl: "https://app.plex.tv/auth#test" }; } } });
+  const response = await mgmt.handler(post("/api/setup/signin", { action: "start", provider: "plex" }));
+  assert.deepEqual([response.status, JSON.parse(response.body)], [400, { error: "invalid_server_url" }]);
+  assert.equal(started, 0);
+});
+
+test("at capacity, reconnecting an existing account succeeds but a different identity cannot be added", async () => {
+  const file = await fixture();
+  const servers = Array.from({ length: 8 }, (_, i) => ({ provider: "navidrome", serverUrl: `http://127.0.0.1:${4533 + i}`, identity: { id: `u${i}`, displayName: `User ${i}` } }));
+  await writeFile(file, serializeSetupConfig({ servers, credentialStored: true }));
+  const values = new Map([["navidrome:u0", "old-secret"]]);
+  const key = (ref) => `${ref.provider}:${ref.identityId}`;
+  const credentials = { read: async (ref) => values.get(key(ref)) ?? null, remove: async (ref) => values.delete(key(ref)), save: async (ref, secret) => { values.set(key(ref), secret); } };
+  let identityId = "u0";
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: credentials, signIn: {
+    signInNavidrome: async () => ({ provider: "navidrome", identity: { id: identityId, displayName: identityId }, secret: "new-secret" }),
+  } });
+  const body = { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "u0", password: "new-password" };
+  const success = await mgmt.handler(post("/api/setup/signin", body));
+  assert.equal(success.status, 200);
+  assert.equal(values.get("navidrome:u0"), "new-secret");
+  assert.equal(JSON.parse(await readFile(file, "utf8")).servers.length, 8);
+  identityId = "new-account";
+  const failed = await mgmt.handler(post("/api/setup/signin", body));
+  assert.deepEqual([failed.status, JSON.parse(failed.body)], [409, { error: "too_many_servers" }]);
+  assert.equal(values.has("navidrome:new-account"), false);
+  assert.equal(values.get("navidrome:u0"), "new-secret");
+  assert.doesNotMatch(await readFile(file, "utf8"), /new-password|new-secret/);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).servers.length, 8);});
