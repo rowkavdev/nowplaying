@@ -10,7 +10,7 @@ function page() {
   const elements = new Map();
   const node = (id) => {
     if (!elements.has(id)) elements.set(id, {
-      id, value: "", hidden: false, disabled: false, textContent: "", children: [],
+      id, value: "", hidden: false, disabled: false, isConnected: true, textContent: "", children: [],
       addEventListener(event, fn) { this[event] = fn; },
       replaceChildren(...children) { this.children = children; },
       append(...children) { this.children.push(...children); },
@@ -26,6 +26,20 @@ function page() {
   });
   return { node, fetches };
 }
+
+test("cancelling manual sign-in restores focus to the Connect button", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
+  node("server-url").value = "http://127.0.0.1:8096";
+  node("server-provider").value = "navidrome";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  assert.equal(node("signin-panel").hidden, false);
+  let focused = false;
+  node("manual-connect").focus = () => { focused = true; };
+  node("signin-cancel").click();
+  assert.equal(node("signin-panel").hidden, true);
+  assert.equal(focused, true, "focus must not remain on a hidden cancel button");
+});
 
 test("failed cancel keeps a completed discovery result and never claims cancellation", async () => {
   const { node, fetches } = page();
