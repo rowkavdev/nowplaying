@@ -4,6 +4,33 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/rowkavdev/nowplaying/compare/v0.2.0...v0.2.1) (2026-09-26)
+
+
+### Fixes
+
+* apply privacy to Settings sample card preview ([46857d4](https://github.com/rowkavdev/nowplaying/commit/46857d484a4b0e51abf80b2c3d7103069f96977e))
+* classify revoked media server tokens as authentication failures ([723ed56](https://github.com/rowkavdev/nowplaying/commit/723ed56db9f8078ccd0cc08b7d7208901ed63950))
+* expire abandoned hosted sign-in guard ([e0629c1](https://github.com/rowkavdev/nowplaying/commit/e0629c159ce6e75c08cc01ceff3ef25df00c82bd))
+* expire local last-good card by elapsed time ([7844ffe](https://github.com/rowkavdev/nowplaying/commit/7844ffed00d509a0de2d8a6ff265cf3c28b70b6e))
+* explain server sign-in save failures in Settings ([0260a5b](https://github.com/rowkavdev/nowplaying/commit/0260a5bad13e21a6078ca00dc5bfdb42e35f9838))
+* guard server sign-in and restore credentials on failed saves ([057f648](https://github.com/rowkavdev/nowplaying/commit/057f64846dc9716b7f3e011fab2f36ea4de82bdc))
+* identify current repository in MusicBrainz User-Agent ([ede2712](https://github.com/rowkavdev/nowplaying/commit/ede271278e80ca96d838ef52188935fb1a25d522))
+* invalidate private card cache after privacy changes ([76bfa90](https://github.com/rowkavdev/nowplaying/commit/76bfa90e8abadee2178b5ec9810d96beed077083))
+* keep a clickable auth link in WebUI provider flows ([287c095](https://github.com/rowkavdev/nowplaying/commit/287c0954e0a2b3f46bed6eb52265a2b75cdfd32a))
+* keep hosted heartbeat alive after client clock rollback ([819a4ab](https://github.com/rowkavdev/nowplaying/commit/819a4abcc24aa6db711029d9f628078f019caba3))
+* normalize private subnet targets before probing ([c8055b1](https://github.com/rowkavdev/nowplaying/commit/c8055b19b47fe14f04863deda363656c9eb296ff))
+* offer auth links in legacy setup page ([ec3fe04](https://github.com/rowkavdev/nowplaying/commit/ec3fe0423fc43d128c69954a1e3329ac1c013679))
+* omit progress track when timing is hidden ([17ad73e](https://github.com/rowkavdev/nowplaying/commit/17ad73e24fa489f4c1f24950fc739af30a2d2cb4))
+* recover hosted upload sequence after clock rollback ([beb495d](https://github.com/rowkavdev/nowplaying/commit/beb495d50da48f6125bb916d64b531223b33fc22))
+* remove saved sign-in when disconnecting a server ([fdd7c70](https://github.com/rowkavdev/nowplaying/commit/fdd7c701e4a53465d64886204d44116b7dd93b3b))
+* restore focus after cancelling server sign-in ([83cee39](https://github.com/rowkavdev/nowplaying/commit/83cee39b80c54d7caf9ba5dc88629d58d7764718))
+* retain hosted revoke key and expose pending disconnect ([abe2377](https://github.com/rowkavdev/nowplaying/commit/abe2377243f478f6aaf6a06def17cfdf5941c72b))
+* run optional setup before committing server config ([89d9319](https://github.com/rowkavdev/nowplaying/commit/89d9319e1a279e6271b2e80126623d07c0dba9e5))
+* show per-server sign-in failures in multi-server status ([627a8b2](https://github.com/rowkavdev/nowplaying/commit/627a8b2f2d197286beab59503c7d8fa7b855632c))
+* surface failed first-run activation with recovery ([192e8b6](https://github.com/rowkavdev/nowplaying/commit/192e8b6d11bde8b4fe49fa081c7c35d29cb798f7))
+* use elapsed time for hosted stale playback guards ([14b4cd9](https://github.com/rowkavdev/nowplaying/commit/14b4cd9652ebfd77055e7498e018a852590ebd70))
+
 ## [0.2.0](https://github.com/rowkavdev/nowplaying/compare/v0.1.0...v0.2.0) (2026-09-26)
 
 
