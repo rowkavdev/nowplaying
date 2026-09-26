@@ -54,7 +54,8 @@ function ago(iso) {
   return m < 90 ? m + " minutes ago" : Math.round(m / 60) + " hours ago";
 }
 let cardTick = 0;
-const SERVER_ROW_WORDS = { playing: "playing", paused: "paused", idle: "connected, nothing playing", waiting: "waiting for first check", error: "can't reach it", unavailable: "sign-in missing" };
+const SERVER_ROW_WORDS = { playing: "playing", paused: "paused", idle: "connected, nothing playing", waiting: "waiting for first check", error: "returned an error", unavailable: "sign-in missing" };
+const SERVER_ROW_ERRORS = { unauthorized: "sign-in rejected, run setup again", unreachable: "can't reach it", timeout: "can't reach it", error: "returned an error" };
 async function load() {
   try {
     const res = await fetch("/api/status", { cache: "no-store", headers: { Accept: "application/json" } });
@@ -62,8 +63,10 @@ async function load() {
     const s = await res.json();
     const server = SERVER_WORDS[s.server.state] || SERVER_WORDS.error;
     const discord = s.discord.enabled ? (DISCORD_WORDS[s.discord.state] || DISCORD_WORDS.unknown) : DISCORD_WORDS.off;
-    const healthy = s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready");
-    set("summary", healthy ? "Everything is working." : s.server.state === "starting" ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : s.server.state === "starting" ? "warn" : "bad");
+    const rows = Array.isArray(s.servers) ? s.servers : [];
+    const failedServer = rows.length > 1 && rows.some((row) => row.state === "error" || row.state === "unavailable");
+    const healthy = !failedServer && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready");
+    set("summary", healthy ? "Everything is working." : s.server.state === "starting" && !failedServer ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : s.server.state === "starting" && !failedServer ? "warn" : "bad");
     set("playing", s.playing ? [s.playing.title, s.playing.subtitle].filter(Boolean).join(" - ") + (s.playing.state === "paused" ? " (paused)" : "") : "Nothing playing");
     set("server-type", s.server.type);
     set("server-address", s.server.address);
@@ -71,11 +74,11 @@ async function load() {
     set("server-state", server[0], server[1]);
     set("server-poll", ago(s.server.lastPollAt));
     // Several servers (#252): one line each. Which one Discord shows is still to be decided.
-    const rows = Array.isArray(s.servers) ? s.servers : [];
     document.getElementById("servers-block").hidden = rows.length < 2;
     document.getElementById("servers").replaceChildren(...(rows.length < 2 ? [] : rows.map((row) => {
       const li = document.createElement("li");
-      li.textContent = [row.type, row.user ? "as " + row.user : null, "- " + (SERVER_ROW_WORDS[row.state] || row.state) + (row.reason ? " (" + row.reason + ")" : ""), row.lastPollAt ? "- checked " + ago(row.lastPollAt) : null].filter(Boolean).join(" ");
+      const state = row.state === "error" ? (SERVER_ROW_ERRORS[row.reason] || SERVER_ROW_WORDS.error) : (SERVER_ROW_WORDS[row.state] || "unknown");
+      li.textContent = [row.type, row.user ? "as " + row.user : null, "- " + state, row.lastPollAt ? "- checked " + ago(row.lastPollAt) : null].filter(Boolean).join(" ");
       return li;
     })));
     set("discord-state", discord[0] + (s.discord.error ? " (" + s.discord.error + ")" : ""), discord[1]);

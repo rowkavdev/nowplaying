@@ -22,7 +22,7 @@ test("polls every server together; a playing server wins over an idle first serv
 });
 
 test("a failing first server fails like before; a failing other server only shows on its own row (#252)", async () => {
-  const down = Object.assign(new Error("secret http://10.0.0.2 detail"), { code: "unreachable" });
+  const down = Object.assign(new Error("secret http://10.0.0.2 detail"), { code: "ECONNREFUSED" });
   const first = createMultiServerProvider([
     { server: server("jellyfin"), provider: { getPresence: async () => { throw down; } } },
     { server: server("emby"), provider: { getPresence: async () => ({ state: "idle" }) } },
@@ -91,4 +91,25 @@ test("first server unavailable and nothing playing: the next server's result sho
   await assert.rejects(failing.getPresence(), /down/);
   const none = createMultiServerProvider([{ server: { provider: "plex" }, unavailable: "CONFIG_INVALID" }]);
   await assert.rejects(none.getPresence(), /No media server is available/);
+});
+
+
+test("revoked sign-in on one server keeps healthy playback but records its safe failure", async () => {
+  const secret = "private-token-123";
+  const rejected = Object.assign(new Error(`token ${secret} rejected`), { status: 401 });
+  const multi = createMultiServerProvider([
+    { server: server("plex"), provider: { getPresence: async () => { throw rejected; } } },
+    { server: server("jellyfin"), provider: { getPresence: async () => ({ state: "playing", kind: "track", title: "Song" }) } },
+  ]);
+  assert.equal((await multi.getPresence()).title, "Song");
+  assert.deepEqual(multi.servers().map(({ state, reason }) => [state, reason]), [["error", "unauthorized"], ["playing", undefined]]);
+  assert.doesNotMatch(JSON.stringify(multi.servers()), /private-token|rejected/);
+});
+
+test("5xx and network failures remain distinct from rejected sign-ins", async () => {
+  for (const [error, expected] of [[Object.assign(new Error("server 503"), { status: 503 }), "error"], [Object.assign(new Error("offline"), { cause: { code: "ECONNREFUSED" } }), "unreachable"]]) {
+    const multi = createMultiServerProvider([{ server: server("plex"), provider: { getPresence: async () => { throw error; } } }]);
+    await assert.rejects(multi.getPresence());
+    assert.equal(multi.servers()[0].reason, expected);
+  }
 });
