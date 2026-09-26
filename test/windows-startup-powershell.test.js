@@ -1,10 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, rename, writeFile } from "node:fs/promises";
-import { join, win32 } from "node:path";
-import { tmpdir } from "node:os";
-import { createWindowsStartup, runPowerShell } from "../src/windows-startup.js";
+import { runPowerShell } from "../src/windows-startup.js";
 
 function fakeChild() {
   const child = new EventEmitter();
@@ -51,27 +48,4 @@ test("kills and rejects when PowerShell overruns the timeout", async () => {
   const pending = runPowerShell("script", {}, { spawnProcess: spawnReturning(child), timeoutMs: 10 });
   await assert.rejects(pending, /timed out/);
   assert.equal(child.kill.mock.calls.length, 1);
-});
-
-const windows = { skip: process.platform !== "win32" };
-
-test("a moved portable bundle shows the stale shortcut as broken and offers a repair", windows, async () => {
-  const appData = await mkdtemp(join(tmpdir(), "np-startup-"));
-  const oldDir = join(appData, "old");
-  const newDir = join(appData, "new");
-  await mkdir(oldDir);
-  await writeFile(join(oldDir, "nowplayingw.exe"), "fixture");
-  const old = createWindowsStartup({ appData, exePath: join(oldDir, "nowplayingw.exe") });
-  const moved = createWindowsStartup({ appData, exePath: join(newDir, "nowplayingw.exe") });
-  await old.setEnabled(true);
-  assert.deepEqual(await old.status(), { enabled: true, broken: false });
-  await rename(oldDir, newDir);
-  try {
-    assert.deepEqual(await moved.status(), { enabled: false, broken: true });
-    assert.equal(await moved.isEnabled(), false);
-    await moved.setEnabled(true);
-    assert.deepEqual(await moved.status(), { enabled: true, broken: false });
-  } finally {
-    await moved.setEnabled(false);
-  }
 });

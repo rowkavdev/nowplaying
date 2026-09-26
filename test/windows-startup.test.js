@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createWindowsStartup, windowsStartupShortcutPath } from "../src/windows-startup.js";
@@ -38,7 +38,7 @@ test("turning it on passes paths to PowerShell only through the environment", as
 
 test("turning it off removes the shortcut, and is fine when there is none", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-startup-"));
-  const startup = createWindowsStartup({ appData: dir, exePath: "C:\\nowplaying\\nowplaying.exe", run: async () => { throw new Error("not expected"); } });
+  const startup = createWindowsStartup({ appData: dir, exePath: "C:\\nowplaying\\nowplaying.exe", run: async () => "C:\\nowplaying\\nowplaying.exe" });
   assert.equal(await startup.isEnabled(), false);
   await startup.setEnabled(false);
   await mkdir(join(startup.shortcut, ".."), { recursive: true });
@@ -65,4 +65,24 @@ test("writes a real startup shortcut to nowplaying.exe start, then removes it", 
   await startup.setEnabled(false);
   assert.equal(await startup.isEnabled(), false);
   await assert.rejects(readFile(startup.shortcut), { code: "ENOENT" });
+});
+
+
+test("moved portable folder reports a stale shortcut and repairs it on Save", windows, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-startup-move-"));
+  const oldDir = join(dir, "old");
+  const newDir = join(dir, "new");
+  await mkdir(oldDir);
+  await writeFile(join(oldDir, "nowplayingw.exe"), "fixture");
+  const old = createWindowsStartup({ appData: dir, exePath: join(oldDir, "nowplayingw.exe") });
+  const moved = createWindowsStartup({ appData: dir, exePath: join(newDir, "nowplayingw.exe") });
+  await old.setEnabled(true);
+  try {
+    assert.deepEqual(await old.status(), { enabled: true, broken: false });
+    await rename(oldDir, newDir);
+    assert.deepEqual(await moved.status(), { enabled: false, broken: true });
+    assert.equal(await moved.isEnabled(), false);
+    await moved.setEnabled(true);
+    assert.deepEqual(await moved.status(), { enabled: true, broken: false });
+  } finally { await moved.setEnabled(false); }
 });
