@@ -55,6 +55,7 @@ test("writes a real startup shortcut to nowplaying.exe start, then removes it", 
   const startup = createWindowsStartup({ appData: dir, exePath });
   await startup.setEnabled(true);
   assert.equal(await startup.isEnabled(), true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
   assert.ok((await stat(startup.shortcut)).size > 0);
   const { execFileSync } = await import("node:child_process");
   const read = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",

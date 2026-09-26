@@ -371,7 +371,10 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const startupView = async () => {
     if (typeof startup?.isEnabled !== "function") return { available: false, startWithWindows: false };
-    try { return { available: true, startWithWindows: await startup.isEnabled() }; }
+    try {
+      const state = typeof startup.status === "function" ? await startup.status() : { enabled: await startup.isEnabled(), broken: false };
+      return { available: true, startWithWindows: state.enabled, ...(state.broken ? { shortcutBroken: true } : {}) };
+    }
     catch { return { available: false, startWithWindows: false }; }
   };
   const settings = Object.freeze({

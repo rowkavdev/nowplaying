@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, writeFile } from "node:fs/promises";
 import { join, win32 } from "node:path";
 import { tmpdir } from "node:os";
 import { createWindowsStartup, runPowerShell } from "../src/windows-startup.js";
@@ -9,6 +9,7 @@ import { createWindowsStartup, runPowerShell } from "../src/windows-startup.js";
 function fakeChild() {
   const child = new EventEmitter();
   child.stderr = new EventEmitter();
+  child.stdout = new EventEmitter();
   child.kill = test.mock.fn();
   return child;
 }
@@ -21,8 +22,9 @@ test("resolves when PowerShell exits 0", async () => {
   const child = fakeChild();
   const spawnProcess = spawnReturning(child);
   const pending = runPowerShell("script", {}, { spawnProcess });
+  child.stdout.emit("data", "  C:\\np\\nowplaying.exe  ");
   child.emit("close", 0);
-  await pending;
+  assert.equal(await pending, "C:\\np\\nowplaying.exe");
   const [exe, args, options] = spawnProcess.mock.calls[0].arguments;
   assert.equal(exe, "powershell.exe");
   assert.ok(args.includes("-NonInteractive"));
@@ -53,11 +55,23 @@ test("kills and rejects when PowerShell overruns the timeout", async () => {
 
 const windows = { skip: process.platform !== "win32" };
 
-test("isEnabled follows the shortcut file", windows, async () => {
+test("a moved portable bundle shows the stale shortcut as broken and offers a repair", windows, async () => {
   const appData = await mkdtemp(join(tmpdir(), "np-startup-"));
-  const startup = createWindowsStartup({ appData, exePath: "C:\\np\\nowplaying.exe", run: async () => {} });
-  assert.equal(await startup.isEnabled(), false);
-  await mkdir(win32.dirname(startup.shortcut), { recursive: true });
-  await writeFile(startup.shortcut, "lnk");
-  assert.equal(await startup.isEnabled(), true);
+  const oldDir = join(appData, "old");
+  const newDir = join(appData, "new");
+  await mkdir(oldDir);
+  await writeFile(join(oldDir, "nowplayingw.exe"), "fixture");
+  const old = createWindowsStartup({ appData, exePath: join(oldDir, "nowplayingw.exe") });
+  const moved = createWindowsStartup({ appData, exePath: join(newDir, "nowplayingw.exe") });
+  await old.setEnabled(true);
+  assert.deepEqual(await old.status(), { enabled: true, broken: false });
+  await rename(oldDir, newDir);
+  try {
+    assert.deepEqual(await moved.status(), { enabled: false, broken: true });
+    assert.equal(await moved.isEnabled(), false);
+    await moved.setEnabled(true);
+    assert.deepEqual(await moved.status(), { enabled: true, broken: false });
+  } finally {
+    await moved.setEnabled(false);
+  }
 });

@@ -27,29 +27,45 @@ const CREATE_SHORTCUT = [
 export function runPowerShell(script, env, { spawnProcess = spawn, timeoutMs = 20000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawnProcess("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
-      env: { ...process.env, ...env }, shell: false, windowsHide: true, stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, ...env }, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
     });
     let errors = "";
+    let output = "";
+    child.stdout?.on("data", (chunk) => { output += chunk; });
     const timer = setTimeout(() => { child.kill?.(); reject(new Error("PowerShell timed out")); }, timeoutMs);
     child.stderr?.on("data", (chunk) => { errors += chunk; });
     child.on("error", (error) => { clearTimeout(timer); reject(error); });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve();
+      if (code === 0) resolve(output.trim());
       else reject(new Error(`PowerShell exited ${code}: ${errors.trim().slice(0, 500)}`));
     });
   });
 }
 
+// Read only the target of our own named shortcut; no arbitrary file contents
+// or paths leave this process through the Settings API.
+const READ_TARGET = [
+  "$ErrorActionPreference = 'Stop'",
+  "$link = (New-Object -ComObject WScript.Shell).CreateShortcut($env:NP_SHORTCUT)",
+  "[Console]::Out.Write($link.TargetPath)",
+].join("; ");
+
 export function createWindowsStartup({ appData, exePath, run = runPowerShell } = {}) {
   const shortcut = windowsStartupShortcutPath({ appData });
   if (typeof exePath !== "string" || !win32.isAbsolute(exePath) || !/\.exe$/i.test(exePath)) throw new TypeError("exePath must be an absolute .exe path");
+  async function status() {
+    try { await access(shortcut); }
+    catch (error) { if (error?.code === "ENOENT") return Object.freeze({ enabled: false, broken: false }); throw error; }
+    const target = await run(READ_TARGET, { NP_SHORTCUT: shortcut });
+    const matches = typeof target === "string" && target.trim() &&
+      win32.normalize(target.trim()).toLowerCase() === win32.normalize(exePath).toLowerCase();
+    return Object.freeze({ enabled: Boolean(matches), broken: !matches });
+  }
   return Object.freeze({
     shortcut,
-    async isEnabled() {
-      try { await access(shortcut); return true; }
-      catch (error) { if (error?.code === "ENOENT") return false; throw error; }
-    },
+    status,
+    async isEnabled() { return (await status()).enabled; },
     async setEnabled(enabled) {
       if (typeof enabled !== "boolean") throw new TypeError("enabled must be a boolean");
       if (!enabled) { await rm(shortcut, { force: true }); return; }
