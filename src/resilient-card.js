@@ -9,6 +9,7 @@ export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, sta
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   const inFlight = new Map();
   const lastGood = new Map();
+  let generation = 0;
 
   function remember(key, value) {
     lastGood.delete(key);
@@ -20,7 +21,8 @@ export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, sta
     return diagnostics ? Object.freeze({ svg, ...fields }) : svg;
   }
 
-  return async function resilientResolve(options = {}) {
+  async function resilientResolve(options = {}) {
+    const epoch = generation;
     const key = variantKey(options);
     let pending = inFlight.get(key);
     if (!pending) {
@@ -28,22 +30,30 @@ export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, sta
         .then((result) => {
           const svg = typeof result === "string" ? result : result?.svg;
           const source = result?.source === "idle" ? "idle" : "live";
-          remember(key, { svg, source, at: now() });
+          if (epoch === generation) remember(key, { svg, source, at: now() });
           return { svg, source };
         })
-        .finally(() => { inFlight.delete(key); });
+        .finally(() => { if (inFlight.get(key) === pending) inFlight.delete(key); });
       inFlight.set(key, pending);
     }
     try {
       const { svg, source } = await pending;
+      if (epoch !== generation) return resilientResolve(options);
       return output(svg, { source, ageMs: 0, cache: "miss", provider: "ok" });
     } catch (error) {
+      if (epoch !== generation) return resilientResolve(options);
       const good = lastGood.get(key);
       const ageMs = good ? Math.max(0, now() - good.at) : Infinity;
       if (good && ageMs <= staleMs) return output(good.svg, { source: "last-good", ageMs, cache: "hit", provider: classifyFailure(error) });
       throw error;
     }
+  }
+  resilientResolve.invalidate = () => {
+    generation += 1;
+    lastGood.clear();
+    inFlight.clear();
   };
+  return resilientResolve;
 }
 
 export function classifyFailure(error) {
