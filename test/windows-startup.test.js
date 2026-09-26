@@ -38,7 +38,9 @@ test("turning it on passes paths to PowerShell only through the environment", as
 
 test("turning it off removes the shortcut, and is fine when there is none", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-startup-"));
-  const startup = createWindowsStartup({ appData: dir, exePath: "C:\\nowplaying\\nowplaying.exe", run: async () => "C:\\nowplaying\\nowplaying.exe" });
+  const exePath = join(dir, "nowplaying.exe");
+  await writeFile(exePath, "fixture");
+  const startup = createWindowsStartup({ appData: dir, exePath, run: async () => exePath });
   assert.equal(await startup.isEnabled(), false);
   await startup.setEnabled(false);
   await mkdir(join(startup.shortcut, ".."), { recursive: true });
@@ -52,6 +54,8 @@ test("turning it off removes the shortcut, and is fine when there is none", wind
 test("writes a real startup shortcut to nowplaying.exe start, then removes it", windows, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-startup-"));
   const exePath = join(dir, "App Folder", "nowplaying.exe");
+  await mkdir(join(dir, "App Folder"));
+  await writeFile(exePath, "fixture");
   const startup = createWindowsStartup({ appData: dir, exePath });
   await startup.setEnabled(true);
   assert.equal(await startup.isEnabled(), true);
