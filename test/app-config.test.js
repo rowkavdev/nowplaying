@@ -251,7 +251,7 @@ test("a down server is retried with backoff, not on every request, and recovers 
     return Response.json([]);
   };
   const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl,
-    discord: { env: {}, builtInClientId: "" }, providerBackoff: { now: () => time, random: () => 0 } });
+    discord: { env: {}, builtInClientId: "" }, providerBackoff: { elapsedNow: () => time, random: () => 0 } });
   try {
     for (let i = 0; i < 5; i += 1) await fetch(`${app.url}/card.svg`);
     assert.equal(calls, 1);

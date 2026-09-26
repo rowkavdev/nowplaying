@@ -66,7 +66,7 @@ test("a 401 from Spotify drops the cached access token so the next poll refreshe
   };
   const config = { spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "me" }, credentialRef: { provider: "spotify", identityId: "me" } } };
   let clock = 0;
-  const source = createSpotifySource(config, store, { fetchImpl, backoff: { now: () => clock } });
+  const source = createSpotifySource(config, store, { fetchImpl, backoff: { elapsedNow: () => clock } });
   await assert.rejects(source.getPresence(), (error) => error.status === 401);
   clock += 10 * 60_000; // past the backoff wait, well inside the token's hour
   assert.equal((await source.getPresence()).title, "Song");
