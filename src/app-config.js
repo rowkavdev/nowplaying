@@ -410,7 +410,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     async previewCard(card) {
       let presence = null;
       try { presence = await cardProvider.getPresence(); } catch { presence = null; }
-      if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
+      if (!presence || presence.state === "idle") presence = applyPrivacy(PREVIEW_SAMPLE, privacyPolicyFromConfig(current));
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is fetched for /card.svg (#449).
       const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
