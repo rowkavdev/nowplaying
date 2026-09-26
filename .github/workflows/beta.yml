@@ -44,10 +44,13 @@ jobs:
       - name: Checksums
         shell: pwsh
         run: |
-          Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object {
+          $lines = Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)" | Add-Content dist/windows/SHA256SUMS
+            "$hash  $($_.Name)"
           }
+          # PowerShell's Add-Content writes CRLF on Windows; GNU sha256sum then
+          # treats the CR as part of the asset name. Write UTF-8 with LF only.
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path dist/windows) 'SHA256SUMS'), ($lines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
       - name: Attest development build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
