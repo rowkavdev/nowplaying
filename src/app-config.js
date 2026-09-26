@@ -405,15 +405,13 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     async updateCard(changes) {
       current = await settingsStore.updateCard(changes);
     },
-    // Preview for the settings page: what's playing now (privacy applied),
-    // or a sample track when nothing is, so layout changes are visible.
+    // Keep the layout preview deterministic. Live playback still appears on
+    // /card.svg; the Settings preview always uses a sample track so automatic
+    // artwork width and its scaling hint refer to the same 100 px baseline.
     async previewCard(card) {
-      let presence = null;
-      try { presence = await cardProvider.getPresence(); } catch { presence = null; }
-      if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is fetched for /card.svg (#449).
-      return renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
+      return renderCard(PREVIEW_SAMPLE, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
     },
     // Drops cached album art and updates Discord straight away (#154).
     refreshArtwork: () => discord.refreshArtwork(),

@@ -149,6 +149,25 @@ test("the hosted link follows the saved card style, width and progress bar", asy
 });
 
 
+test("live movie playback does not change the deterministic sample preview (#559)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-preview-movie-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false }));
+  const fetchImpl = async (url) => String(url).endsWith("/Sessions")
+    ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "movie-1", Name: "Example movie", Type: "Movie", ProductionYear: 2024 }, PlayState: { IsPaused: false } }])
+    : Response.json([]);
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const live = await (await fetch(app.url + "/card.svg")).text();
+    assert.match(live, /Example movie/);
+    const path = "/api/settings/card/preview.svg?width=300&padding=48";
+    const svg = await (await fetch(app.url + path)).text();
+    assert.match(svg, /Sample track/);
+    assert.doesNotMatch(svg, /Example movie/);
+    assert.match(svg, /<image[^>]*width="80"/);
+  } finally { await app.close(); }
+});
+
 test("preview scale hint distinguishes saved width from rendered artwork (#559)", async () => {
   const script = (await handler()({ url: "/settings.js" })).body;
   const calculate = new Function(script.match(/function previewArtworkScale\(values\) \{[\s\S]*?\n\}/)[0] + "; return previewArtworkScale;")();
