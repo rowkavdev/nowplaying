@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createWindowsStartup, windowsStartupShortcutPath } from "../src/windows-startup.js";
@@ -65,7 +65,12 @@ test("writes a real startup shortcut to nowplaying.exe start, then removes it", 
   const read = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
     "$l = (New-Object -ComObject WScript.Shell).CreateShortcut($env:NP_SHORTCUT); @{ target = $l.TargetPath; args = $l.Arguments; dir = $l.WorkingDirectory } | ConvertTo-Json -Compress"],
   { env: { ...process.env, NP_SHORTCUT: startup.shortcut }, encoding: "utf8", windowsHide: true });
-  assert.deepEqual(JSON.parse(read), { target: exePath, args: "start", dir: join(dir, "App Folder") });
+  const shortcut = JSON.parse(read);
+  assert.equal(shortcut.args, "start");
+  assert.equal(shortcut.dir, join(dir, "App Folder"));
+  // WScript may expand an 8.3 TargetPath alias while leaving WorkingDirectory
+  // in its original spelling. The readback is about the same existing file.
+  assert.equal((await realpath(shortcut.target)).toLowerCase(), (await realpath(exePath)).toLowerCase());
   await startup.setEnabled(false);
   assert.equal(await startup.isEnabled(), false);
   await assert.rejects(readFile(startup.shortcut), { code: "ENOENT" });
