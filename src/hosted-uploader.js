@@ -32,7 +32,7 @@ function validRegistration(value) {
 }
 
 export class HostedUploadError extends Error {
-  constructor(code, status = null) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; }
+  constructor(code, status = null, lastSeq = null) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; this.lastSeq = lastSeq; }
 }
 
 export function createHostedUploader({
@@ -65,7 +65,7 @@ export function createHostedUploader({
       const res = await fetchImpl(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, redirect: "error" });
       let data = null;
       try { data = await res.json(); } catch { data = null; }
-      if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status);
+      if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, data?.lastSeq);
       return data;
     } catch (error) {
       if (error instanceof HostedUploadError) throw error;
@@ -126,8 +126,12 @@ export function createHostedUploader({
       await request("/api/ingest", { token: device.token, body: payload });
     } catch (error) {
       if (error.code === "stale_sequence") {
-        // Another run pushed a later seq; jump past it once.
-        lastSeq = Math.max(lastSeq, now()) + 1000;
+        // The authenticated service reports its previous sequence, so a
+        // backward clock correction across restarts cannot strand the card.
+        if (!Number.isSafeInteger(error.lastSeq) || error.lastSeq < 0 || error.lastSeq >= Number.MAX_SAFE_INTEGER) {
+          throw new HostedUploadError("sequence_recovery_unavailable", error.status);
+        }
+        lastSeq = Math.max(lastSeq, error.lastSeq);
         await request("/api/ingest", { token: device.token, body: { ...payload, seq: nextSeq() } });
       } else {
         throw error;

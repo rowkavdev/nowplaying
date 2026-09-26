@@ -35,7 +35,7 @@ const TEXT_LIMIT = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
 export class ServiceError extends Error {
-  constructor(status, code) { super(code); this.status = status; this.code = code; }
+  constructor(status, code, details = {}) { super(code); this.status = status; this.code = code; this.details = details; }
 }
 
 export function hashToken(token) { return createHash("sha256").update(token).digest("hex"); }
@@ -167,7 +167,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const update = validateIngest(payload, { now: now() });
     const seqKey = `np:seq:${device.deviceId}`;
     const lastSeq = Number(await cmd("GET", seqKey) ?? -1);
-    if (update.seq <= lastSeq) throw new ServiceError(409, "stale_sequence");
+    if (update.seq <= lastSeq) throw new ServiceError(409, "stale_sequence", { lastSeq });
     await cmd("SET", seqKey, String(update.seq), "EX", SEQ_TTL_SECONDS);
     if (device.userId) {
       const key = `np:dstate:${device.deviceId}`;

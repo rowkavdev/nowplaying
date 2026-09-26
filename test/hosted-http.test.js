@@ -64,6 +64,20 @@ test("a hosted card without uploaded timing has no empty progress track (#576)",
   } finally { await app.close(); }
 });
 
+test("authenticated stale ingest returns the last accepted sequence without exposing it to other tokens", async () => {
+  const app = await start();
+  try {
+    const { token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 5, observedAt: Date.now(), state: "idle" });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
+    const stale = await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) });
+    assert.equal(stale.status, 409);
+    assert.deepEqual(JSON.parse(stale.body), { error: "stale_sequence", lastSeq: 5 });
+    const anonymous = await call(app.port, "POST", "/api/ingest", { body: payload, headers: json() });
+    assert.deepEqual(JSON.parse(anonymous.body), { error: "unauthorized" });
+  } finally { await app.close(); }
+});
+
 test("ingest enforces auth, content type and size", async () => {
   const app = await start();
   try {
