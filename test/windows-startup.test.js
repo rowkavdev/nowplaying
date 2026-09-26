@@ -103,3 +103,35 @@ test("a different existing executable never counts as this install", windows, as
     assert.deepEqual(await other.status(), { enabled: false, broken: true });
   } finally { await old.setEnabled(false); }
 });
+
+
+test("matching path text without an executable is still a broken shortcut", windows, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-startup-missing-"));
+  const exePath = join(dir, "missing", "nowplayingw.exe");
+  const startup = createWindowsStartup({ appData: dir, exePath });
+  await startup.setEnabled(true);
+  try { assert.deepEqual(await startup.status(), { enabled: false, broken: true }); }
+  finally { await startup.setEnabled(false); }
+});
+
+test("8.3 alias and expanded Windows shortcut target name the same file", windows, async (t) => {
+  const { execFileSync } = await import("node:child_process");
+  const dir = await mkdtemp(join(tmpdir(), "np-startup-alias-"));
+  const longDir = join(dir, "Long Folder Name");
+  await mkdir(longDir);
+  await writeFile(join(longDir, "nowplayingw.exe"), "fixture");
+  const shortDir = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+    "(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:NP_DIR).ShortPath"],
+  { env: { ...process.env, NP_DIR: longDir }, encoding: "utf8", windowsHide: true }).trim();
+  if (shortDir.toLowerCase() === longDir.toLowerCase()) return t.skip("8.3 aliases unavailable on this volume");
+  const shortExe = join(shortDir, "nowplayingw.exe");
+  const startup = createWindowsStartup({ appData: dir, exePath: shortExe });
+  await startup.setEnabled(true);
+  try {
+    const target = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+      "(New-Object -ComObject WScript.Shell).CreateShortcut($env:NP_SHORTCUT).TargetPath"],
+    { env: { ...process.env, NP_SHORTCUT: startup.shortcut }, encoding: "utf8", windowsHide: true }).trim();
+    assert.notEqual(target.toLowerCase(), shortExe.toLowerCase(), "WScript expanded the 8.3 alias");
+    assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+  } finally { await startup.setEnabled(false); }
+});

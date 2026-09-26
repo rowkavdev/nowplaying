@@ -58,12 +58,11 @@ export function createWindowsStartup({ appData, exePath, run = runPowerShell } =
     try { await access(shortcut); }
     catch (error) { if (error?.code === "ENOENT") return Object.freeze({ enabled: false, broken: false }); throw error; }
     const target = await run(READ_TARGET, { NP_SHORTCUT: shortcut });
-    let matches = typeof target === "string" && target.trim() &&
-      win32.normalize(target.trim()).toLowerCase() === win32.normalize(exePath).toLowerCase();
-    if (!matches && typeof target === "string" && target.trim()) {
-      // WScript expands an 8.3 path (RUNNER~1) to its long form on readback.
-      // Resolve both paths to their canonical names; never infer sameness from
-      // file IDs, which can be zero or unsupported on a Windows volume.
+    let matches = false;
+    if (typeof target === "string" && target.trim()) {
+      // WScript can expand an 8.3 path (RUNNER~1) to its long form.
+      // Resolve BOTH files even when path text matches: a dead shortcut must
+      // never look enabled. Canonical paths avoid unreliable Windows file IDs.
       try {
         const [linked, current] = await Promise.all([realpath(target.trim()), realpath(exePath)]);
         matches = win32.normalize(linked).toLowerCase() === win32.normalize(current).toLowerCase();
