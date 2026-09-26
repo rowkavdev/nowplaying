@@ -88,7 +88,11 @@ test("Discord never sends the real title or looks covers up by title when titles
     createArtwork: (settings) => { lookups.push(settings.artworkLookup); return undefined; },
   });
   try {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const deadline = Date.now() + 5000;
+    while (sets.length === 0) {
+      if (Date.now() >= deadline) assert.fail("timed out waiting for initial private Discord activity");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     assert.deepEqual(lookups, ["off"]);
     assert.equal(sets.length, 1);
     assert.doesNotMatch(JSON.stringify(sets[0]), /Secret/);

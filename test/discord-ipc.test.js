@@ -40,6 +40,14 @@ async function fakeDiscord({ onHandshake = "ready", onCommand = "ok" } = {}) {
   };
 }
 
+async function waitUntil(check, label) {
+  const deadline = Date.now() + 5000;
+  while (!check()) {
+    if (Date.now() >= deadline) assert.fail(`timed out waiting for ${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test("frames round-trip, split across chunks", () => {
   const bytes = Buffer.concat([encodeFrame(OP.FRAME, { a: 1 }), encodeFrame(OP.PING, { b: "é" })]);
   const first = decodeFrames(bytes.subarray(0, 17));
@@ -76,7 +84,7 @@ test("handshakes, sets and clears the activity, answers pings, and closes", unix
     ]);
     const [socket] = discord.sockets;
     socket.write(encodeFrame(OP.PING, { t: 1 }));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitUntil(() => discord.frames.at(-1)?.op === OP.PONG, "PONG frame");
     assert.deepEqual(discord.frames.at(-1), { op: OP.PONG, payload: { t: 1 } });
     await client.destroy();
     assert.equal(discord.frames.at(-1).op, OP.CLOSE);
@@ -163,7 +171,7 @@ test("sends the same status again after Discord restarts", unix, async () => {
     assert.equal(sets(first), 1);
     assert.equal(ipc.connected, true);
     await first.close();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitUntil(() => !ipc.connected, "IPC disconnect");
     assert.equal(ipc.connected, false);
     assert.equal(transport.connected, false);
     assert.equal(await client.publish({ details: "Song" }), true);

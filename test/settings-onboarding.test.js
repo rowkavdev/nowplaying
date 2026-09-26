@@ -30,7 +30,8 @@ test("missing config binds first-run Settings and explicit state", async () => {
 
 test("first signed-in server saves valid credential-free config and signals activation", async () => {
   const file = await fixture(); let callbacks = 0; const secrets = [];
-  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { read: store.read, save: async (ref, secret) => { secrets.push({ ref, secret }); } }, onConfigured: () => { callbacks++; }, discover: async () => [], signIn: {
+  let activated; const activation = new Promise((resolve) => { activated = resolve; });
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { read: store.read, save: async (ref, secret) => { secrets.push({ ref, secret }); } }, onConfigured: () => { callbacks++; activated(); }, discover: async () => [], signIn: {
     signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "rowan", displayName: "Rowan" }, secret: "stored-credential" }),
   } });
   const handler = createFirstRunSettingsHandler({ servers: mgmt.handler });
@@ -44,7 +45,7 @@ test("first signed-in server saves valid credential-free config and signals acti
   const config = JSON.parse(await readFile(file, "utf8"));
   assert.equal(config.servers[0].serverUrl, "http://10.1.2.3:4533");
   assert.doesNotMatch(JSON.stringify(config), /not-stored|stored-credential/);
-  await new Promise((resolve) => setTimeout(resolve, 550));
+  await activation;
   assert.equal(callbacks, 1);
   assert.equal(JSON.parse((await mgmt.handler({ url: "/api/settings/servers" })).body).configured, true);
 });
