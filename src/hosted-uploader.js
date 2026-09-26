@@ -32,7 +32,7 @@ function validRegistration(value) {
 }
 
 export class HostedUploadError extends Error {
-  constructor(code, status = null, lastSeq = null) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; this.lastSeq = lastSeq; }
+  constructor(code, status = null, details = {}) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; this.lastSeq = details.lastSeq; this.serverTime = details.serverTime; }
 }
 
 export function createHostedUploader({
@@ -49,6 +49,7 @@ export function createHostedUploader({
   const origin = normalizeHostedUrl(baseUrl);
   let registration = null;
   let lastSeq = -1;
+  let serverClockOffset = 0;
   let lastSent = null; // { key, at }
   let pending = null;
   let retryAt = 0;
@@ -65,7 +66,7 @@ export function createHostedUploader({
       const res = await fetchImpl(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, redirect: "error" });
       let data = null;
       try { data = await res.json(); } catch { data = null; }
-      if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, data?.lastSeq);
+      if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, data);
       return data;
     } catch (error) {
       if (error instanceof HostedUploadError) throw error;
@@ -102,7 +103,8 @@ export function createHostedUploader({
     if (!lastSent) return true;
     if (lastSent.key !== key) return true;
     if (key.includes('"state":"idle"')) return false;
-    if (at - lastSent.at >= heartbeatMs) return true;
+    // A corrected clock can be behind the last successful upload for hours.
+    if (at < lastSent.at || at - lastSent.at >= heartbeatMs) return true;
     // A seek moves the card's progress: resend when position drifts over 15s
     // from where the service would have extrapolated it.
     if (positionMs != null && lastSent.positionMs != null && lastSent.playing) {
@@ -117,24 +119,29 @@ export function createHostedUploader({
   async function send(presence) {
     const at = now();
     // `settings` can be a function so privacy and card changes apply without a restart.
-    const probe = projectHostedState(presence, typeof settings === "function" ? settings() : settings, { seq: 0, now: at });
+    const probe = projectHostedState(presence, typeof settings === "function" ? settings() : settings, { seq: 0, now: at + serverClockOffset });
     const key = changeKey(probe);
     if (!due(key, at, probe.positionMs)) return { sent: false, reason: "unchanged" };
     const device = await ensureRegistered();
-    const payload = { ...probe, seq: nextSeq() };
-    try {
-      await request("/api/ingest", { token: device.token, body: payload });
-    } catch (error) {
-      if (error.code === "stale_sequence") {
-        // The authenticated service reports its previous sequence, so a
-        // backward clock correction across restarts cannot strand the card.
-        if (!Number.isSafeInteger(error.lastSeq) || error.lastSeq < 0 || error.lastSeq >= Number.MAX_SAFE_INTEGER) {
-          throw new HostedUploadError("sequence_recovery_unavailable", error.status);
-        }
-        lastSeq = Math.max(lastSeq, error.lastSeq);
-        await request("/api/ingest", { token: device.token, body: { ...payload, seq: nextSeq() } });
-      } else {
-        throw error;
+    let payload = { ...probe, seq: nextSeq() };
+    let correctedClock = false;
+    let correctedSeq = false;
+    while (true) {
+      try { await request("/api/ingest", { token: device.token, body: payload }); break; }
+      catch (error) {
+        if (error.code === "clock_skew" && !correctedClock) {
+          if (!Number.isSafeInteger(error.serverTime)) throw new HostedUploadError("clock_recovery_unavailable", error.status);
+          serverClockOffset = error.serverTime - now();
+          payload = { ...payload, observedAt: now() + serverClockOffset };
+          correctedClock = true;
+        } else if (error.code === "stale_sequence" && !correctedSeq) {
+          if (!Number.isSafeInteger(error.lastSeq) || error.lastSeq < 0 || error.lastSeq >= Number.MAX_SAFE_INTEGER) {
+            throw new HostedUploadError("sequence_recovery_unavailable", error.status);
+          }
+          lastSeq = Math.max(lastSeq, error.lastSeq);
+          payload = { ...payload, seq: nextSeq() };
+          correctedSeq = true;
+        } else throw error;
       }
     }
     lastSent = { key, at, positionMs: probe.positionMs ?? null, playing: probe.state === "playing" };

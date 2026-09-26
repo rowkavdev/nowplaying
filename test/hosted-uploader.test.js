@@ -12,9 +12,11 @@ const BASE = "https://cards.example.test";
 // tests exercise the actual ingest contract (schema, seq, auth).
 function setup({ start = 1_800_000_000_000 } = {}) {
   let clock = start;
+  let serviceClock = start;
   const now = () => clock;
-  const redis = createMemoryRedis({ now });
-  const service = createService({ redis, now });
+  const serverNow = () => serviceClock;
+  const redis = createMemoryRedis({ now: serverNow });
+  const service = createService({ redis, now: serverNow });
   const calls = [];
   let offline = false;
   const fetchImpl = async (url, init) => {
@@ -38,7 +40,9 @@ function setup({ start = 1_800_000_000_000 } = {}) {
   return {
     service, calls, credentials, fetchImpl, now,
     stored: () => stored,
-    advance: (ms) => { clock += ms; },
+    advance: (ms) => { clock += ms; serviceClock += ms; },
+    advanceClient: (ms) => { clock += ms; },
+    advanceServer: (ms) => { serviceClock += ms; },
     setOffline: (value) => { offline = value; },
     uploader: (options = {}) => createHostedUploader({ baseUrl: BASE, credentials, fetchImpl, now, ...options }),
   };
@@ -134,6 +138,26 @@ test("a stale server without a prior sequence reports recovery unavailable", asy
   const restarted = env.uploader({ fetchImpl });
   assert.deepEqual(await restarted.push(track({ title: "Temptation" })), { sent: false, reason: "sequence_recovery_unavailable" });
   assert.equal(restarted.status().lastError, "sequence_recovery_unavailable");
+});
+
+test("paused card heartbeat survives a client-only hour rollback without per-poll uploads", async () => {
+  const env = setup();
+  const up = env.uploader();
+  const paused = track({ state: "paused", title: "Still Playing" });
+  assert.deepEqual(await up.push(paused), { sent: true });
+  const { cardId, token } = env.stored();
+  env.advanceClient(-60 * 60 * 1000);
+  for (let minute = 1; minute <= 11; minute++) {
+    env.advance(60_000);
+    const result = await up.push(paused);
+    assert.equal(result.sent, minute === 1 || minute === 5 || minute === 9, `minute ${minute}`);
+    assert.equal((await env.service.readCardState(cardId)).state, "paused", `minute ${minute}`);
+  }
+  const accepted = ingests(env.calls).filter((call) => Math.abs(call.body.observedAt - 1_800_000_000_000) < 12 * 60_000 && call.body.seq > 1_800_000_000_000);
+  assert.equal(accepted.length, 3);
+  assert.ok(accepted.every((call, i) => i === 0 || call.body.seq > accepted[i - 1].body.seq));
+  assert.equal(up.status().state, "connected");
+  await assert.rejects(env.service.ingest({ token, payload: { ...accepted[0].body, observedAt: 1_800_000_000_000 + 11 * 60_000 } }), { code: "stale_sequence" });
 });
 
 test("disabled card fields and artwork never reach the wire", async () => {

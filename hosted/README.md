@@ -45,7 +45,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 - Body limit 2 KB, text fields 200 characters.
 - `seq` must go up for each device; replays and out-of-order updates get `409 stale_sequence` with `lastSeq` only after device-token authentication. The desktop retries once with `lastSeq + 1`, allowing recovery after a clock rollback across restarts without accepting a replay. If an older service omits `lastSeq`, the app reports `sequence_recovery_unavailable` rather than guessing a sequence; update the hosted service to restore uploads on the same card.
 - Each device can send 30 updates a minute; more get `429`. The app sends on change plus a 4-minute heartbeat, so this only stops runaway clients.
-- `observedAt` must be within 2 minutes of server time.
+- `observedAt` must be within 2 minutes of server time. After device-token authentication, a `400 clock_skew` response includes `serverTime` so the desktop can correct its offset and retry once. If the service cannot give a valid time, the app reports `clock_recovery_unavailable`.
 - `state: "idle"` clears the card. Any other state expires after 10 minutes without an update, and the card falls back to "Not playing".
 - Only send fields the user enabled for the card. Discord presence stays local and never goes through this service.
 

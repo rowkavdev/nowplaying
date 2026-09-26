@@ -78,6 +78,20 @@ test("authenticated stale ingest returns the last accepted sequence without expo
   } finally { await app.close(); }
 });
 
+test("clock skew replies with service time only for authenticated devices", async () => {
+  const app = await start();
+  try {
+    const { token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now() - 60 * 60 * 1000, state: "paused" });
+    const skew = await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) });
+    assert.equal(skew.status, 400);
+    assert.equal(JSON.parse(skew.body).error, "clock_skew");
+    assert.ok(Math.abs(JSON.parse(skew.body).serverTime - Date.now()) < 10_000);
+    const anonymous = await call(app.port, "POST", "/api/ingest", { body: payload, headers: json() });
+    assert.deepEqual(JSON.parse(anonymous.body), { error: "unauthorized" });
+  } finally { await app.close(); }
+});
+
 test("ingest enforces auth, content type and size", async () => {
   const app = await start();
   try {
