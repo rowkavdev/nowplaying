@@ -1,12 +1,13 @@
 const MAX_VARIANTS = 32;
 const UNREACHABLE_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "EHOSTUNREACH", "ENETUNREACH", "EAI_AGAIN"]);
 
-export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, staleMs = 300000, diagnostics = false, now = () => Date.now() } = {}) {
+export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, staleMs = 300000, diagnostics = false, now = () => performance.now() } = {}) {
   if (typeof resolveCard !== "function") throw new TypeError("resolveCard: expected a function");
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) throw new RangeError("timeoutMs must be an integer from 1 to 30000");
   if (!Number.isInteger(staleMs) || staleMs < 0 || staleMs > 3600000) throw new RangeError("staleMs must be an integer from 0 to 3600000");
   if (typeof diagnostics !== "boolean") throw new TypeError("diagnostics: expected a boolean");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
+  // Cache age measures elapsed process time, not the adjustable wall clock.
   const inFlight = new Map();
   const lastGood = new Map();
   let generation = 0;
