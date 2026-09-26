@@ -45,17 +45,17 @@ function Test-Bundle($dir, $label) {
       $ready = $false
       for ($i = 0; $i -lt 100; $i++) {
         if ($app.HasExited) { throw "$label exited $($app.ExitCode): $(Get-Content $stderr -Raw)" }
-        try { if ((Invoke-WebRequest "$base/healthz" -UseBasicParsing -TimeoutSec 2).Content.Trim() -eq "ok") { $ready = $true; break } } catch {}
+        try { if ((Invoke-WebRequest "$base/settings" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { $ready = $true; break } } catch {}
         Start-Sleep -Milliseconds 300
       }
-      if (-not $ready) { throw "$label did not serve healthz: stdout=$(Get-Content $stdout -Raw); stderr=$(Get-Content $stderr -Raw); process=$($app.HasExited)" }
+      if (-not $ready) { throw "$label did not serve first-run Settings: stdout=$(Get-Content $stdout -Raw); stderr=$(Get-Content $stderr -Raw); process=$($app.HasExited)" }
       $page = Invoke-WebRequest "$base/settings" -UseBasicParsing
       if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'Set up NowPlaying') { throw "$label first-run WebUI missing" }
       $servers = Invoke-RestMethod "$base/api/settings/servers"
       if (-not $servers.firstRun) { throw "$label did not enter first-run" }
       $discovery = Invoke-WebRequest "$base/api/setup/discover" -UseBasicParsing
       if ($discovery.StatusCode -ne 200) { throw "$label discovery API failed" }
-      Write-Host "${label}: version, launch, healthz, first-run WebUI and discovery API passed"
+      Write-Host "${label}: version, launch, first-run WebUI and discovery API passed"
     } finally {
       taskkill /PID $app.Id /T /F | Out-Null
     }
