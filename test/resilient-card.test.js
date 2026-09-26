@@ -71,3 +71,31 @@ test("classifies timeouts, auth failures and idle output", async () => {
   assert.equal((await resolve()).provider, "timeout");
   assert.throws(() => createResilientCardResolver({ resolveCard: async () => "", diagnostics: "yes" }), TypeError);
 });
+
+test("invalidate drops old variants and ignores an in-flight pre-change render", async () => {
+  let fail = false;
+  let release;
+  let slow = false;
+  const resolve = createResilientCardResolver({ resolveCard: async () => {
+    if (slow) { await new Promise((done) => { release = done; }); return "<svg>old title</svg>"; }
+    if (fail) throw Object.assign(new Error("offline"), { code: "ECONNREFUSED" });
+    return "<svg>old title</svg>";
+  }, diagnostics: true });
+  assert.equal((await resolve()).svg, "<svg>old title</svg>");
+  fail = true;
+  assert.equal((await resolve()).source, "last-good", "normal network failures still use last-good");
+  resolve.invalidate();
+  await assert.rejects(resolve(), /offline/, "old title must not return after privacy invalidation");
+  fail = false;
+  slow = true;
+  const old = resolve();
+  await new Promise((done) => setImmediate(done));
+  slow = false;
+  resolve.invalidate();
+  release();
+  const next = await old;
+  assert.equal(next.source, "live", "an old in-flight result is retried in the new generation");
+  fail = true;
+  resolve.invalidate();
+  await assert.rejects(resolve(), /offline/);
+});

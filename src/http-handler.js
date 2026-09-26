@@ -41,9 +41,10 @@ const HOME_PAGE = `<!doctype html>
 </body></html>
 `;
 
-export function createCardHandler({ resolveCard, now = () => performance.now() } = {}) {
+export function createCardHandler({ resolveCard, now = () => performance.now(), cacheControl = "public, max-age=30, stale-while-revalidate=60" } = {}) {
   if (typeof resolveCard !== "function") throw new TypeError("resolveCard: expected a function");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
+  if (cacheControl !== "no-store" && cacheControl !== "public, max-age=30, stale-while-revalidate=60") throw new TypeError("cacheControl: unsupported policy");
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
@@ -69,8 +70,8 @@ export function createCardHandler({ resolveCard, now = () => performance.now() }
       if (typeof svg !== "string" || !svg.includes("<svg")) throw new TypeError("invalid card output");
       const diagnostics = { ...cardDiagnostics(result), ...renderTiming(now() - startedAt) };
       const etag = `"${createHash("sha256").update(svg).digest("base64url")}"`;
-      const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=30, stale-while-revalidate=60", ETag: etag, "X-Content-Type-Options": "nosniff", ...diagnostics };
-      if (readHeader(request?.headers, "if-none-match") === etag) return response(304, "", headers);
+      const headers = { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": cacheControl, ETag: etag, "X-Content-Type-Options": "nosniff", ...diagnostics };
+      if (cacheControl !== "no-store" && readHeader(request?.headers, "if-none-match") === etag) return response(304, "", headers);
       return response(200, method === "HEAD" ? "" : svg, headers);
     } catch {
       return response(503, "Card unavailable", { "Cache-Control": "no-store", "X-Nowplaying-Source": "unavailable", ...renderTiming(now() - startedAt) });

@@ -397,6 +397,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     async updatePrivacy(changes) {
       const next = await settingsStore.updatePrivacy(changes);
       current = next;
+      resolveCard.invalidate();
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
     },
@@ -449,7 +450,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       if (current.hosted?.enabled) current = await settingsStore.updateHosted({ enabled: false });
     },
   });
-  const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard }) });
+  const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard, cacheControl: "no-store" }) });
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
   const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
   // Hosted card devices on the settings page (#140).

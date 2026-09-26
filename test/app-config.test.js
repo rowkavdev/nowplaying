@@ -423,3 +423,61 @@ test("reads a config saved with a UTF-8 byte order mark (Notepad, PowerShell 5)"
   // Only a leading mark is allowed; one anywhere else is still invalid.
   assert.throws(() => parseAppConfig(`{\uFEFF${serializeSetupConfig(JELLYFIN).slice(1)}`), code("CONFIG_INVALID"));
 });
+
+test("artwork restriction does not replay old artwork when provider fails (#577)", async () => {
+  const sharp = (await import("sharp")).default;
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#f28c28" } }).png().toBuffer();
+  let offline = false;
+  const session = { UserId: "u1", PlayState: { IsPaused: false, PositionTicks: 0 }, NowPlayingItem: { Id: "item1", Type: "Audio", Name: "Sensitive Track", Artists: ["Sensitive Artist"], ImageTags: { Primary: "tag1" }, RunTimeTicks: 1_000_000_000 } };
+  const fetchImpl = async (url) => {
+    if (offline) throw Object.assign(new Error("offline"), { code: "ECONNREFUSED" });
+    return String(url).endsWith("/Sessions") ? Response.json([session]) : new Response(png, { status: 200, headers: { "Content-Type": "image/png" } });
+  };
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const before = await (await fetch(`${app.url}/card.svg`)).text();
+    assert.match(before, /data:image\/png;base64,/);
+    offline = true;
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const saved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { Cookie: cookie, Origin: app.url, "Content-Type": "application/json" }, body: JSON.stringify({ privacy: { hideArtwork: true } }) });
+    assert.equal(saved.status, 200);
+    const after = await fetch(`${app.url}/card.svg`);
+    assert.doesNotMatch(await after.text(), /data:image\/png;base64,|Sensitive Track|Sensitive Artist/);
+    assert.notEqual(after.headers.get("x-nowplaying-source"), "last-good");
+  } finally { await app.close(); }
+});
+
+test("saved privacy restrictions never replay a pre-change card while the provider is offline (#577)", async () => {
+  const session = { UserId: "u1", PlayState: { IsPaused: false, PositionTicks: 0 }, NowPlayingItem: { Id: "item1", Type: "Audio", Name: "Sensitive Track", Artists: ["Sensitive Artist"], RunTimeTicks: 1_000_000_000 } };
+  let offline = false;
+  const fetchImpl = async () => {
+    if (offline) throw Object.assign(new Error("provider unavailable"), { code: "ECONNREFUSED" });
+    return Response.json([session]);
+  };
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    const card = () => fetch(`${app.url}/card.svg`);
+    const first = await card();
+    const firstEtag = first.headers.get("etag");
+    assert.match(await first.text(), /Sensitive Track/);
+    offline = true;
+    const stale = await card();
+    assert.equal(stale.headers.get("x-nowplaying-source"), "last-good");
+    assert.match(await stale.text(), /Sensitive Track/, "unchanged policy keeps normal last-good behavior");
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const savePrivacy = async (privacy) => {
+      const result = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { Cookie: cookie, Origin: app.url, "Content-Type": "application/json" }, body: JSON.stringify({ privacy }) });
+      assert.equal(result.status, 200);
+      return result.json();
+    };
+    for (const restriction of [{ hideTitles: true }, { hideArtwork: true }, { hideMusic: true }]) {
+      const saved = await savePrivacy(restriction);
+      assert.equal(saved.privacy[Object.keys(restriction)[0]], true);
+      const after = await fetch(`${app.url}/card.svg`, { headers: { "If-None-Match": firstEtag } });
+      assert.notEqual(after.status, 304, "privacy change must never get an old not-modified response");
+      assert.doesNotMatch(await after.text(), /Sensitive Track|Sensitive Artist/);
+      assert.notEqual(after.headers.get("x-nowplaying-source"), "last-good");
+      assert.equal(after.headers.get("cache-control"), "no-store");
+    }
+  } finally { await app.close(); }
+});
