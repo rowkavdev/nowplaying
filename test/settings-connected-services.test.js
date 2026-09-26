@@ -8,6 +8,17 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 const CID = "0123456789abcdef0123456789abcdef";
 const post = (url, body) => ({ url, method: "POST", body: JSON.stringify(body), headers: { "sec-fetch-site": "same-origin" } });
 const configFile = async (installed = true) => { const file = join(await mkdtemp(join(tmpdir(), "np-services-")), "config.json"); if (installed) await writeFile(file, serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true })); return file; };
+async function waitForSpotify(svc, flowId) {
+  const deadline = Date.now() + 5000;
+  while (true) {
+    const response = await svc(post("/api/setup/spotify", { action: "poll", flowId }));
+    const result = JSON.parse(response.body);
+    if (result.status !== "pending") { assert.equal(result.status, "signed_in"); return result; }
+    if (Date.now() >= deadline) assert.fail("Spotify sign-in did not complete within 5 seconds");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 
 test("Spotify WebUI flow saves identity not token, and disconnects/revokes", async () => {
   const file = await configFile(); const saved = []; const removed = []; let finish;
@@ -17,8 +28,7 @@ test("Spotify WebUI flow saves identity not token, and disconnects/revokes", asy
   assert.equal(started.status, 200);
   const flowId = JSON.parse(started.body).flowId;
   finish({ refreshToken: "super-secret", identity: { id: "rowan", displayName: "Rowan" } });
-  await new Promise((r) => setTimeout(r, 30));
-  assert.equal(JSON.parse((await h(post("/api/setup/spotify", { action: "poll", flowId }))).body).status, "signed_in");
+  await waitForSpotify(h, flowId);
   const data = JSON.parse(await readFile(file, "utf8"));
   assert.deepEqual(data.spotify.identity, { id: "rowan", displayName: "Rowan" });
   assert.doesNotMatch(JSON.stringify(data), /super-secret/);
@@ -32,8 +42,8 @@ test("first-run optional accounts stage until media server config exists", async
   const file = await configFile(false); let finish; const saved=[];
   const svc = createSettingsConnectedServices({ file, credentialStore: { save: async (...x)=>saved.push(x) }, spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) });
   const started = await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
-  finish({ refreshToken: "secret", identity: { id: "rowan", displayName: "Rowan" } }); await new Promise((r)=>setTimeout(r, 30));
-  assert.equal(JSON.parse((await svc.handler(post("/api/setup/spotify", { action: "poll", flowId: JSON.parse(started.body).flowId }))).body).status, "signed_in");
+  finish({ refreshToken: "secret", identity: { id: "rowan", displayName: "Rowan" } });
+  await waitForSpotify(svc.handler, JSON.parse(started.body).flowId);
   assert.equal(JSON.parse((await svc.handler({ url: "/api/settings/services" })).body).spotify.name, "Rowan");
   await writeFile(file, serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true }));
   await svc.afterFirstServer();
