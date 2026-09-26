@@ -63,7 +63,7 @@ const JS = `"use strict";
     expired: "That Spotify sign-in expired. Start again.",
     too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
   };
-  var spotify = { flowId: null, timer: null, clientId: "" };
+  var spotify = { flowId: null, timer: null, clientId: "", authUrl: null };
   var TEST_MESSAGES = {
     connected: "Connected. NowPlaying can see what you're playing.",
     authentication_failed: "Your server rejected the saved sign-in. Sign in again.",
@@ -103,7 +103,7 @@ const JS = `"use strict";
     expired: "That sign-in expired. Start again.",
     too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
   };
-  var signin = { flowId: null, code: null, timer: null };
+  var signin = { flowId: null, code: null, timer: null, authUrl: null };
   var DRAFT_ERRORS = {
     too_many_servers: "You can add up to 8 servers.",
     server_not_found: "That server was already removed.",
@@ -179,7 +179,7 @@ const JS = `"use strict";
 
   function stopSignIn() {
     if (signin.timer) clearTimeout(signin.timer);
-    signin = { flowId: null, code: null, timer: null };
+    signin = { flowId: null, code: null, timer: null, authUrl: null };
   }
 
   function signInResult(result) {
@@ -207,7 +207,8 @@ const JS = `"use strict";
       if (result.status === "pending") {
         signin.flowId = result.flowId;
         signin.code = result.code || null;
-        if (result.authUrl && result.authUrl.indexOf("https://app.plex.tv/") === 0) window.open(result.authUrl, "_blank", "noopener");
+        signin.authUrl = result.authUrl && result.authUrl.indexOf("https://app.plex.tv/") === 0 ? result.authUrl : null;
+        if (signin.authUrl) window.open(signin.authUrl, "_blank", "noopener");
       }
       return signInResult(result);
     }).catch(function (error) { showError(error.message); })
@@ -230,6 +231,7 @@ const JS = `"use strict";
     if (spotify.timer) clearTimeout(spotify.timer);
     spotify.flowId = null;
     spotify.timer = null;
+    spotify.authUrl = null;
   }
 
   function spotifyResult(result) {
@@ -256,7 +258,8 @@ const JS = `"use strict";
     callSpotify({ action: "start", clientId: spotify.clientId }).then(function (result) {
       if (result.status === "pending") {
         spotify.flowId = result.flowId;
-        if (result.authUrl && result.authUrl.indexOf("https://accounts.spotify.com/") === 0) window.open(result.authUrl, "_blank", "noopener");
+        spotify.authUrl = result.authUrl && result.authUrl.indexOf("https://accounts.spotify.com/") === 0 ? result.authUrl : null;
+        if (spotify.authUrl) window.open(spotify.authUrl, "_blank", "noopener");
       }
       return spotifyResult(result);
     }).catch(function (error) { showError(error.message); })
@@ -273,6 +276,7 @@ const JS = `"use strict";
     parts.push(el("p", { textContent: "Shows what you play on Spotify on your card and hosted card, never on Discord. You need a Client ID from your own app in the Spotify developer dashboard, with http://127.0.0.1/spotify/callback as its redirect URI." }));
     parts.push(field("spotifyClientId", "Spotify Client ID", "text", spotify.clientId));
     if (spotify.flowId) parts.push(el("p", { textContent: "Finish signing in on the Spotify page. This page updates when you're done." }));
+    if (spotify.authUrl) parts.push(el("p", {}, ["If no tab opened, use ", el("a", { href: spotify.authUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Open Spotify sign-in" }), "."]));
     parts.push(el("button", { type: "button", id: "spotifyStart", textContent: spotify.flowId ? "Open Spotify sign-in again" : "Sign in with Spotify" }));
     return parts;
   }
@@ -300,6 +304,7 @@ const JS = `"use strict";
     if (draft.provider === "plex") {
       parts.push(field("serverUrl", "Plex server address", "url", DEFAULT_URLS.plex));
       parts.push(el("p", { textContent: signin.flowId ? "Finish signing in on the Plex page. This page updates when you're done." : "Plex opens in a new tab so you can approve NowPlaying." }));
+      if (signin.authUrl) parts.push(el("p", {}, ["If no tab opened, use ", el("a", { href: signin.authUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Open Plex sign-in" }), "."]));
       parts.push(el("button", { type: "button", id: "signinStart", textContent: draft.account ? "Sign in again" : "Open Plex sign-in" }));
     } else if (draft.provider === "jellyfin") {
       parts.push(field("serverUrl", "Server address", "url", DEFAULT_URLS.jellyfin));

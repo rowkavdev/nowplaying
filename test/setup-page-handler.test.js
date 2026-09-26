@@ -116,3 +116,13 @@ test("GitHub sign-in on the hosting step uses the signin API and explains every 
     assert.ok(ps1.includes(quoted), `${key} wording matches the native window`);
   }
 });
+
+test("slow Plex and Spotify sign-in expose real clickable links when popup blocking wins", async () => {
+  const js = (await handle({ method: "GET", url: "/setup/app.js" })).body;
+  assert.match(js, /href: signin\.authUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Open Plex sign-in"/);
+  assert.match(js, /href: spotify\.authUrl, target: "_blank", rel: "noopener noreferrer", textContent: "Open Spotify sign-in"/);
+  assert.match(js, /signin\.authUrl = result\.authUrl && result\.authUrl\.indexOf\("https:\/\/app\.plex\.tv\/"\) === 0/);
+  assert.match(js, /spotify\.authUrl = result\.authUrl && result\.authUrl\.indexOf\("https:\/\/accounts\.spotify\.com\/"\) === 0/);
+  assert.match(js, /signin = \{ flowId: null, code: null, timer: null, authUrl: null \}/);
+  assert.match(js, /spotify\.authUrl = null/);
+});
