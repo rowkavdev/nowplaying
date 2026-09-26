@@ -39,8 +39,14 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const progressHeight = bounded(layout.progressHeight, 4, 2, 12, "layout.progressHeight");
   const directionSetting = layout.direction ?? "ltr";
   if (!new Set(["ltr", "rtl", "auto"]).has(directionSetting)) throw new TypeError("layout.direction: expected ltr, rtl or auto");
-  // "auto" follows the first strong character of the title, then subtitle.
-  const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${presence.title ?? ""}${presence.subtitle ?? ""}`));
+  const presetShow = theme === "compact" ? COMPACT_SHOW : {};
+  const visibility = { ...SHOW_DEFAULTS, ...presetShow, ...show };
+  for (const [key, value] of Object.entries(visibility)) {
+    if (!Object.hasOwn(SHOW_DEFAULTS, key)) throw new TypeError(`Unknown card visibility setting: ${key}`);
+    if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
+  }
+  // Hidden subtitle must not influence markup or the automatic text direction.
+  const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${presence.title ?? ""}${visibility.subtitle ? presence.subtitle ?? "" : ""}`));
   const artworkPosition = layout.artworkPosition ?? (rtl ? "right" : "left");
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
   // Album art is square; posters and episode stills keep the 2:3 shape.
@@ -55,12 +61,6 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const textAlign = layout.textAlign ?? "start";
   if (!Object.hasOwn(TEXT_ANCHORS, textAlign)) throw new TypeError("layout.textAlign: expected start, middle or end");
   if (artworkDataUri !== null && (typeof artworkDataUri !== "string" || !DATA_IMAGE_PATTERN.test(artworkDataUri))) throw new TypeError("artworkDataUri must be a validated raster data URI");
-  const presetShow = theme === "compact" ? COMPACT_SHOW : {};
-  const visibility = { ...SHOW_DEFAULTS, ...presetShow, ...show };
-  for (const [key, value] of Object.entries(visibility)) {
-    if (!Object.hasOwn(SHOW_DEFAULTS, key)) throw new TypeError(`Unknown card visibility setting: ${key}`);
-    if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
-  }
   // Privacy removes both timing fields before rendering. Do not leave an
   // empty bar when the user hid progress (or the source has no timing).
   if (presence.state === "playing" || presence.state === "paused") {
@@ -113,7 +113,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const barX = progressSpan === "full" ? padding : contentX;
   const barWidth = progressSpan === "full" ? width - padding * 2 : contentWidth;
   const progress = progressWidth(presence, barWidth);
-  const description = subtitle || status;
+  const description = hasSubtitle ? subtitle : status;
   // Elapsed / total sits across from the status line when the layout is the
   // plain default, so it never collides with reordered or centred text.
   // It's left out when the two wouldn't both fit (narrow cards, long films).

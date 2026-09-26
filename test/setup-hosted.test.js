@@ -18,8 +18,8 @@ test("preview route lists the fields the current settings would send", async () 
   const res = await handle({ method: "GET", url: "/api/setup/hosted/preview" });
   assert.equal(res.status, 200);
   const p = body(res);
-  assert.deepEqual(p.sent.map((f) => f.key), ["state", "kind", "title", "subtitle"]);
-  assert.deepEqual(p.withheld.map((f) => f.key), ["durationMs", "positionMs"]);
+  assert.deepEqual(p.sent.map((f) => f.key), ["state", "kind", "title"]);
+  assert.deepEqual(p.withheld.map((f) => f.key), ["subtitle", "durationMs", "positionMs"]);
   assert.equal(p.defaultUrl, "https://nowplaying-hosted.vercel.app");
   assert.equal((await handle({ method: "POST", url: "/api/setup/hosted/preview" })).status, 405);
   assert.equal(await handle({ method: "GET", url: "/api/setup/draft" }), null);
@@ -47,6 +47,16 @@ test("hosted upload settings withhold progress when the card hides it", () => {
   assert.equal(shown.positionMs, 1000);
   const redacted = projectHostedState(presence, hostedUploadSettings({ privacy: { redactTitles: true } }), { seq: 1, now: 1 });
   assert.notEqual(redacted.title, "T");
+});
+
+test("saved Compact style withholds subtitle while normal styles retain it", () => {
+  const presence = { state: "playing", kind: "track", title: "Visible Song", subtitle: "Hidden Artist" };
+  const compact = projectHostedState(presence, hostedUploadSettings({ card: { theme: "compact" } }), { seq: 1, now: 1 });
+  assert.equal(Object.hasOwn(compact, "subtitle"), false);
+  assert.doesNotMatch(JSON.stringify(compact), /Hidden Artist/);
+  for (const theme of ["paper", "midnight-blue"]) {
+    assert.equal(projectHostedState(presence, hostedUploadSettings({ card: { theme } }), { seq: 1, now: 1 }).subtitle, "Hidden Artist");
+  }
 });
 
 test("draft carries the hosting choice and rejects bad URLs", () => {
