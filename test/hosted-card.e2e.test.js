@@ -56,3 +56,22 @@ test("local last-good card expires after five elapsed minutes despite wall-clock
     assert.equal(wall < 1_800_000_000_000, true);
   } finally { await app.close(); }
 });
+
+test("hidden subtitle never enters raw local SVG or accessible description", async () => {
+  const provider = { getPresence: async () => createPresence({ state: "playing", kind: "track", title: "Visible Song", subtitle: "Hidden Artist" }) };
+  const handler = createCardHandler({ resolveCard: createResilientCardResolver({ resolveCard: createCardPipeline({ provider }) }) });
+  const app = createHttpServer({ port: 0, handler });
+  const address = await app.listen();
+  try {
+    for (const path of ["/card.svg?show=mediaType,state,progress", "/card.svg?theme=compact"]) {
+      const result = await get(address.port, path);
+      assert.equal(result.status, 200);
+      assert.match(result.body, /aria-labelledby="title desc"/);
+      assert.match(result.body, /<desc id="desc">NOW PLAYING<\/desc>/);
+      assert.doesNotMatch(result.body, /Hidden Artist/);
+      assert.match(result.body, /Visible Song/);
+    }
+    const normal = await get(address.port, "/card.svg");
+    assert.match(normal.body, /<desc id="desc">Hidden Artist<\/desc>/);
+  } finally { await app.close(); }
+});
