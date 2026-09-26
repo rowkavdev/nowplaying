@@ -125,3 +125,20 @@ test("first-run page stops polling with recovery after a startup deadline", asyn
   timers.shift()(); await tick();
   assert.deepEqual(requests, ["/api/settings/servers"]);
 });
+
+test("capacity and config-save errors are explained in the Settings sign-in panel", async () => {
+  for (const [code, message] of [
+    ["too_many_servers", "You can add up to 8 servers."],
+    ["draft_update_failed", "Could not save the server. Try again."],
+  ]) {
+    const { node, fetches } = page();
+    fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
+    node("server-url").value = "http://127.0.0.1:4533";
+    node("server-provider").value = "navidrome";
+    node("manual-connect").click({ currentTarget: node("manual-connect") });
+    const signIn = node("signin-button").click();
+    assert.equal(fetches[1].path, "/api/setup/signin");
+    fetches[1].resolve(json({ error: code }, false));
+    await signIn;
+    assert.equal(node("signin-result").textContent, `Sign-in failed: ${message}`);
+  }});
