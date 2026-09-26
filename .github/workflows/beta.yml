@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: windows-2022
+    runs-on: windows-2025
     permissions:
       contents: write
       pull-requests: read
@@ -58,116 +58,15 @@ jobs:
           subject-path: |
             dist/windows/*.exe
             dist/windows/*.zip
-      - name: Name this development build
-        shell: bash
-        run: |
-          current=$(node -p "require('./package.json').version")
-          IFS=. read -r major minor patch <<<"$current"
-          echo "DEV_VERSION=${major}.${minor}.$((patch + 1))-dev+${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
-      - name: Build cumulative development release notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO_VISIBILITY: ${{ github.event.repository.visibility }}
-        run: |
-          set -euo pipefail
-          stable_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft --jq 'select(.isPrerelease == false and .isDraft == false) | .tagName')
-          if [[ -z "$stable_tag" ]]; then
-            stable_tag=$(git rev-list --max-parents=0 HEAD | tail -1)
-            baseline_label="initial commit"
-          else
-            baseline_label="$stable_tag"
-          fi
-
-          git log --reverse --no-merges --pretty=format:'%H%x09%s' "$stable_tag..$GITHUB_SHA" > all-changes.tsv
-          # One line per commit for scripts/release-notes.js: sha, PR, size, subject.
-          : > changes.tsv
-          while IFS=$'\t' read -r sha subject || [[ -n "${sha:-}" ]]; do
-            [[ -z "${sha:-}" ]] && continue
-            # shellcheck disable=SC2016 # awk field references must remain literal.
-            size=$(git show --numstat --format= "$sha" | awk '{a+=$1; d+=$2; f++} END {print a+d+f+0}')
-            pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --jq '.[0].number // empty' 2>/dev/null | grep -m1 -E '^[0-9]+$' || true)
-            printf '%s\t%s\t%s\t%s\n' "$sha" "$pr" "$size" "$subject" >> changes.tsv
-          done < all-changes.tsv
-          node scripts/release-notes.js changes.tsv "$GITHUB_REPOSITORY" > ranked-changes.md
-          {
-            # shellcheck disable=SC2016 # Markdown backticks are intentional.
-            printf '**Dev build #%s** (`%s`), built from main at [`%s`](https://github.com/%s/commit/%s).\n\n' "$GITHUB_RUN_NUMBER" "$DEV_VERSION" "${GITHUB_SHA:0:7}" "$GITHUB_REPOSITORY" "$GITHUB_SHA"
-            printf 'This is a cumulative test build containing updates and fixes since **%s**. It may be unstable. For the latest supported release, use the version GitHub marks Latest. Assets are unsigned; verify SHA256SUMS before installing. To test it, follow the [dev build checklist](https://github.com/%s/blob/main/docs/testing-dev-build.md).\n\n' "$baseline_label" "$GITHUB_REPOSITORY"
-            if [[ "$REPO_VISIBILITY" == public ]]; then
-              # shellcheck disable=SC2016 # Markdown backticks are intentional.
-              printf 'Check where a download was built with `gh attestation verify <file> --repo %s`.\n\n' "$GITHUB_REPOSITORY"
-            fi
-            printf "## What's Changed\n\n"
-            cat ranked-changes.md
-            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$GITHUB_SHA"
-          } > development-release-notes.md
-      # One moving pre-release: the "dev" tag and its release are updated in place
-      # on every push to main, so the releases page shows a single development
-      # build instead of one per merge. It is never marked Latest.
-      - name: Update the development pre-release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          mapfile -t files < <(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) | sort)
-          # Only a 404 means there is no dev release yet. Any other lookup error
-          # (rate limit, outage) used to fall through to "create", which moved the
-          # tag and then failed with "a release with the same tag name already
-          # exists", leaving the old assets under a moved tag. Retry, then stop.
-          lookup=failed
-          for attempt in 1 2 3; do
-            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev" > dev-release.json 2> dev-release-error.txt; then lookup=found; break; fi
-            if grep -q "HTTP 404" dev-release-error.txt; then lookup=missing; break; fi
-            echo "Dev release lookup attempt $attempt failed: $(head -c 300 dev-release-error.txt)"
-            sleep $((attempt * 20))
-          done
-          [[ "$lookup" != failed ]] || { echo "Couldn't look up the dev release; nothing was changed"; exit 1; }
-          if [[ "$lookup" == missing ]]; then
-            git tag -f dev "$GITHUB_SHA"
-            git push --force "$remote" refs/tags/dev
-            gh release create dev --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --verify-tag --title "$title" --notes-file development-release-notes.md "${files[@]}"
-            exit 0
-          fi
-          release_id=$(jq -r .id dev-release.json)
-          # Replace every asset explicitly instead of relying on --clobber, which
-          # can fail with a 404 on an asset it just looked up. A 404 on delete
-          # means the asset is already gone, which is the state we want.
-          for attempt in 1 2 3; do
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' > asset-ids.txt
-            while IFS= read -r id; do
-              [[ -n "$id" ]] && { gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id" >/dev/null 2>&1 || true; }
-            done < asset-ids.txt
-            if gh release upload dev --repo "$GITHUB_REPOSITORY" "${files[@]}"; then uploaded=1; break; fi
-            echo "Upload attempt $attempt failed; retrying"
-            sleep $((attempt * 5))
-          done
-          [[ "${uploaded:-0}" == 1 ]] || { echo "Could not upload development assets"; exit 1; }
-          # Move the tag only once the new assets are on the release, so the tag,
-          # source archives and binaries always describe the same commit.
-          git tag -f dev "$GITHUB_SHA"
-          git push --force "$remote" refs/tags/dev
-          # Update the release by the ID looked up above.
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f name="$title" -F prerelease=true -f make_latest=false -F body=@development-release-notes.md --jq '.name'
-      # Old scheme: one immutable vX.Y.Z-dev.N pre-release per merge. Remove those
-      # (release and tag) only after the moving dev release is confirmed to carry
-      # this commit's assets. Stable releases never match the pattern.
-      - name: Remove old per-merge development pre-releases
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          target=$(gh release view dev --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets,tagName --jq 'select(.isPrerelease) | [.assets[].name | select(endswith(".zip"))] | length')
-          [[ "${target:-0}" -ge 1 ]] || { echo "dev release not ready; skipping cleanup"; exit 0; }
-          [[ "$(git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/dev | cut -f1)" == "$GITHUB_SHA" ]] || { echo "dev tag not at this commit; skipping cleanup"; exit 0; }
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 500 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' > prereleases.txt
-          while IFS= read -r tag; do
-            if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
-              echo "Deleting $tag"
-              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
-            fi
-          done < prereleases.txt
+      # Representative rolling dev build on windows-2025 without mutating the
+      # moving dev release/tag. Inspect the artifact and checksum before merge.
+      - name: Upload representative Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-2025-dev-build
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
+            dist/windows/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
