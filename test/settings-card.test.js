@@ -180,3 +180,29 @@ test("preview scale hint reads the actual track and movie SVG (#559)", async () 
   assert.match(script, /Your selected width is still saved/);
   assert.match(script, /card.scaleNote.hidden = true/);
 });
+
+
+test("Hide progress and timer removes the bar from the live card and Settings preview (#576)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-hidden-progress-"));
+  const file = join(dir, "config.json");
+  await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false, privacy: { hideProgress: true }, card: { showProgress: true } }));
+  const fetchImpl = async (url) => String(url).endsWith("/Sessions")
+    ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "song", Name: "Example song", Type: "Audio", RunTimeTicks: 1_200_000_000 }, PlayState: { IsPaused: false, PositionTicks: 600_000_000 } }])
+    : Response.json([]);
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
+  try {
+    for (const path of ["/card.svg", "/api/settings/card/preview.svg"]) {
+      const hidden = await (await fetch(app.url + path)).text();
+      assert.match(hidden, /Example song/);
+      assert.doesNotMatch(hidden, /<rect[^>]*height="4"/);
+      assert.doesNotMatch(hidden, /1:00 \/ 2:00/);
+    }
+    const page = await fetch(`${app.url}/settings`);
+    const cookie = page.headers.get("set-cookie").split(";")[0];
+    const saved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ privacy: { hideProgress: false } }) });
+    assert.equal(saved.status, 200);
+    const restored = await (await fetch(app.url + "/card.svg")).text();
+    assert.match(restored, /<rect[^>]*height="4"/);
+    assert.equal(parseAppConfig(await readFile(file, "utf8")).card.showProgress, true);
+  } finally { await app.close(); }
+});
