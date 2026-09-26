@@ -19,7 +19,10 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
     : { state: "waiting", at: null }));
   // When each server last started something: playback began, resumed, or
   // moved to a different item.
-  const activeAt = entries.map(() => null);
+  // Activity order is process-local. Wall time can move backward while the
+  // app is running, but a new request must still outrank an older one.
+  const activeOrder = entries.map(() => null);
+  let nextActivityOrder = 0;
   let inflight = null;
 
   function itemKey(presence) {
@@ -32,7 +35,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
     const wasActive = was?.state === "playing" || was?.state === "paused";
     const newItem = !wasActive || itemKey(was) !== itemKey(presence);
     const resumed = presence.state === "playing" && was?.state !== "playing";
-    if (newItem || resumed) activeAt[index] = now();
+    if (newItem || resumed) activeOrder[index] = ++nextActivityOrder;
   }
 
   async function pollAll() {
@@ -61,7 +64,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
     for (const wanted of ["playing", "paused"]) {
       results.forEach((result, index) => {
         if (result.state !== "ok" || result.presence?.state !== wanted) return;
-        if (best === -1 || (activeAt[index] ?? -Infinity) > (activeAt[best] ?? -Infinity)) best = index;
+        if (best === -1 || (activeOrder[index] ?? -Infinity) > (activeOrder[best] ?? -Infinity)) best = index;
       });
       if (best !== -1) return results[best].presence;
     }

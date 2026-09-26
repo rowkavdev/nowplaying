@@ -64,6 +64,29 @@ test("most recent request wins: the server that started or resumed last shows (#
   assert.equal((await tick()).title, "B", "a paused server shows over idle ones");
 });
 
+test("latest activity wins after a backward wall-clock correction", async () => {
+  let clock = 1_800_000_000_000;
+  const state = { a: { state: "playing", kind: "track", title: "Older request" }, b: { state: "idle" } };
+  const multi = createMultiServerProvider([
+    { server: server("jellyfin"), provider: { getPresence: async () => state.a } },
+    { server: server("plex"), provider: { getPresence: async () => state.b } },
+  ], { now: () => clock });
+  assert.equal((await multi.getPresence()).title, "Older request");
+  clock += 1000;
+  state.b = { state: "playing", kind: "track", title: "Newer request" };
+  assert.equal((await multi.getPresence()).title, "Newer request");
+  clock -= 60 * 60_000;
+  clock += 1000;
+  assert.equal((await multi.getPresence()).title, "Newer request", "unchanged sessions do not steal priority");
+  state.a = { state: "playing", kind: "track", title: "Newest request after correction" };
+  assert.equal((await multi.getPresence()).title, "Newest request after correction");
+  assert.deepEqual(multi.servers().map((s) => s.state), ["playing", "playing"]);
+  state.a = { ...state.a, state: "paused" };
+  assert.equal((await multi.getPresence()).title, "Newer request", "playing still beats paused");
+  state.a = { ...state.a, state: "playing" };
+  assert.equal((await multi.getPresence()).title, "Newest request after correction", "resume is new activity");
+});
+
 test("a playing server still shows when the first server is down (#252)", async () => {
   const multi = createMultiServerProvider([
     { server: server("jellyfin"), provider: { getPresence: async () => { throw new Error("down"); } } },
