@@ -149,7 +149,7 @@ test("the hosted link follows the saved card style, width and progress bar", asy
 });
 
 
-test("live movie playback does not change the deterministic sample preview (#559)", async () => {
+test("live movie preview keeps the live title and reports its automatic art width (#559)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-preview-movie-"));
   const file = join(dir, "config.json");
   await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false }));
@@ -162,19 +162,21 @@ test("live movie playback does not change the deterministic sample preview (#559
     assert.match(live, /Example movie/);
     const path = "/api/settings/card/preview.svg?width=300&padding=48";
     const svg = await (await fetch(app.url + path)).text();
-    assert.match(svg, /Sample track/);
-    assert.doesNotMatch(svg, /Example movie/);
-    assert.match(svg, /<image[^>]*width="80"/);
+    assert.match(svg, /Example movie/);
+    assert.doesNotMatch(svg, /Sample track/);
+    assert.match(svg, /data-preview-artwork-width="68"/);
+    assert.match(svg, /<image[^>]*width="68"/);
+    const narrower = await (await fetch(app.url + "/api/settings/card/preview.svg?width=280&padding=48")).text();
+    assert.match(narrower, /Example movie/);
+    assert.match(narrower, /data-preview-artwork-width="68"/);
+    assert.match(narrower, /<image[^>]*width="60"/);
   } finally { await app.close(); }
 });
 
-test("preview scale hint distinguishes saved width from rendered artwork (#559)", async () => {
+test("preview scale hint reads the actual track and movie SVG (#559)", async () => {
   const script = (await handler()({ url: "/settings.js" })).body;
-  const calculate = new Function(script.match(/function previewArtworkScale\(values\) \{[\s\S]*?\n\}/)[0] + "; return previewArtworkScale;")();
-  assert.deepEqual(calculate({ theme: "midnight-blue", width: 280, padding: 48, artworkWidth: 160 }), { requested: 160, rendered: 60 });
-  assert.equal(calculate({ theme: "midnight-blue", width: 440, padding: 48, artworkWidth: 160 }), null);
-  assert.deepEqual(calculate({ theme: "midnight-blue", width: 280, padding: 48, artworkWidth: null }), { requested: 100, rendered: 60 }, "sample track automatic width is also capped");
-  assert.equal(calculate({ theme: "compact", width: 280, padding: 48, artworkWidth: 160 }), null, "compact hides artwork");
+  assert.match(script, /previewArtworkScale\(svg, values.artworkWidth\)/);
+  assert.match(script, /data-preview-artwork-width/);
   assert.match(script, /Your selected width is still saved/);
   assert.match(script, /card.scaleNote.hidden = true/);
 });

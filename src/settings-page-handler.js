@@ -255,35 +255,70 @@ function cardValues() {
 function cardValid(values) {
   return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => (ART_AUTO[key] && values[key] === null) || (Number.isInteger(values[key]) && values[key] >= min && values[key] <= max));
 }
-// The preview uses a sample track with artwork. Mirror only the renderer's
-// width cap here to explain why its artwork can differ from the saved slider.
-function previewArtworkScale(values) {
-  if (values.theme === "compact") return null;
-  const requested = values.artworkWidth ?? 100; // sample track's auto width
-  const rendered = Math.min(requested, values.width - values.padding * 2 - 24 - 100);
-  return rendered < requested ? { requested, rendered } : null;
+// Read the actual SVG returned for this preview, not an assumed media kind:
+// live movies and episodes use different automatic artwork widths from tracks.
+function previewArtworkScale(svg, selectedWidth) {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  if (doc.querySelector("parsererror") || doc.documentElement.localName !== "svg") throw new Error("Invalid preview");
+  const image = doc.querySelector("image");
+  if (!image) return null;
+  const rendered = Number(image.getAttribute("width"));
+  const requested = selectedWidth ?? (doc.documentElement.getAttribute("data-preview-artwork-width") ? Number(doc.documentElement.getAttribute("data-preview-artwork-width")) : rendered);
+  return Number.isFinite(rendered) && Number.isFinite(requested) && rendered < requested ? { requested, rendered } : null;
 }
 let previewTimer;
+let previewRequest;
+let previewObjectUrl;
+let previewGeneration = 0;
 function cardChanged() {
   for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = ART_AUTO[key] ? "Auto" : cardField(key).value + " px";
   for (const key of ["progressHeight", "progressPosition", "progressWidth"]) cardField(key).disabled = !cardField("showProgress").checked;
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => {
+  previewGeneration++;
+  if (previewRequest) previewRequest.abort();
+  card.scaleNote.hidden = true;
+  previewTimer = setTimeout(async () => {
     const values = cardValues();
-    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; card.scaleNote.hidden = true; return; }
+    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
     card.save.disabled = false;
     if (document.getElementById("card-result").className === "bad") cardSay("");
     const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0", fieldOrder: values.fieldOrder.join(",") });
     for (const key of Object.keys(ART_AUTO)) if (values[key] === null) query.delete(key);
-    const scale = previewArtworkScale(values);
-    card.scaleNote.hidden = true;
-    card.scaleNote.textContent = scale ? "Preview artwork is " + scale.rendered + " px wide (" + scale.requested + " px selected) to keep the text readable. Your selected width is still saved." : "";
-    card.preview.dataset.artworkScaled = scale ? "yes" : "no";
-    card.preview.src = "/api/settings/card/preview.svg?" + query;
+    const request = new AbortController();
+    const generation = previewGeneration;
+    previewRequest = request;
+    try {
+      const response = await fetch("/api/settings/card/preview.svg?" + query, { signal: request.signal, cache: "no-store" });
+      if (!response.ok) throw new Error("Preview unavailable");
+      const svg = await response.text();
+      if (request.signal.aborted || generation !== previewGeneration) return;
+      const scale = previewArtworkScale(svg, values.artworkWidth);
+      card.scaleNote.textContent = scale ? "Preview artwork is " + scale.rendered + " px wide (" + scale.requested + " px selected) to keep the text readable. Your selected width is still saved." : "";
+      const objectUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      card.preview.onload = () => {
+        if (generation !== previewGeneration) { URL.revokeObjectURL(objectUrl); return; }
+        if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = objectUrl;
+        card.preview.hidden = false;
+        card.note.hidden = true;
+        card.scaleNote.hidden = !card.scaleNote.textContent;
+      };
+      card.preview.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        if (generation !== previewGeneration) return;
+        card.preview.hidden = true;
+        card.note.hidden = false;
+        card.scaleNote.hidden = true;
+      };
+      card.preview.src = objectUrl;
+    } catch (error) {
+      if (request.signal.aborted || generation !== previewGeneration) return;
+      card.preview.hidden = true;
+      card.note.hidden = false;
+      card.scaleNote.hidden = true;
+    }
   }, 200);
 }
-card.preview.addEventListener("load", () => { card.preview.hidden = false; card.note.hidden = true; card.scaleNote.hidden = card.preview.dataset.artworkScaled !== "yes"; });
-card.preview.addEventListener("error", () => { card.preview.hidden = true; card.note.hidden = false; card.scaleNote.hidden = true; });
 function showCard(c) {
   card.form.hidden = !c;
   if (!c) return;

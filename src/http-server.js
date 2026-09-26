@@ -13,7 +13,7 @@ const SECURITY_HEADERS = Object.freeze({
 
 // Opt-in policy for the local setup page: same-origin script, style, images and
 // fetch only. No inline script, no framing, no third-party origins.
-export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
