@@ -40,3 +40,17 @@ test("the pipeline passes an artwork tint on unless the card turns it off (#447)
     ["data:image/png;base64,AAAA", null, false],
   ]);
 });
+
+
+test("privacy hides the local progress track and timer without changing the saved card preference (#576)", async () => {
+  const presence = createPresence({ state: "playing", kind: "track", title: "Song", positionMs: 60_000, durationMs: 120_000 });
+  const provider = { getPresence: async () => presence };
+  const options = { provider, defaults: () => ({ show: { progress: true } }) };
+  const visible = await createCardPipeline(options)();
+  const hidden = await createCardPipeline({ ...options, privacy: { hideProgress: true } })();
+  assert.match(visible, /width="196" height="4"/);
+  assert.match(visible, /1:00 \/ 2:00/);
+  assert.doesNotMatch(hidden, /<rect[^>]*height="4"/);
+  assert.doesNotMatch(hidden, /1:00 \/ 2:00/);
+  assert.match(await createCardPipeline(options)(), /width="196" height="4"/, "switching privacy off restores the saved appearance");
+});

@@ -51,6 +51,19 @@ test("register, ingest and render a card over HTTP", async () => {
   } finally { await app.close(); }
 });
 
+test("a hosted card without uploaded timing has no empty progress track (#576)", async () => {
+  const app = await start();
+  try {
+    const { cardId, token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "playing", kind: "track", title: "Private track" });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
+    const card = await call(app.port, "GET", `/card/${cardId}.svg`);
+    assert.equal(card.status, 200);
+    assert.match(card.body, /Private track/);
+    assert.doesNotMatch(card.body, /<rect[^>]*height="4"/);
+  } finally { await app.close(); }
+});
+
 test("ingest enforces auth, content type and size", async () => {
   const app = await start();
   try {

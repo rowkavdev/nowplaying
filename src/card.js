@@ -61,6 +61,11 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     if (!Object.hasOwn(SHOW_DEFAULTS, key)) throw new TypeError(`Unknown card visibility setting: ${key}`);
     if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
   }
+  // Privacy removes both timing fields before rendering. Do not leave an
+  // empty bar when the user hid progress (or the source has no timing).
+  if (presence.state === "playing" || presence.state === "paused") {
+    visibility.progress &&= presence.durationMs > 0 && Number.isFinite(presence.positionMs);
+  }
   const palette = resolveCardTheme(theme, colors);
   if (tint !== null && (typeof tint !== "string" || !COLOR_PATTERN.test(tint))) throw new TypeError("tint must be a six-digit hex color");
   const hasArtwork = visibility.artwork && artworkDataUri !== null;
