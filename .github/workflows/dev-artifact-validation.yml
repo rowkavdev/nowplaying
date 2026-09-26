@@ -1,0 +1,23 @@
+name: Dev artifact real-install validation
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/dev-artifact-validation.yml"
+      - "scripts/verify-dev-artifacts.ps1"
+permissions:
+  contents: read
+  attestations: read
+jobs:
+  real-install:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download and exercise moving dev installer and portable ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/verify-dev-artifacts.ps1
