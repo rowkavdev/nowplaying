@@ -11,14 +11,17 @@ export function createAnalyticsStore({ file, salt } = {}) {
     if (!["card", "discord"].includes(kind)) throw new TypeError("kind: expected card or discord");
     if (typeof installationId !== "string" || installationId.length < 16 || installationId.length > 128) throw new TypeError("installationId: expected 16-128 characters");
     const id = createHash("sha256").update(`${salt}\0${installationId}`).digest("hex");
-    queue = queue.then(async () => {
+    const write = queue.then(async () => {
       const data = await load(file);
       data[`${kind}s`] += 1;
       if (!data.installations.includes(id)) data.installations.push(id);
       if (!data[`${kind}Installations`].includes(id)) data[`${kind}Installations`].push(id);
       await save(file, data);
     });
-    await queue;
+    // Each caller sees its own failure, but a failed write must not poison
+    // later records or reads. The next operation reloads the file from disk.
+    queue = write.catch(() => {});
+    await write;
   }
 
   async function stats() {
