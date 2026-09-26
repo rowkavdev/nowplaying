@@ -6,6 +6,7 @@ import { createCardPipeline } from "../src/card-pipeline.js";
 import { createResilientCardResolver } from "../src/resilient-card.js";
 import { createCardHandler } from "../src/http-handler.js";
 import { createHttpServer } from "../src/http-server.js";
+import { withProviderBackoff } from "../src/provider-backoff.js";
 
 function get(port, path) { return new Promise((resolve, reject) => { const req = request({ host: "127.0.0.1", port, path }, (res) => { const chunks = []; res.on("data", (c) => chunks.push(c)); res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() })); }); req.once("error", reject).end(); }); }
 
@@ -73,5 +74,33 @@ test("hidden subtitle never enters raw local SVG or accessible description", asy
     }
     const normal = await get(address.port, "/card.svg");
     assert.match(normal.body, /<desc id="desc">Hidden Artist<\/desc>/);
+  } finally { await app.close(); }
+});
+
+test("local card returns recovered provider playback after rollback and elapsed retry", async () => {
+  let wall = 1_800_000_000_000, elapsed = 0, healthy = false, calls = 0;
+  const provider = withProviderBackoff({ getPresence: async () => {
+    calls++;
+    if (!healthy) throw Object.assign(new Error("down"), { code: "ECONNREFUSED" });
+    return createPresence({ state: "playing", kind: "track", title: "Recovered Track" });
+  } }, { random: () => 0, elapsedNow: () => elapsed });
+  const handler = createCardHandler({ resolveCard: createResilientCardResolver({ resolveCard: createCardPipeline({ provider }), diagnostics: true }) });
+  const app = createHttpServer({ port: 0, handler });
+  const address = await app.listen();
+  try {
+    assert.equal((await get(address.port, "/card.svg")).status, 503);
+    assert.equal(provider.backoff().nextRetryInMs, 5_000);
+    healthy = true;
+    wall -= 60 * 60_000;
+    elapsed += 4_999; wall += 4_999;
+    assert.equal((await get(address.port, "/card.svg")).status, 503);
+    assert.equal(calls, 1);
+    elapsed++; wall++;
+    const recovered = await get(address.port, "/card.svg");
+    assert.equal(recovered.status, 200);
+    assert.equal(recovered.headers["x-nowplaying-source"], "live");
+    assert.match(recovered.body, /Recovered Track/);
+    assert.equal(calls, 2);
+    assert.ok(wall < 1_800_000_000_000);
   } finally { await app.close(); }
 });

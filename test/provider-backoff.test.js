@@ -11,7 +11,7 @@ test("backs off after failures, doubling up to the cap, and resets on success", 
   let time = 0;
   const down = Object.assign(new Error("down"), { code: "ECONNREFUSED" });
   const { calls, provider } = flaky([down, down, down, down, { state: "idle" }, down]);
-  const p = withProviderBackoff(provider, { baseMs: 1_000, maxMs: 4_000, random: () => 0, now: () => time });
+  const p = withProviderBackoff(provider, { baseMs: 1_000, maxMs: 4_000, random: () => 0, elapsedNow: () => time });
   await assert.rejects(p.getPresence(), (error) => error === down);
   assert.deepEqual({ ...p.backoff() }, { failures: 1, nextRetryInMs: 1_000 });
   time = 999; await assert.rejects(p.getPresence(), (error) => error === down);
@@ -25,11 +25,34 @@ test("backs off after failures, doubling up to the cap, and resets on success", 
   await assert.rejects(p.getPresence()); assert.equal(p.backoff().nextRetryInMs, 1_000);
 });
 
+test("retries after elapsed delay despite a backward wall-clock correction", async () => {
+  let wall = 1_800_000_000_000, elapsed = 0, healthy = false, calls = 0;
+  const provider = { getPresence: async () => {
+    calls++;
+    if (!healthy) throw Object.assign(new Error("down"), { code: "ECONNREFUSED" });
+    return { state: "playing", title: "Recovered Track" };
+  } };
+  const p = withProviderBackoff(provider, { random: () => 0, elapsedNow: () => elapsed });
+  await assert.rejects(p.getPresence(), { code: "ECONNREFUSED" });
+  assert.equal(p.backoff().nextRetryInMs, 5_000);
+  wall -= 60 * 60_000;
+  healthy = true;
+  elapsed += 4_999; wall += 4_999;
+  await assert.rejects(p.getPresence(), { code: "ECONNREFUSED" });
+  assert.equal(calls, 1);
+  assert.equal(p.backoff().nextRetryInMs, 1);
+  elapsed++; wall++;
+  assert.deepEqual(await p.getPresence(), { state: "playing", title: "Recovered Track" });
+  assert.equal(calls, 2);
+  assert.deepEqual(p.backoff(), { failures: 0, nextRetryInMs: 0 });
+  assert.ok(wall < 1_800_000_000_000);
+});
+
 test("jitter only shortens the wait", async () => {
   const waits = [];
   for (const share of [0, 0.5, 1, 9]) {
     const { provider } = flaky([new Error("x")]);
-    const p = withProviderBackoff(provider, { baseMs: 1_000, random: () => share, now: () => 0 });
+    const p = withProviderBackoff(provider, { baseMs: 1_000, random: () => share, elapsedNow: () => 0 });
     await assert.rejects(p.getPresence());
     waits.push(p.backoff().nextRetryInMs);
   }
@@ -38,7 +61,7 @@ test("jitter only shortens the wait", async () => {
 
 test("callers at the same moment share one request and pass arguments through", async () => {
   const { calls, provider } = flaky([{ state: "playing" }]);
-  const p = withProviderBackoff(provider, { now: () => 0 });
+  const p = withProviderBackoff(provider, { elapsedNow: () => 0 });
   const [a, b] = await Promise.all([p.getPresence({ userId: "u1" }), p.getPresence({ userId: "u1" })]);
   assert.equal(a, b);
   assert.deepEqual(calls, [[{ userId: "u1" }]]);
@@ -51,7 +74,7 @@ test("rejects bad options", () => {
   assert.throws(() => withProviderBackoff(provider, { baseMs: 10 }), RangeError);
   assert.throws(() => withProviderBackoff(provider, { baseMs: 5_000, maxMs: 1_000 }), RangeError);
   assert.throws(() => withProviderBackoff(provider, { jitter: 1 }), RangeError);
-  assert.throws(() => withProviderBackoff(provider, { now: 1 }), TypeError);
+  assert.throws(() => withProviderBackoff(provider, { elapsedNow: 1 }), TypeError);
 });
 
 test("waits at least as long as the server's Retry-After, capped at an hour (#135)", async () => {
@@ -59,7 +82,7 @@ test("waits at least as long as the server's Retry-After, capped at an hour (#13
   const limited = Object.assign(new Error("Spotify now-playing request failed: 429"), { retryAfterMs: 30_000 });
   const huge = Object.assign(new Error("429"), { retryAfterMs: 10 * 3_600_000 });
   const { calls, provider } = flaky([limited, huge, { state: "idle" }]);
-  const p = withProviderBackoff(provider, { baseMs: 1_000, maxMs: 4_000, random: () => 0, now: () => time });
+  const p = withProviderBackoff(provider, { baseMs: 1_000, maxMs: 4_000, random: () => 0, elapsedNow: () => time });
   await assert.rejects(p.getPresence(), (error) => error === limited);
   assert.equal(p.backoff().nextRetryInMs, 30_000);
   time = 29_999; await assert.rejects(p.getPresence());
