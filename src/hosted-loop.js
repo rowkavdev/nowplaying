@@ -13,7 +13,7 @@ import { createPresence } from "./presence.js";
 
 export function createHostedLoop({
   getPresence, uploader, intervalMs = 15_000, failAfterMs = 60_000, stuckAfterMs = 300_000,
-  now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+  elapsedNow = () => performance.now(), setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
   if (typeof uploader?.push !== "function") throw new TypeError("uploader.push is required");
@@ -26,15 +26,17 @@ export function createHostedLoop({
   let failingSince = null;
   let clearedForFailure = false;
   let stuck = null;
+  let clearedForStuck = false;
 
   function isStuck(presence) {
-    if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; return false; }
+    if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; clearedForStuck = false; return false; }
     const key = JSON.stringify([presence.kind, presence.title, presence.subtitle, presence.series, presence.season, presence.episode]);
     if (!stuck || stuck.key !== key || stuck.positionMs !== presence.positionMs) {
-      stuck = { key, positionMs: presence.positionMs, since: now() };
+      stuck = { key, positionMs: presence.positionMs, since: elapsedNow() };
+      clearedForStuck = false;
       return false;
     }
-    return now() - stuck.since >= stuckAfterMs;
+    return elapsedNow() - stuck.since >= stuckAfterMs;
   }
 
   async function push(presence) {
@@ -46,8 +48,8 @@ export function createHostedLoop({
     try {
       presence = await getPresence();
     } catch {
-      failingSince ??= now();
-      if (clearedForFailure || now() - failingSince < failAfterMs) return { sent: false, reason: "provider_error" };
+      failingSince ??= elapsedNow();
+      if (clearedForFailure || elapsedNow() - failingSince < failAfterMs) return { sent: false, reason: "provider_error" };
       const result = await push(createPresence({ state: "idle" }));
       // Only stop retrying once the idle state actually reached the host (or
       // the uploader says it already has it).
@@ -57,7 +59,12 @@ export function createHostedLoop({
     failingSince = null;
     clearedForFailure = false;
     if (!presence) return { sent: false, reason: "no_presence" };
-    if (isStuck(presence)) return { ...(await push(createPresence({ state: "idle" }))), cleared: "stuck" };
+    if (isStuck(presence)) {
+      if (clearedForStuck) return { sent: false, reason: "stuck" };
+      const result = await push(createPresence({ state: "idle" }));
+      if (result.sent || result.reason === "unchanged") clearedForStuck = true;
+      return { ...result, cleared: "stuck" };
+    }
     return push(presence);
   }
 
