@@ -4,7 +4,7 @@ Everything here is optional. WebUI Settings covers normal use; this page is for 
 
 ## The settings file
 
-Settings live at `%LOCALAPPDATA%\nowplaying\config.json`. It contains no passwords or tokens - those are in Windows Credential Manager - so it's safe to copy when asking for help. nowplaying backs the file up before upgrading its format, and unknown settings are rejected rather than silently ignored.
+Settings live at `%LOCALAPPDATA%\nowplaying\config.json`. It contains no passwords or tokens - those are in Windows Credential Manager - but check it for personal details such as server addresses before sharing it. nowplaying backs the file up before upgrading its format, and unknown settings are rejected rather than silently ignored.
 
 ## What you can change
 

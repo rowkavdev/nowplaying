@@ -15,7 +15,7 @@ Privacy is applied before anything is formatted or sent, so hidden data can't le
 
 ## Where your sign-ins live
 
-Provider sign-ins and the hosted-card device key live in **Windows Credential Manager**. The settings file (`%LOCALAPPDATA%\nowplaying\config.json`) holds no passwords or tokens, so it's safe to copy when asking for help.
+Provider sign-ins and the hosted-card device key live in **Windows Credential Manager**. The settings file (`%LOCALAPPDATA%\nowplaying\config.json`) holds no passwords or tokens, but check it for personal details such as server addresses before sharing it.
 
 ## The card never exposes your server
 

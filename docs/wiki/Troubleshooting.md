@@ -6,7 +6,7 @@ Find the symptom you see. Keep server addresses, usernames and tokens out of any
 
 1. Open `http://127.0.0.1:47832/healthz`. It should answer `ok`. If not, nowplaying isn't running - start it from the Start Menu.
 2. Check your media server is reachable in a browser on the same PC.
-3. Look at recent events on the **Logs** page, or the log file at `%LOCALAPPDATA%\nowplaying\logs\nowplaying.log` (tray icon, **Open log folder**). Logs never contain titles, usernames or tokens, so they're safe to attach to a bug report.
+3. Look at recent events on the **Logs** page, or the log file at `%LOCALAPPDATA%\nowplaying\logs\nowplaying.log` (tray icon, **Open log folder**). Logs are designed to redact titles, usernames and tokens, but inspect them before sharing a bug report.
 
 ## Discord shows nothing
 
