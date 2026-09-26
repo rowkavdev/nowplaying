@@ -1,0 +1,49 @@
+name: Dev artifact card exploration
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/dev-card-exploration.yml'
+      - 'scripts/windows-dev-card-exploration.js'
+permissions:
+  contents: read
+jobs:
+  card-exploration:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Download and verify moving dev ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download dev --repo rowkavdev/nowplaying --pattern nowplaying-dev-windows-x64.zip --pattern SHA256SUMS --dir "$env:RUNNER_TEMP"
+          if ($LASTEXITCODE -ne 0) { throw 'Dev download failed' }
+          $zip = Join-Path $env:RUNNER_TEMP 'nowplaying-dev-windows-x64.zip'
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sums = Get-Content (Join-Path $env:RUNNER_TEMP 'SHA256SUMS') -Raw
+          if (-not $sums.Contains("$hash  nowplaying-dev-windows-x64.zip")) { throw 'SHA256SUMS mismatch' }
+          Expand-Archive $zip (Join-Path $env:RUNNER_TEMP 'dev-bundle') -Force
+          $tag = (gh api repos/rowkavdev/nowplaying/git/ref/tags/dev --jq '.object.sha').Trim()
+          $info = Get-Content (Join-Path $env:RUNNER_TEMP 'dev-bundle/app/build-info.json') -Raw | ConvertFrom-Json
+          if ($info.commitSha -ne $tag) { throw "Bundle source $($info.commitSha) differs from dev tag $tag" }
+      - name: Explore real dev bundle card and privacy with mock playback
+        shell: pwsh
+        run: |
+          npm install --no-save --package-lock=false playwright-core
+          node scripts/windows-dev-card-exploration.js (Join-Path $env:RUNNER_TEMP 'dev-bundle') (Join-Path $env:RUNNER_TEMP 'card-evidence')
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nowplaying-dev-card-evidence
+          path: ${{ runner.temp }}/card-evidence/*.png
+          if-no-files-found: warn
+          retention-days: 14
