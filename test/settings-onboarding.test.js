@@ -85,3 +85,45 @@ test("adding a second server keeps current settings and never writes a password"
   assert.equal(last.status, 200);
   assert.equal((await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: "two" }) })).status, 409);
 });
+
+test("cancelled discovery stays distinct from a completed empty scan and does not replace cached results", async () => {
+  const file = await fixture();
+  let finish, started;
+  const scanning = new Promise((resolve) => { started = resolve; });
+  let calls = 0;
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store,
+    discover: ({ signal }) => {
+      calls++;
+      if (calls === 1) return Promise.resolve([{ provider: "plex", baseUrl: "http://127.0.0.1:32400" }]);
+      if (calls === 3) return Promise.resolve([{ provider: "emby", baseUrl: "http://10.0.0.2:8096" }]);
+      started(signal);
+      return new Promise((resolve) => { finish = resolve; });
+    },
+  });
+  const first = JSON.parse((await mgmt.handler(post("/api/settings/servers/discover", { subnet: "" }))).body);
+  assert.equal(first.servers.length, 1);
+  const pending = mgmt.handler(post("/api/settings/servers/discover", { subnet: "192.168.1.0/24" }));
+  const signal = await scanning;
+  assert.equal((await mgmt.handler(post("/api/settings/servers/cancel", {}))).status, 200);
+  assert.equal(signal.aborted, true);
+  // A transport that resolves despite abort must not turn partial results into a completed scan.
+  finish([{ provider: "emby", baseUrl: "http://10.0.0.2:8096" }]);
+  assert.deepEqual(JSON.parse((await pending).body), { cancelled: true });
+  assert.deepEqual(JSON.parse((await mgmt.handler({ url: "/api/settings/servers" })).body).discovered, first.servers);
+  assert.deepEqual(JSON.parse((await mgmt.handler(post("/api/settings/servers/discover", { subnet: "" }))).body).servers, [{ provider: "emby", baseUrl: "http://10.0.0.2:8096" }]);
+});
+
+test("cancelled discovery reports cancellation even when transport rejects on abort", async () => {
+  const file = await fixture();
+  let started;
+  const scanning = new Promise((resolve) => { started = resolve; });
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store,
+    discover: ({ signal }) => new Promise((_, reject) => {
+      started(); signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    }),
+  });
+  const pending = mgmt.handler(post("/api/settings/servers/discover", { subnet: "" }));
+  await scanning;
+  await mgmt.handler(post("/api/settings/servers/cancel", {}));
+  assert.deepEqual(JSON.parse((await pending).body), { cancelled: true });
+});

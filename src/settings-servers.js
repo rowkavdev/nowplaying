@@ -78,8 +78,13 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       try { const input = JSON.parse(request.body ?? "{}"); if (!input || Object.keys(input).join() !== "subnet" || typeof input.subnet !== "string") throw Error(); subnet = subnetCandidates(input.subnet); }
       catch { return json(400, { error: "invalid_subnet" }); }
       const controller = new AbortController(); scan = controller;
-      try { cached = await discover({ signal: controller.signal, hosts: subnet }); return json(200, { servers: cached ?? [] }); }
-      catch { return json(503, { error: "discovery_failed" }); }
+      try {
+        const found = await discover({ signal: controller.signal, hosts: subnet });
+        if (controller.signal.aborted) return json(200, { cancelled: true });
+        cached = found;
+        return json(200, { servers: cached ?? [] });
+      }
+      catch { return controller.signal.aborted ? json(200, { cancelled: true }) : json(503, { error: "discovery_failed" }); }
       finally { if (scan === controller) scan = null; }
     }
     if (url.pathname === "/api/settings/servers/cancel") {
