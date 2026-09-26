@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="440" height="74" role="img" aria-labelledby="title desc">
-  <title id="title">NOW PLAYING: Holocene</title><desc id="desc">Bon Iver</desc>
+  <title id="title">NOW PLAYING: Holocene</title><desc id="desc">NOW PLAYING</desc>
   <defs><clipPath id="txt"><rect x="22" y="0" width="396" height="74"/></clipPath></defs>
   <rect x="0.5" y="0.5" width="439" height="73" rx="10" fill="#0d1117" stroke="#30363d"/>
   

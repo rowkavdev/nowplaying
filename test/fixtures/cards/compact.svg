@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="74" role="img" aria-labelledby="title desc">
-  <title id="title">NOW PLAYING: Blue Monday</title><desc id="desc">New Order</desc>
+  <title id="title">NOW PLAYING: Blue Monday</title><desc id="desc">NOW PLAYING</desc>
   <defs><clipPath id="txt"><rect x="22" y="0" width="276" height="74"/></clipPath></defs>
   <rect x="0.5" y="0.5" width="319" height="73" rx="10" fill="#0d1117" stroke="#30363d"/>
   

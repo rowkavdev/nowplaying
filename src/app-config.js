@@ -238,7 +238,7 @@ export function hostedUploadSettings(config) {
   const theme = config?.card?.theme ?? "midnight-blue";
   return Object.freeze({
     privacy: privacyPolicyFromConfig(config),
-    show: Object.freeze({ progress: config?.card?.showProgress ?? theme !== "compact" }),
+    show: Object.freeze({ progress: config?.card?.showProgress ?? theme !== "compact", subtitle: theme !== "compact" }),
   });
 }
 
