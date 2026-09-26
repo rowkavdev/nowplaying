@@ -16,7 +16,7 @@ Reasons to self-host: your own domain, your own data boundary, or development.
 3. In nowplaying's settings file, point `hosted.url` at your deployment (must be HTTPS).
 4. Check `/healthz` answers `ok`, then watch the first card update arrive from your PC.
 
-The card endpoint accepts only safe display options (theme, width, shown fields). Provider credentials stay on your PC and are never sent to any card service. Full reference: [hosted card deployment](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-card.md) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
+The card service accepts only safe display options (theme, width, shown fields). Provider credentials stay on your PC and are never sent to any card service. Full reference: [hosted card deployment](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-card.md) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
 
 ## Running the app itself on a server
 
