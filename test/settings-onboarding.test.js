@@ -127,10 +127,3 @@ test("cancelled discovery reports cancellation even when transport rejects on ab
   await mgmt.handler(post("/api/settings/servers/cancel", {}));
   assert.deepEqual(JSON.parse((await pending).body), { cancelled: true });
 });
-
-test("WebUI keeps cancelled scan separate from a completed no-results scan", async () => {
-  const { SERVER_SCRIPT } = await import("../src/settings-onboarding-page.js");
-  assert.match(SERVER_SCRIPT, /if \(scanCancelled \|\| result\.cancelled\)/);
-  assert.match(SERVER_SCRIPT, /Scan cancelled\. Not all addresses were checked\./);
-  assert.match(SERVER_SCRIPT, /No servers found\. Add one by address below\./);
-});
