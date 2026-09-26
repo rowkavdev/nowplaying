@@ -17,7 +17,7 @@ Show what you are playing from Plex, Jellyfin, Navidrome or Emby in a GitHub REA
    Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
    ```
 
-2. Run the installer, or extract the ZIP and run `nowplaying.exe` without separating it from the other extracted files. On first launch, WebUI Settings opens in your browser. Connect a discovered media server, or enter its address. You can add more than one server.
+2. Run the installer, or extract the ZIP and run `nowplaying.exe` without separating it from the other extracted files. On first launch, WebUI Settings opens in your browser instead of a native setup wizard. Connect a discovered media server, or enter its address. You can add more than one server.
 3. Turn on Discord in Settings if you want Rich Presence. Keep the Discord desktop app open. Play something and check the app's local status page (`http://127.0.0.1:47832/`). The local card is at [`/card.svg`](http://127.0.0.1:47832/card.svg); [`/healthz`](http://127.0.0.1:47832/healthz) checks only whether the app responds.
 4. To put a card in a README, enable the hosted card in Settings and copy the generated Markdown snippet. You can optionally sign in with GitHub to use one card across your PCs. Your media server does not need a public port.
 

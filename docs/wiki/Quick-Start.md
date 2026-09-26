@@ -1,6 +1,6 @@
 # Quick start
 
-Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This guide uses the rolling development build, which is still being tested.
+Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This guide uses the rolling development build, which is still being tested. The first-run page is in your browser, not a native setup wizard.
 
 ## 1. Download and check the development build
 
@@ -16,12 +16,12 @@ Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This gu
 
 ## 2. Set up nowplaying
 
-The first time nowplaying starts with no saved settings, it opens WebUI Settings in your web browser. There is no console window and nothing to type in a terminal.
+The first time nowplaying starts with no saved settings, it opens WebUI Settings in your web browser. There is no native setup wizard, console window or terminal step. Choose **Find servers** for a quick scan of this PC and a local Jellyfin/Emby announcement. If no server appears, choose **Add a server by address**. A full private /24 subnet scan runs only if you enter that subnet yourself; check whether the address is on a VPN before scanning.
 
 1. **Connect your media server.** Choose a discovered server or enter its address, then follow the sign-in guide for [Plex](Connect-Plex), [Jellyfin](Connect-Jellyfin), [Navidrome](Connect-Navidrome) or [Emby](Connect-Emby). The server appears in Settings after sign-in; add or remove servers there later. **Spotify and hosted card** sign-ins are optional and available on this same first-run page and in Settings later. [Spotify](Connect-Spotify) does not appear in Discord. The [YouTube extension](Connect-YouTube) is another optional source.
 
-2. **Turn on Discord.** Keep the Discord desktop app open, enable Discord in Settings after connecting your server, and use the card preview to check how it looks.
-3. Once a server is connected, the app starts. Your settings are saved on your PC. Sign-ins live in Windows Credential Manager, not in the settings file.
+2. **Wait for the app to start.** Once a server is connected, the page says it is starting NowPlaying and then opens the full Settings page. Your settings are saved on your PC. Sign-ins live in Windows Credential Manager, not in the settings file.
+3. **Turn on Discord (optional).** Keep the Discord desktop app open. On the full **Settings > Discord** page, tick **Show what I'm playing on Discord** and press **Save**. The first-run page has no Discord switch or card preview.
 
 ## 3. Check it's working
 
