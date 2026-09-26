@@ -19,6 +19,7 @@ test("native setup window walks every step, including sign-in, against the real 
   };
   const credentialStore = {
     save: async (key, secret) => { saved.push([key, secret]); },
+    remove: async (key) => { const index = saved.findIndex(([stored]) => stored.provider === key.provider && stored.identityId === key.identityId); if (index < 0) return false; saved.splice(index, 1); return true; },
     // A real Navidrome sign-in is stored as token + salt JSON.
     read: async (key) => (saved.some(([k]) => k.identityId === key.identityId) ? JSON.stringify({ token: "t", salt: "s" }) : undefined),
   };
