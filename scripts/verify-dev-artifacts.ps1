@@ -53,8 +53,10 @@ function Test-Bundle($dir, $label) {
       if ($page.StatusCode -ne 200 -or $page.Content -notmatch 'Set up NowPlaying') { throw "$label first-run WebUI missing" }
       $servers = Invoke-RestMethod "$base/api/settings/servers"
       if (-not $servers.firstRun) { throw "$label did not enter first-run" }
-      $discovery = Invoke-WebRequest "$base/api/setup/discover" -UseBasicParsing
-      if ($discovery.StatusCode -ne 200) { throw "$label discovery API failed" }
+      $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+      $settingsPage = Invoke-WebRequest "$base/settings" -UseBasicParsing -WebSession $session
+      $discovery = Invoke-RestMethod "$base/api/settings/servers/discover" -Method Post -ContentType 'application/json' -Body '{"subnet":""}' -WebSession $session
+      if ($null -eq $discovery.servers) { throw "$label discovery API failed" }
       Write-Host "${label}: version, launch, first-run WebUI and discovery API passed"
     } finally {
       taskkill /PID $app.Id /T /F | Out-Null
