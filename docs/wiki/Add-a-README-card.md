@@ -7,8 +7,8 @@ It's off until you turn it on.
 ## Steps
 
 1. Open the nowplaying **Settings** page (tray icon, **Settings**) and find the **hosted card** section.
-2. Turn it on. You get a per-PC card link with a random ID that can't be traced to you, plus a ready-made Markdown snippet. Want one card shared by all your PCs? Sign in with GitHub in **Settings > Spotify and hosted card** - see below.
-3. Paste the snippet into your README, for example:
+2. Tick **Upload my card to the hosted service** and press **Save**. Settings shows an upload state, a per-PC card link with a random ID and a ready-made README snippet. Want one card shared by all your PCs? Sign in with GitHub in **Settings > Spotify and hosted card** - see below.
+3. Press **Copy** beside **README** and paste that exact snippet into your README. A GitHub-linked card might look like:
 
    ```markdown
    ![Now playing](https://nowplaying-hosted.vercel.app/u/your-github-username.svg)
@@ -46,4 +46,4 @@ Stop playing or close the app and the card goes back to "Not playing" within abo
 
 ## Turning it off
 
-**Disconnect** in the hosted card section deletes this PC's state and device key on the service and on your PC. With GitHub sign-in your other PCs keep updating the card; without it, the card link stops showing anything.
+**Disconnect this PC** in the hosted card section deletes this PC's state and device key on the service and on your PC. With GitHub sign-in your other PCs keep updating the card; without it, the card link stops showing anything.
