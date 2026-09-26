@@ -23,3 +23,36 @@ test("serves a privacy-filtered provider fixture end to end", async () => {
     assert.doesNotMatch(result.body, /Arrival|Denis Villeneuve/);
   } finally { await app.close(); }
 });
+
+test("local last-good card expires after five elapsed minutes despite wall-clock rollback", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  let fail = false;
+  const provider = { getPresence: async () => {
+    if (fail) throw Object.assign(new Error("offline"), { code: "ECONNREFUSED" });
+    return createPresence({ state: "playing", kind: "track", title: "Old Secret Track", subtitle: "Old Artist" });
+  } };
+  const pipeline = createCardPipeline({ provider });
+  const handler = createCardHandler({ resolveCard: createResilientCardResolver({ resolveCard: pipeline, diagnostics: true, staleMs: 300_000, now: () => elapsed }) });
+  const app = createHttpServer({ port: 0, handler });
+  const address = await app.listen();
+  try {
+    const live = await get(address.port, "/card.svg");
+    assert.equal(live.status, 200);
+    assert.equal(live.headers["x-nowplaying-source"], "live");
+    assert.match(live.body, /Old Secret Track/);
+    fail = true;
+    wall -= 60 * 60_000;
+    wall += 60_000; elapsed += 60_000;
+    const recent = await get(address.port, "/card.svg");
+    assert.equal(recent.status, 200);
+    assert.equal(recent.headers["x-nowplaying-source"], "last-good");
+    assert.equal(recent.headers["x-nowplaying-age"], "60");
+    wall += 9 * 60_000; elapsed += 9 * 60_000;
+    const stale = await get(address.port, "/card.svg");
+    assert.equal(stale.status, 503);
+    assert.equal(stale.headers["cache-control"], "no-store");
+    assert.doesNotMatch(stale.body, /Old Secret Track|Old Artist/);
+    assert.equal(wall < 1_800_000_000_000, true);
+  } finally { await app.close(); }
+});
