@@ -92,6 +92,35 @@ test("adding a second server keeps current settings and never writes a password"
   assert.equal((await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: "two" }) })).status, 409);
 });
 
+test("server removal deletes only its saved credential after config persists", async () => {
+  const file = await fixture();
+  const server = (provider, id) => ({ provider, serverUrl: "http://127.0.0.1:8096", identity: { id, displayName: id } });
+  await writeFile(file, serializeSetupConfig({ servers: [server("jellyfin", "first"), server("navidrome", "two")], credentialStored: true }));
+  const seen = [];
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: {
+    ...store, remove: async (ref) => { seen.push({ ref, config: JSON.parse(await readFile(file, "utf8")) }); return true; },
+  } });
+  const del = (provider, id) => mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider, id }) });
+  assert.deepEqual(JSON.parse((await del("plex", "unknown")).body), { error: "not_found" });
+  assert.deepEqual(JSON.parse((await del("jellyfin", "first")).body), { removed: true, tokenRemoved: true });
+  assert.deepEqual(seen, [{ ref: { provider: "jellyfin", identityId: "first" }, config: JSON.parse(await readFile(file, "utf8")) }]);
+  assert.deepEqual(seen[0].config.servers.map((s) => s.identity.id), ["two"]);
+  assert.equal((await del("navidrome", "two")).status, 409);
+  assert.equal(seen.length, 1);
+});
+
+test("server removal reports a failed keychain delete while preserving config removal", async () => {
+  const file = await fixture();
+  await writeFile(file, serializeSetupConfig({ servers: [
+    { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "first", displayName: "One" } },
+    { provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "two", displayName: "Two" } },
+  ], credentialStored: true }));
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: { ...store, remove: async () => { throw new Error("keychain unavailable"); } } });
+  const result = await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: "two" }) });
+  assert.deepEqual(JSON.parse(result.body), { removed: true, tokenRemoved: false });
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).servers.map((s) => s.identity.id), ["first"]);
+});
+
 test("cancelled discovery stays distinct from a completed empty scan and does not replace cached results", async () => {
   const file = await fixture();
   let finish, started;

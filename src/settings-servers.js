@@ -129,13 +129,21 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     return serial(async () => {
       const existing = await read();
       if (!existing) return json(404, { error: "not_found" });
-      const servers = existing.servers.filter((s) => !(s.provider === input.provider && s.identity.id === input.id));
-      if (servers.length === existing.servers.length) return json(404, { error: "not_found" });
+      const removed = existing.servers.find((s) => s.provider === input.provider && s.identity.id === input.id);
+      const servers = existing.servers.filter((s) => s !== removed);
+      if (!removed) return json(404, { error: "not_found" });
       if (!servers.length) return json(409, { error: "last_server" });
       try { await save(servers, existing); }
       catch { return json(500, { error: "save_failed" }); }
+      // Config is committed first: a keychain failure must not leave the app
+      // using a credential for a server the user has removed.
+      let tokenRemoved = false;
+      if (typeof credentialStore.remove === "function") {
+        try { tokenRemoved = await credentialStore.remove(removed.credentialRef); }
+        catch { /* The UI will tell the user to remove it from the OS store. */ }
+      }
       scheduleRestart();
-      return json(200, { removed: true });
+      return json(200, { removed: true, tokenRemoved });
     });
   }
   return { handler };
