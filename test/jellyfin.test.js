@@ -79,3 +79,15 @@ test("drops odd Jellyfin numbers instead of failing", async () => {
   assert.equal(presence.episode, null);
   assert.equal(presence.year, null);
 });
+
+test("HTTP authentication failures carry a safe status for sign-in guidance", async () => {
+  const { classifyFailure } = await import("../src/resilient-card.js");
+  for (const status of [401, 403, 503]) {
+    const provider = createJellyfinProvider({ baseUrl: "http://jellyfin.test", apiKey: "secret", fetchImpl: async () => ({ ok: false, status, statusText: status === 503 ? "Unavailable" : "Rejected" }) });
+    await assert.rejects(provider.getPresence(), (error) => {
+      assert.equal(error.status, status);
+      assert.equal(classifyFailure(error), status === 503 ? "error" : "unauthorized");
+      return true;
+    });
+  }
+});
