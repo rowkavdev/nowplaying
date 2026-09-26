@@ -67,24 +67,42 @@ try {
   assert.match(before, /CI artist/);
   await page.screenshot({ path: join(evidence, 'dev-card-before.png'), fullPage: true });
   await page.locator('#card-theme').selectOption('paper');
+  const preview = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/settings/card/preview.svg' && url.searchParams.get('theme') === 'paper'
+      && url.searchParams.get('width') === '520' && response.status() === 200;
+  });
   await page.locator('#card-width').fill('520');
-  await eventually(async () => (await page.locator('#card-preview').getAttribute('src'))?.startsWith('blob:'), 'live preview');
+  await preview;
+  await page.waitForFunction(() => {
+    const img = document.querySelector('#card-preview');
+    return img?.complete && img.naturalWidth === 520 && !img.hidden;
+  });
+  const cardSave = page.waitForResponse(response => response.url().endsWith('/api/settings') && response.request().method() === 'PUT');
   await page.locator('#card-save').click();
-  await page.getByText('Saved. Your card uses these settings now.').waitFor();
+  const cardSaved = await cardSave;
+  assert.equal(cardSaved.status(), 200);
+  assert.equal((await cardSaved.json()).card.width, 520);
   const styled = await (await fetch(`${base}/card.svg`)).text();
   assert.match(styled, /Dev card probe/);
   assert.match(styled, /width="520"/);
   assert.match(styled, /fill="#ffffff"/);
   await page.screenshot({ path: join(evidence, 'dev-card-styled.png'), fullPage: true });
   await page.locator('#privacy-hideTitles').check();
+  const privacySave = page.waitForResponse(response => response.url().endsWith('/api/settings') && response.request().method() === 'PUT');
   await page.locator('#privacy-save').click();
-  await page.getByText('Saved. Applies from the next update.').waitFor();
+  const privacySaved = await privacySave;
+  assert.equal(privacySaved.status(), 200);
+  assert.equal((await privacySaved.json()).privacy.hideTitles, true);
   const privateCard = await (await fetch(`${base}/card.svg`)).text();
   assert.match(privateCard, /Private media/);
   assert.doesNotMatch(privateCard, /Dev card probe|CI artist/);
   await page.locator('#privacy-hideMusic').check();
+  const suppressionSave = page.waitForResponse(response => response.url().endsWith('/api/settings') && response.request().method() === 'PUT');
   await page.locator('#privacy-save').click();
-  await page.getByText('Saved. Applies from the next update.').waitFor();
+  const suppressionSaved = await suppressionSave;
+  assert.equal(suppressionSaved.status(), 200);
+  assert.equal((await suppressionSaved.json()).privacy.hideMusic, true);
   const suppressed = await (await fetch(`${base}/card.svg`)).text();
   assert.match(suppressed, /Nothing playing/);
   assert.doesNotMatch(suppressed, /Dev card probe|CI artist/);
