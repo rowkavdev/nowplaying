@@ -26,6 +26,10 @@ export function createSetupSpotifyHandler({
   // overwrite a newer sign-in's credential or config.
   const latestByClientId = new Map();
   const superseded = (flow) => latestByClientId.get(flow.clientId) !== flow.overlap;
+  // Write sections for the same account run one at a time (#703): a stale
+  // flow's save/restore cleanup must land strictly before or after a newer
+  // flow's writes, never interleaved with them.
+  const writeChains = new Map();
 
   function prune() {
     const time = now();
@@ -48,6 +52,15 @@ export function createSetupSpotifyHandler({
       flow.result = { status: "failed", error: "credential_store_failed" };
       return;
     }
+    const prior = writeChains.get(safeIdentity.id) ?? Promise.resolve();
+    const turn = prior.then(() => writeCredential(flow, tokens.refreshToken, safeIdentity, active));
+    writeChains.set(safeIdentity.id, turn.then(() => {}, () => {}));
+    await turn;
+  }
+
+  async function writeCredential(flow, refreshToken, safeIdentity, active) {
+    // The chain wait can itself outlast the flow or see it superseded.
+    if (!active() || flow.expiresAt <= now()) return;
     const ref = { provider: "spotify", identityId: safeIdentity.id };
     let previous;
     try { previous = await credentialStore.read(ref); }
@@ -58,7 +71,7 @@ export function createSetupSpotifyHandler({
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
     }
-    try { await credentialStore.save(ref, tokens.refreshToken); }
+    try { await credentialStore.save(ref, refreshToken); }
     catch {
       // An adapter might persist the value before reporting failure.
       try { await restore(); } catch { /* Cannot promise recovery. */ }
@@ -71,8 +84,10 @@ export function createSetupSpotifyHandler({
       catch { flow.result = { status: "failed", error: "credential_store_failed" }; }
       return;
     }
-    // Once the draft write starts it may already be in flight when TTL elapses.
-    // Keep this flow pollable until that write settles rather than reporting 410.
+    // Committed boundary: once the draft write starts, this flow finishes and
+    // reports its result even if a newer start supersedes it meanwhile; the
+    // newer flow's own write section then overwrites the credential. Keep the
+    // flow pollable until the write settles rather than reporting 410.
     flow.committing = true;
     try { await onSignedIn({ clientId: flow.clientId, identity: safeIdentity }); }
     catch {

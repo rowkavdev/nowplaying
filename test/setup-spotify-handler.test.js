@@ -250,3 +250,35 @@ test("a superseded Spotify sign-in does not pin a flow slot (#703)", async () =>
   assert.equal(third.status, 200);
   assert.equal(parse(third).flowId, "flow-3");
 });
+
+test("a superseded flow's in-flight save cannot remove the newer credential (#703)", async () => {
+  let seq = 0;
+  const writes = [];
+  const values = new Map();
+  let releaseSave;
+  const key = (ref) => `${ref.provider}:${ref.identityId}`;
+  const fake = fakeSignIn();
+  const handle = createSetupSpotifyHandler({
+    credentialStore: {
+      read: async (ref) => values.get(key(ref)) ?? null,
+      remove: async (ref) => { writes.push("remove"); values.delete(key(ref)); },
+      save: async (ref, secret) => { writes.push(secret); values.set(key(ref), secret); if (secret === "older") await new Promise((resolve) => { releaseSave = resolve; }); },
+    },
+    onSignedIn: async () => {}, signIn: fake.signIn, newFlowId: () => `flow-${++seq}`,
+  });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[0].resolve({ refreshToken: "older", identity: { id: "rowan", displayName: "Rowan" } });
+  await settled(); // the older flow is parked inside its credential save
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[1].resolve({ refreshToken: "newer", identity: { id: "rowan", displayName: "Rowan" } });
+  await settled();
+  releaseSave();
+  await settled();
+  await settled();
+  const stale = await handle(post({ action: "poll", flowId: "flow-1" }));
+  assert.deepEqual([stale.status, parse(stale)], [410, { error: "expired" }]);
+  const newer = await handle(post({ action: "poll", flowId: "flow-2" }));
+  assert.equal(parse(newer).status, "signed_in");
+  assert.equal(values.get("spotify:rowan"), "newer");
+  assert.equal(writes[writes.length - 1], "newer");
+});
