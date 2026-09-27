@@ -27,6 +27,9 @@ export function createHostedLoop({
   let clearedForFailure = false;
   let stuck = null;
   let clearedForStuck = false;
+  let privacyClearPending = false;
+  let privacyEpoch = 0;
+  let privacyClearing = null;
 
   function isStuck(presence) {
     if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; clearedForStuck = false; return false; }
@@ -44,10 +47,12 @@ export function createHostedLoop({
   }
 
   async function tick() {
+    if (privacyClearPending) return clearForPrivacy();
     let presence;
     try {
       presence = await getPresence();
     } catch {
+      if (privacyClearPending) return clearForPrivacy();
       failingSince ??= elapsedNow();
       if (clearedForFailure || elapsedNow() - failingSince < failAfterMs) return { sent: false, reason: "provider_error" };
       const result = await push(createPresence({ state: "idle" }));
@@ -56,6 +61,7 @@ export function createHostedLoop({
       if (result.sent || result.reason === "unchanged") clearedForFailure = true;
       return { ...result, cleared: "provider_error" };
     }
+    if (privacyClearPending) return clearForPrivacy();
     failingSince = null;
     clearedForFailure = false;
     if (!presence) return { sent: false, reason: "no_presence" };
@@ -65,7 +71,20 @@ export function createHostedLoop({
       if (result.sent || result.reason === "unchanged") clearedForStuck = true;
       return { ...result, cleared: "stuck" };
     }
+    if (privacyClearPending) return clearForPrivacy();
     return push(presence);
+  }
+
+  function clearForPrivacy() {
+    if (privacyClearing) return privacyClearing;
+    const epoch = privacyEpoch;
+    const clearing = (async () => {
+      const result = await push(createPresence({ state: "idle" }));
+      if (epoch === privacyEpoch && (result.sent || result.reason === "unchanged")) privacyClearPending = false;
+      return { ...result, cleared: "privacy_change" };
+    })();
+    privacyClearing = clearing;
+    return clearing.finally(() => { if (privacyClearing === clearing) privacyClearing = null; });
   }
 
   function schedule() {
@@ -92,6 +111,13 @@ export function createHostedLoop({
       if (running) await running.catch(() => {});
     },
     tick,
+    async privacyChanged() {
+      privacyClearPending = true;
+      privacyEpoch += 1;
+      // Do not wait for provider-error grace or an in-flight provider poll.
+      if (privacyClearing) await privacyClearing;
+      return clearForPrivacy();
+    },
     status: () => uploader.status?.() ?? null,
   });
 }

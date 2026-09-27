@@ -251,7 +251,7 @@ export function startHostedFromConfig(config, provider, { credentials, fetchImpl
   const uploader = createUploader({ baseUrl: config.hosted.url ?? DEFAULT_HOSTED_URL, credentials, fetchImpl, settings });
   const loop = createHostedLoop({ getPresence: () => provider.getPresence(), uploader, ...(intervalMs ? { intervalMs } : {}) });
   loop.start();
-  return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status(), disconnect: () => uploader.disconnect() });
+  return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status(), disconnect: () => uploader.disconnect(), privacyChanged: () => loop.privacyChanged() });
 }
 
 // 3000 clashes with most dev servers, so the local app uses a rarely used port.
@@ -401,6 +401,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       const next = await settingsStore.updatePrivacy(changes);
       current = next;
       resolveCard.invalidate();
+      if (hosted.status === "on") await hosted.privacyChanged();
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
     },

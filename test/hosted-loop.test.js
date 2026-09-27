@@ -111,6 +111,23 @@ test("a provider failing past the timeout pushes idle once, not every poll", asy
   assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle"]);
 });
 
+test("privacy change clears immediately during provider-error grace and retries a failed clear", async () => {
+  const env = staleSetup({ presence: playingAt(1000) });
+  await env.loop.tick();
+  env.set(new Error("down"));
+  assert.equal((await env.loop.tick()).reason, "provider_error");
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing"]);
+  env.setResult({ sent: false, reason: "network_error" });
+  assert.equal((await env.loop.privacyChanged()).reason, "network_error");
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle"]);
+  env.setResult({ sent: true });
+  assert.equal((await env.loop.tick()).cleared, "privacy_change");
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "idle", "idle"]);
+  env.advance(15_000);
+  assert.equal((await env.loop.tick()).reason, "provider_error");
+  assert.equal(env.pushed.length, 3);
+});
+
 test("the failure idle is retried until it reaches the host", async () => {
   const env = staleSetup({ presence: new Error("down") });
   await env.loop.tick();
