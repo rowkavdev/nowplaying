@@ -141,3 +141,20 @@ test("the page manages servers here instead of opening a wizard", async () => {
   assert.match(script, /\/api\/setup\/signin/);
   assert.equal((await h({ method: "POST", url: "/api/settings/servers/setup", body: "{}" })).status, 410);
 });
+
+
+test("DRPP split shell keeps real NowPlaying controls and safe log endpoint", async () => {
+  const h = handler();
+  const page = (await h({ url: "/settings" })).body;
+  assert.match(page, /class="drpp-columns"/);
+  assert.match(page, /class="drpp-config"/);
+  assert.match(page, /class="drpp-logs"/);
+  assert.match(page, /id="drpp-log-lines"/);
+  assert.match(page, /id="discord-form"/);
+  assert.match(page, /Info \(coming soon\)/);
+  assert.equal((await h({ url: "/drpp-shell.css" })).status, 200);
+  const script = (await h({ url: "/settings.js" })).body;
+  assert.match(script, /fetch\("\/api\/logs"/);
+  assert.match(script, /fetch\("\/api\/status"/);
+  assert.doesNotMatch(script, /innerHTML/);
+});
