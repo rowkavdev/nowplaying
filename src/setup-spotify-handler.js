@@ -32,15 +32,31 @@ export function createSetupSpotifyHandler({
       return;
     }
     const safeIdentity = { id: identity.id, displayName: typeof identity.displayName === "string" && identity.displayName ? identity.displayName : identity.id };
-    try {
-      await credentialStore.save({ provider: "spotify", identityId: safeIdentity.id }, tokens.refreshToken);
-    } catch {
+    // The draft/config write can fail after a token was saved. Keep the old
+    // token so a failed repeat sign-in never replaces a working credential.
+    if (typeof credentialStore.read !== "function" || typeof credentialStore.remove !== "function") {
       flow.result = { status: "failed", error: "credential_store_failed" };
       return;
     }
-    try {
-      await onSignedIn({ clientId: flow.clientId, identity: safeIdentity });
-    } catch {
+    const ref = { provider: "spotify", identityId: safeIdentity.id };
+    let previous;
+    try { previous = await credentialStore.read(ref); }
+    catch { flow.result = { status: "failed", error: "credential_store_failed" }; return; }
+    async function restore() {
+      if (previous === null || previous === undefined) await credentialStore.remove(ref);
+      else await credentialStore.save(ref, previous);
+    }
+    try { await credentialStore.save(ref, tokens.refreshToken); }
+    catch {
+      // An adapter might persist the value before reporting failure.
+      try { await restore(); } catch { /* Cannot promise recovery. */ }
+      flow.result = { status: "failed", error: "credential_store_failed" };
+      return;
+    }
+    try { await onSignedIn({ clientId: flow.clientId, identity: safeIdentity }); }
+    catch {
+      try { await restore(); }
+      catch { flow.result = { status: "failed", error: "credential_store_failed" }; return; }
       flow.result = { status: "failed", error: "draft_update_failed" };
       return;
     }

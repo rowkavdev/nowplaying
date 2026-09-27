@@ -22,7 +22,7 @@ async function waitForSpotify(svc, flowId) {
 
 test("Spotify WebUI flow saves identity not token, and disconnects/revokes", async () => {
   const file = await configFile(); const saved = []; const removed = []; let finish;
-  const h = createSettingsConnectedServices({ file, credentialStore: { save: async (...x) => saved.push(x), remove: async (ref) => removed.push(ref) },
+  const h = createSettingsConnectedServices({ file, credentialStore: { read: async () => null, save: async (...x) => saved.push(x), remove: async (ref) => removed.push(ref) },
     spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) }).handler;
   const started = await h(post("/api/setup/spotify", { action: "start", clientId: CID }));
   assert.equal(started.status, 200);
@@ -40,7 +40,7 @@ test("Spotify WebUI flow saves identity not token, and disconnects/revokes", asy
 
 test("first-run optional accounts stage until media server config exists", async () => {
   const file = await configFile(false); let finish; const saved=[];
-  const svc = createSettingsConnectedServices({ file, credentialStore: { save: async (...x)=>saved.push(x) }, spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) });
+  const svc = createSettingsConnectedServices({ file, credentialStore: { read: async () => null, remove: async () => {}, save: async (...x)=>saved.push(x) }, spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) });
   const started = await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
   finish({ refreshToken: "secret", identity: { id: "rowan", displayName: "Rowan" } });
   await waitForSpotify(svc.handler, JSON.parse(started.body).flowId);
@@ -99,7 +99,7 @@ test("hosted preview/check are available on first run and reflect privacy", asyn
 
 test("Spotify completes without restarting before the browser receives success", async () => {
   const file = await configFile(); let finish; let restartCount = 0;
-  const svc = createSettingsConnectedServices({ file, credentialStore: { save: async () => {} }, onConfigured: async () => { restartCount++; },
+  const svc = createSettingsConnectedServices({ file, credentialStore: { read: async () => null, remove: async () => {}, save: async () => {} }, onConfigured: async () => { restartCount++; },
     spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }) });
   const started = await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
   const flowId = JSON.parse(started.body).flowId;
