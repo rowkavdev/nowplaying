@@ -115,6 +115,30 @@ test("only one provider poll can claim a flow at a time", async () => {
   assert.equal((await post(handler, { action: "poll", flowId: started.flowId })).status, 410);
 });
 
+test("Cancel during finish validation prevents Plex and Jellyfin writes", async () => {
+  for (const provider of ["plex", "jellyfin"]) {
+    const store = fakeStore();
+    let release;
+    const validation = new Promise((resolve) => { release = resolve; });
+    let validating;
+    const startedValidation = new Promise((resolve) => { validating = resolve; });
+    const signIn = fakeSignIn({
+      [provider === "plex" ? "pollPlexPin" : "pollJellyfinQuickConnect"]: async () => ({
+        status: "signed_in", provider, identity: { id: "7", displayName: "Rowan" }, secret: "token",
+      }),
+    });
+    const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn,
+      beforeSignedIn: async () => { validating(); await validation; } });
+    const { flowId } = read(await post(handler, { action: "start", provider, baseUrl: "http://127.0.0.1:32400" }));
+    const polling = post(handler, { action: "poll", flowId });
+    await startedValidation;
+    assert.deepEqual(read(await post(handler, { action: "cancel", flowId })), { status: "cancelled" });
+    release();
+    assert.deepEqual(read(await polling), { error: "expired" });
+    assert.deepEqual(store.saved, []);
+  }
+});
+
 test("Cancel cannot claim success once a sign-in has started committing", async () => {
   let release;
   const pendingSave = new Promise((resolve) => { release = resolve; });
@@ -128,12 +152,41 @@ test("Cancel cannot claim success once a sign-in has started committing", async 
   const polling = post(handler, { action: "poll", flowId: started.flowId });
   await startedSaving;
   const cancelled = await post(handler, { action: "cancel", flowId: started.flowId });
-  assert.equal(cancelled.status, 409);
-  assert.deepEqual(read(cancelled), { error: "signin_in_progress" });
-  assert.deepEqual(read(await post(handler, { action: "poll", flowId: started.flowId })), { error: "poll_in_progress" });
+  assert.deepEqual(read(cancelled), { status: "cancelled" });
   release();
-  assert.equal(read(await polling).status, "signed_in");
-  assert.equal(store.saved.length, 1);
+  assert.deepEqual(read(await polling), { error: "expired" });
+  assert.equal(store.saved.length, 1); // new value and rollback removal below are tracked separately
+  assert.equal(store.values.size, 0);
+});
+
+test("an expired committing flow cannot be cancelled after a second poll (Plex/Jellyfin)", async () => {
+  for (const provider of ["plex", "jellyfin"]) {
+    let time = 1000;
+    let release;
+    const pendingUpdate = new Promise((resolve) => { release = resolve; });
+    let updating;
+    const startedUpdate = new Promise((resolve) => { updating = resolve; });
+    const store = fakeStore();
+    const signIn = fakeSignIn({
+      [provider === "plex" ? "pollPlexPin" : "pollJellyfinQuickConnect"]: async () => ({
+        status: "signed_in", provider, identity: { id: "7", displayName: "Rowan" }, secret: "token",
+      }),
+    });
+    const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn,
+      now: () => time, flowTtlMs: 100, onSignedIn: async () => { updating(); await pendingUpdate; } });
+    const { flowId } = read(await post(handler, { action: "start", provider, baseUrl: "http://127.0.0.1:32400" }));
+    const polling = post(handler, { action: "poll", flowId });
+    await startedUpdate;
+    time += 101;
+    assert.deepEqual(read(await post(handler, { action: "poll", flowId })), { error: "poll_in_progress" });
+    const cancelled = await post(handler, { action: "cancel", flowId });
+    assert.equal(cancelled.status, 409);
+    assert.deepEqual(read(cancelled), { error: "signin_in_progress" });
+    release();
+    assert.equal(read(await polling).status, "signed_in");
+    assert.equal(store.saved.length, 1);
+    assert.equal((await post(handler, { action: "poll", flowId })).status, 410);
+  }
 });
 
 test("a provider response arriving after flow expiry cannot save a credential", async () => {
