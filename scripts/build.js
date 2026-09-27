@@ -5,6 +5,7 @@ const packageJson = JSON.parse(await readFile(new URL("../package.json", import.
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 await cp("src", "dist/src", { recursive: true });
+for (const name of ["NOTICE", "README.md", "LICENSE"]) await cp(name, `dist/${name}`);
 await writeFile("dist/card.svg", renderCard(createPresence({
   state: "playing",
   kind: "track",

@@ -50,6 +50,7 @@ async function page(startup) {
   runInNewContext(script, {
     document: {
       getElementById: node,
+      querySelectorAll: () => [],
       createElement: (tag) => ({ tag, className: "", textContent: "", children: [], append(...c) { this.children.push(...c); }, setAttribute() {}, addEventListener() {} }),
     },
     fetch,

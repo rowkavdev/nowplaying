@@ -36,6 +36,7 @@ $BuildInfo = [ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buil
 [System.IO.File]::WriteAllText((Join-Path $Bundle 'app/build-info.json'), $BuildInfo, [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
+foreach ($InfoFile in @('NOTICE', 'README.md', 'LICENSE')) { Copy-Item (Join-Path $Root $InfoFile) (Join-Path $Bundle 'app' $InfoFile) }
 Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse
 
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source

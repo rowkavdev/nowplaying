@@ -4,6 +4,7 @@
 // the HTTP server only lets them through with the session cookie this page
 // sets, from the app's own origin.
 
+import { readFileSync } from "node:fs";
 import { normalizeCard } from "./setup-config.js";
 import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
 import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
@@ -13,7 +14,7 @@ const PAGE = `<!doctype html>
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
 <body class="drpp-shell"><header class="drpp-header">
   <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
-  <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" disabled title="Info panel not ported yet">Info (coming soon)</button></div>
+  <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" id="drpp-info-open" aria-haspopup="dialog" title="Info">Info</button></div>
 </header><div class="drpp-columns"><main class="drpp-config">
 <div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider" id="drpp-autostart-divider" hidden></span><label id="drpp-autostart-wrap" hidden><input type="checkbox" id="drpp-autostart"> Launch app on system startup</label><small id="drpp-autostart-result" role="status" aria-live="polite"></small></div>
 <div class="drpp-config-scroll">
@@ -167,7 +168,7 @@ const PAGE = `<!doctype html>
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
 <div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
 <p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" class="drpp-log-lines" role="log" aria-live="off"></div>
-</aside></div><script src="/settings.js"></script></body></html>
+</aside></div><dialog id="drpp-info" aria-labelledby="drpp-info-title"><div class="drpp-info-heading"><h2 id="drpp-info-title">Info</h2><button type="button" id="drpp-info-close" aria-label="Close Info">×</button></div><div class="drpp-info-tabs" role="tablist" aria-label="Project information"><button type="button" role="tab" id="drpp-info-attribution" aria-controls="drpp-info-content" data-file="NOTICE" aria-selected="true">OSS Attribution</button><button type="button" role="tab" id="drpp-info-readme" aria-controls="drpp-info-content" data-file="README.md" aria-selected="false">Readme</button><button type="button" role="tab" id="drpp-info-license" aria-controls="drpp-info-content" data-file="LICENSE" aria-selected="false">License</button></div><pre id="drpp-info-content" role="tabpanel" aria-live="polite">Loading...</pre></dialog><script src="/settings.js"></script></body></html>
 `;
 
 const CSS = `${SERVER_CSS}
@@ -210,7 +211,9 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 .drpp-indicator{width:9px;height:9px;background:#868e96;border-radius:50%;flex:none}.drpp-indicator.connected{background:#7ab8ff}.drpp-indicator.disconnected{background:#ffa552}
 .drpp-log-lines{font:13px/1.6 ui-monospace,Consolas,monospace}.drpp-log-line{padding:1px 8px;border-left:4px solid #7ab8ff;background:rgba(79,70,229,.05);white-space:pre;word-break:break-all}.drpp-log-line.warn{border-color:#f59e0b}.drpp-log-line.error{border-color:#ffa552}.drpp-log-line .timestamp{color:#6b7280}.drpp-log-line .level{color:#7ab8ff}.drpp-log-line.warn .level{color:#f59e0b}.drpp-log-line.error .level{color:#ffa552}.drpp-log-line .source{color:#60a5fa}
 .drpp-log-lines.wrap .drpp-log-line{white-space:pre-wrap}.drpp-logs #drpp-log-error{padding:8px 16px;color:#ffa552}
-@media(max-width:900px){.drpp-columns{height:auto;flex-direction:column}.drpp-config,.drpp-logs{width:100%;border-right:0}.drpp-config-scroll{max-height:65vh}.drpp-log-lines{min-height:250px;max-height:45vh}.drpp-header{flex-wrap:wrap}}
+#drpp-info{width:75%;max-width:1100px;max-height:85vh;margin:auto;background:#242424;color:#c1c2c5;border:1px solid #373a40;border-radius:8px;padding:0;box-shadow:0 20px 60px #0009}
+#drpp-info::backdrop{background:#0009}.drpp-info-heading{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #373a40}.drpp-info-heading h2{margin:0}.drpp-info-tabs{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid #373a40;overflow-x:auto}.drpp-info-tabs button[aria-selected=true]{color:#f1f3f5;border-color:#1971c2;background:#263b50}#drpp-info-content{margin:0;padding:16px;max-height:60vh;overflow:auto;background:#242424;color:#c1c2c5;border:0;white-space:pre-wrap;word-break:break-word;font:13px/1.5 ui-monospace,Consolas,monospace}
+@media(max-width:900px){#drpp-info{width:95%}.drpp-columns{height:auto;flex-direction:column}.drpp-config,.drpp-logs{width:100%;border-right:0}.drpp-config-scroll{max-height:65vh}.drpp-log-lines{min-height:250px;max-height:45vh}.drpp-header{flex-wrap:wrap}}
 `;
 
 const DRPP_SHELL_SCRIPT = `"use strict";
@@ -324,6 +327,29 @@ async function refreshVersion() {
     }
   } catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
 }
+// DRPP InfoModal: local, read-only NOTICE/README/LICENSE tabs.
+const infoDialog = document.getElementById("drpp-info");
+const infoContent = document.getElementById("drpp-info-content");
+const infoTabs = Array.from(document.querySelectorAll("#drpp-info [role=tab]"));
+const infoCache = new Map();
+let infoRequest = 0;
+async function selectInfoTab(tab) {
+  for (const item of infoTabs) item.setAttribute("aria-selected", String(item === tab));
+  const filename = tab.dataset.file;
+  const request = ++infoRequest;
+  if (infoCache.has(filename)) { infoContent.textContent = infoCache.get(filename); return; }
+  infoContent.textContent = "Loading...";
+  try {
+    const res = await fetch("/api/info/" + filename, { cache: "no-store", headers: { Accept: "text/plain" } });
+    if (!res.ok) throw new Error();
+    const text = await res.text();
+    infoCache.set(filename, text);
+    if (request === infoRequest) infoContent.textContent = text;
+  } catch { if (request === infoRequest) infoContent.textContent = "Could not load this file."; }
+}
+document.getElementById("drpp-info-open").addEventListener("click", () => { infoDialog.showModal(); selectInfoTab(infoTabs[0]); });
+document.getElementById("drpp-info-close").addEventListener("click", () => infoDialog.close());
+for (const tab of infoTabs) tab.addEventListener("click", () => selectInfoTab(tab));
 refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(refreshVersion, 15000);
 `;
 
@@ -736,6 +762,11 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     "/drpp-shell.css": { body: DRPP_SHELL_CSS, type: "text/css; charset=utf-8" },
     "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${DRPP_SHELL_SCRIPT}`, type: "text/javascript; charset=utf-8" },
   };
+  // Explicit allowlist only; project files ship alongside src in installed builds.
+  const infoFiles = Object.fromEntries(["NOTICE", "README.md", "LICENSE"].map((name) => {
+    try { return [name, readFileSync(new URL("../" + name, import.meta.url), "utf8")]; }
+    catch { return [name, null]; }
+  }));
   const read = async () => {
     const value = await settings.read();
     return { discord: value.discord, ...(value.hosted ? { hosted: value.hosted } : {}), ...(value.startup ? { startup: value.startup } : {}), ...(value.privacy ? { privacy: value.privacy } : {}), ...(value.card ? { card: value.card } : {}) };
@@ -772,6 +803,15 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
     const asset = assets[url.pathname];
+    if (url.pathname.startsWith("/api/info/")) {
+      const name = url.pathname.slice("/api/info/".length);
+      if (!Object.hasOwn(infoFiles, name)) return response(404, "Not Found");
+      if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
+      const site = header(request?.headers, "sec-fetch-site");
+      if (site !== undefined && !SAFE_FETCH_SITES.has(String(site).toLowerCase())) return response(403, "Forbidden");
+      const text = infoFiles[name];
+      return text === null ? response(503, "File unavailable") : response(200, method === "HEAD" ? "" : text, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+    }
     const disconnect = url.pathname === "/api/settings/hosted/disconnect";
     const refresh = url.pathname === "/api/settings/discord/refresh-artwork";
     if (url.pathname === PREVIEW_PATH) return preview(request, method, url);

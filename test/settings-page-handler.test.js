@@ -151,7 +151,7 @@ test("DRPP split shell keeps real NowPlaying controls and safe log endpoint", as
   assert.match(page, /class="drpp-logs"/);
   assert.match(page, /id="drpp-log-lines"/);
   assert.match(page, /id="discord-form"/);
-  assert.match(page, /Info \(coming soon\)/);
+  assert.match(page, /id="drpp-info-open"/);
   assert.equal((await h({ url: "/drpp-shell.css" })).status, 200);
   const script = (await h({ url: "/settings.js" })).body;
   assert.match(script, /fetch\("\/api\/logs"/);
