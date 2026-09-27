@@ -14,6 +14,11 @@ export function launchAgentsDir({ home = process.env?.HOME } = {}) {
   return posix.join(home, "Library", "LaunchAgents");
 }
 
+function xmlUnescape(value) {
+  // &amp; comes last so "&amp;lt;" unescapes to "&lt;", not "<".
+  return value.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", '"').replaceAll("&amp;", "&");
+}
+
 function xmlEscape(value) {
   return value
     .replaceAll("&", "&amp;")
@@ -73,11 +78,12 @@ export function createMacosStartup({
         return Object.freeze({ enabled: false, broken: false });
       throw error;
     }
-    const match = text.match(
-      /<key>ProgramArguments<\/key>\s*<array>\s*<string>([^<]*)<\/string>/,
-    );
-    const current = match?.[1];
-    const matches = current === xmlEscape(programPath);
+    // Compare the whole command vector, not just the program: an agent whose
+    // script or arguments were edited away from this install is broken.
+    const array = text.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/);
+    const parts = array ? [...array[1].matchAll(/<string>([^<]*)<\/string>/g)].map((m) => xmlUnescape(m[1])) : [];
+    const expected = [programPath, ...programArguments];
+    const matches = parts.length === expected.length && parts.every((part, i) => part === expected[i]);
     return Object.freeze({ enabled: matches, broken: !matches });
   }
   return Object.freeze({

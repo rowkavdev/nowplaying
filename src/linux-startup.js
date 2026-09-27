@@ -76,7 +76,12 @@ export function createLinuxStartup({
       .split("\n")
       .find((line) => line.startsWith("Exec="))
       ?.slice("Exec=".length);
-    const matches = current === execLine;
+    // XDG disable keys: Hidden=true acts as if the entry were deleted, and
+    // X-GNOME-Autostart-enabled=false is GNOME's off switch. Either one means
+    // autostart is off despite the file - report broken so the Settings
+    // toggle shows off and re-enabling repairs the entry.
+    const disabled = /^\s*Hidden\s*=\s*true\s*$/m.test(text) || /^\s*X-GNOME-Autostart-enabled\s*=\s*false\s*$/m.test(text);
+    const matches = current === execLine && !disabled;
     return Object.freeze({ enabled: matches, broken: !matches });
   }
   return Object.freeze({

@@ -113,3 +113,22 @@ test("invalid exec definitions are rejected before any file is written", async (
   const startup = make({ autostartDir });
   await assert.rejects(startup.setEnabled("yes"), /boolean/);
 });
+
+test("Hidden=true disables the entry: status reports broken, re-enabling repairs (#672 review)", async () => {
+  const startup = make({ autostartDir: await dir() });
+  await startup.setEnabled(true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+  const { appendFile } = await import("node:fs/promises");
+  await appendFile(startup.file, "Hidden=true\n");
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+  await startup.setEnabled(true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+test("X-GNOME-Autostart-enabled=false disables the entry: status reports broken", async () => {
+  const startup = make({ autostartDir: await dir() });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("X-GNOME-Autostart-enabled=true", "X-GNOME-Autostart-enabled=false"));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+});

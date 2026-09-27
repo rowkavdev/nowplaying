@@ -113,3 +113,27 @@ test(
     );
   },
 );
+
+test("an edited argument in the plist reports broken, not enabled (#672 review)", async () => {
+  const launchAgents = await dir();
+  // Enable with /usr/bin/node /good/nowplaying.js start...
+  const startup = createMacosStartup({ launchAgentsDir: launchAgents, programPath: "/usr/bin/node", programArguments: ["/good/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+  // ...then the script path in the plist is edited to /other/nowplaying.js.
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("/good/nowplaying.js", "/other/nowplaying.js"));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+  // Re-enabling repairs the edited agent.
+  await startup.setEnabled(true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+test("a dropped argument in the plist reports broken, not enabled", async () => {
+  const launchAgents = await dir();
+  const startup = createMacosStartup({ launchAgentsDir: launchAgents, programPath: "/usr/bin/node", programArguments: ["/good/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("\t\t<string>start</string>\n", ""));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+});
