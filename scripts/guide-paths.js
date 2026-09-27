@@ -202,7 +202,7 @@ async function discordRichPresence() {
 // privacy-filtered presence, serve the card, cache, reject bad writes, delete.
 const HOSTED_FIXTURES = [
   { state: "playing", kind: "track", title: "Holocene", subtitle: "Bon Iver" },
-  { state: "paused", kind: "track", title: "Holocene", subtitle: "Bon Iver" },
+  { state: "paused", kind: "track", title: "Re: Stacks", subtitle: "Bon Iver", marker: "PAUSED" },
   { state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost S4E5" },
   { state: "playing", kind: "movie", title: "Spirited Away", subtitle: "2001" },
 ];
@@ -252,13 +252,17 @@ async function hostedCard() {
       }],
       ["render-states-over-http", async () => {
         let seq = 1;
-        for (const fixture of HOSTED_FIXTURES) {
+        for (const { marker, ...fixture } of HOSTED_FIXTURES) {
           const payload = JSON.stringify({ v: 1, seq: ++seq, observedAt: Date.now(), ...fixture });
-          await hostedCall(app.port, "POST", "/api/ingest", { body: payload, headers: auth(registered.token) });
-          const card = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg?theme=paper&width=320`);
+          const ingested = await hostedCall(app.port, "POST", "/api/ingest", { body: payload, headers: auth(registered.token) });
+          expect(ingested.status === 202,
+            `${fixture.kind}/${fixture.state}: ingest must answer 202, got ${ingested.status}: ${ingested.body}`);
+          const card = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg?theme=paper&width=320&show=state`);
           expect(card.status === 200 && card.headers["content-type"]?.includes("image/svg+xml"),
             `${fixture.kind}/${fixture.state}: card must be an SVG over HTTP, got ${card.status}`);
           expect(card.body.includes(fixture.title), `${fixture.kind}/${fixture.state}: card must show "${fixture.title}"`);
+          if (marker)
+            expect(card.body.includes(marker), `${fixture.kind}/${fixture.state}: card must show the ${fixture.state} state`);
         }
         return `${HOSTED_FIXTURES.length} documented states served`;
       }],
@@ -281,7 +285,11 @@ async function hostedCard() {
         const revoked = await hostedCall(app.port, "POST", "/api/revoke", { headers: auth(registered.token) });
         expect(revoked.status === 200, `revoke must answer 200, got ${revoked.status}`);
         const card = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg`);
-        expect(!card.body.includes("Holocene"), "after disconnect the card must no longer serve media");
+        expect(!card.body.includes("Spirited Away"), "after disconnect the card must no longer serve the last media");
+        const replayed = JSON.stringify({ v: 1, seq: 99, observedAt: Date.now(), ...HOSTED_FIXTURES[2] });
+        const ingestAfterRevoke = await hostedCall(app.port, "POST", "/api/ingest",
+          { body: replayed, headers: auth(registered.token) });
+        expect(ingestAfterRevoke.status === 401, `a revoked token must not ingest, got ${ingestAfterRevoke.status}`);
       }],
     ]);
   } finally {
