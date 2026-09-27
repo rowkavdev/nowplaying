@@ -27,7 +27,10 @@ export function subnetCandidates(subnet) {
 export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64, onProbeFailure } = {}) {
   if (signal?.aborted) return [];
   if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 254 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
-  const local = await localDiscover({ fetchImpl, timeoutMs: 2500, signal, networkHosts: [], onProbeFailure }).catch(() => []);
+  const local = await localDiscover({ fetchImpl, timeoutMs: 2500, signal, networkHosts: [], onProbeFailure }).catch(() => {
+    onProbeFailure?.({ provider: "local_discovery", baseUrl: "http://127.0.0.1", reason: "discovery_failed" });
+    return [];
+  });
   if (signal?.aborted) return [];
   const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => {
     // Callers can supply hosts directly, not only via subnetCandidates.

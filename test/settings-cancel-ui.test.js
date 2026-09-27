@@ -55,6 +55,25 @@ test("failed cancel keeps a completed discovery result and never claims cancella
   assert.equal(node("discovery-state").textContent, "No servers found. Add one by address below.");
 });
 
+test("quick scan shows a safe, copyable reason for a missing localhost Plex", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
+  const scan = node("discover-servers").click();
+  fetches[1].resolve(json({ servers: [], probeFailures: [{ provider: "plex", baseUrl: "http://127.0.0.1:32400", reason: "timeout" }] }));
+  await scan;
+  assert.match(node("discovery-state").textContent, /Plex at 127\.0\.0\.1:32400\/identity timed out/);
+  assert.doesNotMatch(node("discovery-state").textContent, /password|token|Secret Track/);
+});
+
+test("quick scan distinguishes failed local discovery from a real empty scan", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
+  const scan = node("discover-servers").click();
+  fetches[1].resolve(json({ servers: [], probeFailures: [{ provider: "local_discovery", baseUrl: "http://127.0.0.1", reason: "discovery_failed" }] }));
+  await scan;
+  assert.match(node("discovery-state").textContent, /Local discovery failed before it could check Plex/);
+});
+
 test("confirmed cancellation reports it only when discovery replies cancelled", async () => {
   const { node, fetches } = page();
   fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
