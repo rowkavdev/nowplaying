@@ -60,6 +60,63 @@ test("refresh polls only when nothing polled recently, and coalesces", async () 
   t = 20000; await status.refresh(); assert.equal(calls, 2);
 });
 
+test("older playing poll finishing after newer idle cannot restore status playback", async () => {
+  let t = 1000, calls = 0, release;
+  const barrier = new Promise((resolve) => { release = resolve; });
+  const status = createAppStatus({ config, now: () => t });
+  const provider = status.wrapProvider({ getPresence: async () => ++calls === 1 ? barrier : { state: "idle" } });
+  const old = provider.getPresence();
+  await Promise.resolve();
+  t = 2000;
+  assert.deepEqual(await provider.getPresence(), { state: "idle" });
+  assert.equal(status.snapshot().playing, null);
+  assert.equal(status.snapshot().server.lastPollAt, new Date(2000).toISOString());
+  t = 3000;
+  release({ state: "playing", title: "OLD" });
+  assert.equal((await old).title, "OLD", "provider result still reaches the original caller");
+  const snapshot = status.snapshot();
+  assert.equal(snapshot.playing, null);
+  assert.equal(snapshot.server.lastPollAt, new Date(2000).toISOString());
+  assert.equal(snapshot.server.lastOkAt, new Date(2000).toISOString());
+});
+
+test("older failure cannot mark a newer successful provider poll failed", async () => {
+  let t = 1000, calls = 0, rejectOld;
+  const barrier = new Promise((_, reject) => { rejectOld = reject; });
+  const status = createAppStatus({ config, now: () => t });
+  const provider = status.wrapProvider({ getPresence: async () => ++calls === 1 ? barrier : { state: "playing", title: "NEW" } });
+  const old = provider.getPresence();
+  await Promise.resolve();
+  t = 2000;
+  await provider.getPresence();
+  t = 3000;
+  rejectOld(Object.assign(new Error("old auth error"), { status: 401 }));
+  await assert.rejects(old);
+  const snapshot = status.snapshot();
+  assert.equal(snapshot.playing.title, "NEW");
+  assert.equal(snapshot.server.state, "connected");
+  assert.equal(snapshot.server.lastPollAt, new Date(2000).toISOString());
+  assert.equal(status.diagnostics().provider.status, "connected");
+});
+
+test("older successful poll cannot clear a newer failure", async () => {
+  let t = 1000, calls = 0, release;
+  const barrier = new Promise((resolve) => { release = resolve; });
+  const status = createAppStatus({ config, now: () => t });
+  const provider = status.wrapProvider({ getPresence: async () => ++calls === 1 ? barrier : Promise.reject(Object.assign(new Error("new failure"), { status: 401 })) });
+  const old = provider.getPresence();
+  await Promise.resolve();
+  t = 2000;
+  await assert.rejects(provider.getPresence());
+  t = 3000;
+  release({ state: "playing", title: "OLD" });
+  await old;
+  const snapshot = status.snapshot();
+  assert.equal(snapshot.server.state, "authentication_failed");
+  assert.equal(snapshot.playing, null);
+  assert.equal(snapshot.server.lastPollAt, new Date(2000).toISOString());
+});
+
 test("refresh swallows provider errors", async () => {
   const status = createAppStatus({ config });
   status.wrapProvider({ getPresence: async () => { throw new Error("boom"); } });
