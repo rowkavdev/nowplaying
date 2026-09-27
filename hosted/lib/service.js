@@ -34,6 +34,36 @@ const INGEST_KEYS = new Set(["v", "seq", "observedAt", "state", "kind", "title",
 const TEXT_LIMIT = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
+// Keep the per-device sequence check and card-state write in one Redis action.
+// EVAL is atomic on Upstash Redis, including across concurrent function calls.
+export const INGEST_ATOMIC_SCRIPT = `
+local previous = tonumber(redis.call('GET', KEYS[1]) or '-1')
+local incoming = tonumber(ARGV[1])
+if incoming <= previous then return {0, previous} end
+local state = cjson.decode(ARGV[4])
+if ARGV[3] == '1' then
+  if state.state == 'idle' then
+    redis.call('DEL', KEYS[2])
+  else
+    local prior = redis.call('GET', KEYS[2])
+    local old = prior and cjson.decode(prior) or nil
+    if state.state == 'playing' then
+      state.startedAt = old and old.state == 'playing' and old.startedAt or tonumber(ARGV[5])
+    else
+      state.startedAt = cjson.null
+    end
+    redis.call('SET', KEYS[2], cjson.encode(state), 'EX', tonumber(ARGV[6]))
+  end
+  redis.call('SET', KEYS[3], ARGV[5], 'EX', tonumber(ARGV[2]))
+elseif state.state == 'idle' then
+  redis.call('DEL', KEYS[2])
+else
+  redis.call('SET', KEYS[2], cjson.encode(state), 'EX', tonumber(ARGV[6]))
+end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
+return {1, previous}
+`;
+
 export class ServiceError extends Error {
   constructor(status, code, details = {}) { super(code); this.status = status; this.code = code; this.details = details; }
 }
@@ -174,30 +204,13 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       throw error;
     }
     const seqKey = `np:seq:${device.deviceId}`;
-    const lastSeq = Number(await cmd("GET", seqKey) ?? -1);
-    if (update.seq <= lastSeq) throw new ServiceError(409, "stale_sequence", { lastSeq });
-    await cmd("SET", seqKey, String(update.seq), "EX", SEQ_TTL_SECONDS);
-    if (device.userId) {
-      const key = `np:dstate:${device.deviceId}`;
-      if (update.state === "idle") {
-        await cmd("DEL", key);
-      } else {
-        const prevRaw = await cmd("GET", key);
-        const prev = prevRaw ? JSON.parse(prevRaw) : null;
-        // startedAt moves only when this device starts playing (server time).
-        const startedAt = update.state === "playing" ? (prev?.state === "playing" && prev.startedAt ? prev.startedAt : now()) : null;
-        await cmd("SET", key, JSON.stringify({ ...update, receivedAt: now(), startedAt }), "EX", STATE_TTL_SECONDS);
-      }
-      await cmd("SET", `np:dseen:${device.deviceId}`, String(now()), "EX", SEQ_TTL_SECONDS);
-      await markDeviceActive(device.deviceId);
-      return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
-    }
-    const stateKey = `np:state:${device.cardId}`;
-    if (update.state === "idle") {
-      await cmd("DEL", stateKey);
-    } else {
-      await cmd("SET", stateKey, JSON.stringify({ ...update, receivedAt: now() }), "EX", STATE_TTL_SECONDS);
-    }
+    const stateKey = device.userId ? `np:dstate:${device.deviceId}` : `np:state:${device.cardId}`;
+    const seenKey = device.userId ? `np:dseen:${device.deviceId}` : seqKey;
+    const receivedAt = now();
+    const record = { ...update, receivedAt };
+    const [accepted, lastSeq] = await cmd("EVAL", INGEST_ATOMIC_SCRIPT, 3, seqKey, stateKey, seenKey,
+      String(update.seq), SEQ_TTL_SECONDS, device.userId ? "1" : "0", JSON.stringify(record), String(receivedAt), STATE_TTL_SECONDS);
+    if (Number(accepted) !== 1) throw new ServiceError(409, "stale_sequence", { lastSeq: Number(lastSeq) });
     await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
   }

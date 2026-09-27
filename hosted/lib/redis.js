@@ -39,6 +39,28 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
     data,
     async command([name, key, ...rest]) {
       switch (String(name).toUpperCase()) {
+        case "EVAL": {
+          // Emulates the hosted ingest script as one synchronous Redis action.
+          // No await may split its comparison from the card-state write.
+          if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 3) throw new Error("unsupported script");
+          const [seqKey, stateKey, seenKey, seqText, seqTtl, userFlag, recordText, receivedAt, stateTtl] = rest.slice(1);
+          const previous = Number(live(seqKey)?.value ?? -1);
+          const incoming = Number(seqText);
+          if (incoming <= previous) return [0, previous];
+          const record = JSON.parse(recordText);
+          if (record.state === "idle") data.delete(stateKey);
+          else {
+            if (userFlag === "1") {
+              const prior = live(stateKey)?.value;
+              const old = prior ? JSON.parse(prior) : null;
+              record.startedAt = record.state === "playing" ? (old?.state === "playing" && old.startedAt ? old.startedAt : Number(receivedAt)) : null;
+            }
+            data.set(stateKey, { value: JSON.stringify(record), expiresAt: now() + Number(stateTtl) * 1000 });
+          }
+          if (userFlag === "1") data.set(seenKey, { value: String(receivedAt), expiresAt: now() + Number(seqTtl) * 1000 });
+          data.set(seqKey, { value: String(seqText), expiresAt: now() + Number(seqTtl) * 1000 });
+          return [1, previous];
+        }
         case "GET": return live(key)?.value ?? null;
         case "MGET": return [key, ...rest].map((k) => live(k)?.value ?? null);
         case "SET": {

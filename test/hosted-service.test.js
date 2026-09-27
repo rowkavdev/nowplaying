@@ -52,6 +52,30 @@ test("ingest rejects bad tokens, replays and out-of-order sequences", async () =
   await assert.rejects(service.ingest({ token, payload: update(now(), { seq: 4 }) }), { status: 409 });
 });
 
+test("concurrent anonymous ingests cannot let an older sequence overwrite newer state", async () => {
+  const { redis, now } = setup();
+  let entered, release;
+  const atBarrier = new Promise((resolve) => { entered = resolve; });
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let delayed = false;
+  const controlled = { command: async (args) => {
+    if (args[0] === "EVAL" && args[6] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now });
+  const { cardId, deviceId, token } = await service.register();
+  const older = service.ingest({ token, payload: update(now(), { seq: 1, title: "Older" }) });
+  await atBarrier;
+  const newer = await service.ingest({ token, payload: update(now(), { seq: 2, title: "Newer" }) });
+  assert.equal(newer.accepted, true);
+  release();
+  await assert.rejects(older, { status: 409, code: "stale_sequence", details: { lastSeq: 2 } });
+  assert.equal((await service.readCardState(cardId)).title, "Newer");
+  assert.equal(await redis.command(["GET", `np:seq:${deviceId}`]), "2");
+  await assert.rejects(service.ingest({ token, payload: update(now(), { seq: 2, title: "Replay" }) }), { status: 409 });
+  assert.equal((await service.readCardState(cardId)).title, "Newer");
+});
+
 test("validation rejects unknown fields, skew, oversize text and bad times", () => {
   const now = 1_800_000_000_000;
   assert.throws(() => validateIngest({ ...update(now), artworkUrl: "http://x" }, { now }), { code: "unknown_field" });
