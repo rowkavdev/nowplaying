@@ -105,10 +105,13 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       catch { return json(400, { error: "invalid_subnet" }); }
       const controller = new AbortController(); scan = controller;
       try {
-        const found = await discover({ signal: controller.signal, hosts: subnet });
+        const probeFailures = [];
+        const found = await discover({ signal: controller.signal, hosts: subnet, onProbeFailure: (failure) => {
+          if (probeFailures.length < 64) probeFailures.push(failure);
+        } });
         if (controller.signal.aborted) return json(200, { cancelled: true });
         cached = found;
-        return json(200, { servers: cached ?? [] });
+        return json(200, { servers: cached ?? [], probeFailures });
       }
       catch { return controller.signal.aborted ? json(200, { cancelled: true }) : json(503, { error: "discovery_failed" }); }
       finally { if (scan === controller) scan = null; }

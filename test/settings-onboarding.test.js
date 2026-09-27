@@ -13,6 +13,21 @@ const store = { read: async () => null, save: async () => {}, remove: async () =
 const deviceId = "onboarding-test-device-id";
 const post = (url, body) => ({ method: "POST", url, body: JSON.stringify(body), headers: { "sec-fetch-site": "same-origin" } });
 
+test("scan reports bounded probe failure reasons without hiding healthy results", async () => {
+  const file = await fixture();
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore: store, discover: async ({ onProbeFailure }) => {
+    onProbeFailure({ provider: "plex", baseUrl: "http://127.0.0.1:32400", reason: "timeout" });
+    onProbeFailure({ provider: "jellyfin_or_emby", baseUrl: "http://127.0.0.1:8096", reason: "unrecognized_response" });
+    return [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533" }];
+  } });
+  const scan = JSON.parse((await mgmt.handler(post("/api/settings/servers/discover", { subnet: "" }))).body);
+  assert.deepEqual(scan.servers, [{ provider: "navidrome", baseUrl: "http://127.0.0.1:4533" }]);
+  assert.deepEqual(scan.probeFailures, [
+    { provider: "plex", baseUrl: "http://127.0.0.1:32400", reason: "timeout" },
+    { provider: "jellyfin_or_emby", baseUrl: "http://127.0.0.1:8096", reason: "unrecognized_response" },
+  ]);
+});
+
 test("missing config binds first-run Settings and explicit state", async () => {
   const file = await fixture();
   const app = await startAppFromConfig({ configFile: file, credentialStore: store, deviceId, port: 0, discoverServers: async () => [], onConfigured: async () => {} });

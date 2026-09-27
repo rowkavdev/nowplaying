@@ -46,6 +46,17 @@ test("HTTP identity finds localhost Plex without UDP; non-Plex host does not mat
   assert.deepEqual(empty, []);
 });
 
+test("a healthy Plex identity still works when UDP is blocked, and failures identify the probe", async () => {
+  const failures = [];
+  const found = await discoverSettingsServers({ fetchImpl: async (url) => {
+    if (url.endsWith(":32400/identity")) return reply('<MediaContainer machineIdentifier="plex-local" version="1.43.3"/>');
+    throw new Error("closed");
+  }, localDiscover: ({ fetchImpl: fetch, onProbeFailure }) => discoverLocalServers({ fetchImpl: fetch, networkHosts: [], discoverLan: async () => [], discoverPlex: async () => { throw Error("UDP unavailable"); }, onProbeFailure }), onProbeFailure: (failure) => failures.push(failure) });
+  assert.equal(found.find((server) => server.provider === "plex")?.id, "plex-local");
+  assert.equal(failures.some((failure) => failure.provider === "plex"), false);
+  assert.ok(failures.some((failure) => failure.provider === "navidrome" && failure.reason === "network_error"));
+});
+
 test("a real unauthenticated HTTP /identity responder is found without GDM", async () => {
   const http = createServer((req, res) => {
     assert.equal(req.url, "/identity");
