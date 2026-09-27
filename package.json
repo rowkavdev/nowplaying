@@ -20,5 +20,8 @@
   },
   "dependencies": {
     "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "ghost-deps": "^0.1.6"
   }
 }
