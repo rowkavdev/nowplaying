@@ -30,7 +30,7 @@ export function createSetupSignInHandler({
 
   function prune() {
     const time = now();
-    for (const [id, flow] of flows) if (flow.expiresAt <= time) flows.delete(id);
+    for (const [id, flow] of flows) if (flow.expiresAt <= time && !flow.committing) flows.delete(id);
   }
 
   async function finish(result, serverUrl) {
@@ -95,7 +95,7 @@ export function createSetupSignInHandler({
     prune();
     const flow = flows.get(input.flowId);
     if (!flow || flow.expiresAt <= now()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
-    if (flow.polling) return json(409, { error: "poll_in_progress" });
+    if (flow.polling || flow.committing) return json(409, { error: "poll_in_progress" });
     flow.polling = true;
     let result;
     try {
@@ -115,8 +115,11 @@ export function createSetupSignInHandler({
       return json(410, { error: "expired" });
     }
     if (result.status !== "signed_in") return json(200, { status: "pending" });
-    flows.delete(input.flowId);
-    return finish(result, flow.serverUrl);
+    // Commit is the linearization point: after this, cancellation must not
+    // report success while a credential/config write may be in progress.
+    flow.committing = true;
+    try { return await finish(result, flow.serverUrl); }
+    finally { if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
   }
 
   async function password(input) {
@@ -132,6 +135,8 @@ export function createSetupSignInHandler({
 
   async function cancel(input) {
     if (!onlyKeys(input, ["action", "flowId"]) || !text(input.flowId)) return json(400, { error: "invalid_request" });
+    const flow = flows.get(input.flowId);
+    if (flow?.committing) return json(409, { error: "signin_in_progress" });
     flows.delete(input.flowId);
     return json(200, { status: "cancelled" });
   }
