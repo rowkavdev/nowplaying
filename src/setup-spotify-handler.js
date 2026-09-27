@@ -21,14 +21,19 @@ export function createSetupSpotifyHandler({
   const flows = new Map();
   const completing = new Set();
   let generation = 0;
+  // Newest start per Client ID wins (#703): each start supersedes older
+  // pending flows for the same account, so a stale completion can never
+  // overwrite a newer sign-in's credential or config.
+  const latestByClientId = new Map();
+  const superseded = (flow) => latestByClientId.get(flow.clientId) !== flow.overlap;
 
   function prune() {
     const time = now();
-    for (const [id, flow] of flows) if (!flow.committing && flow.expiresAt <= time) flows.delete(id);
+    for (const [id, flow] of flows) if (!flow.committing && (flow.expiresAt <= time || superseded(flow))) flows.delete(id);
   }
 
   async function complete(flow, tokens) {
-    const active = () => flow.generation === generation;
+    const active = () => flow.generation === generation && !superseded(flow);
     // A late OAuth completion must not revive a flow already reported expired.
     if (!active() || flow.expiresAt <= now()) return;
     const identity = tokens?.identity;
@@ -85,7 +90,9 @@ export function createSetupSpotifyHandler({
     if (!CLIENT_ID.test(clientId)) return json(400, { error: "bad_client_id" });
     prune();
     if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
-    const flow = { clientId, generation, expiresAt: now() + flowTtlMs, result: { status: "pending" } };
+    const overlap = (latestByClientId.get(clientId) ?? 0) + 1;
+    latestByClientId.set(clientId, overlap);
+    const flow = { clientId, overlap, generation, expiresAt: now() + flowTtlMs, result: { status: "pending" } };
     let giveUrl;
     const authUrl = new Promise((resolve) => { giveUrl = resolve; });
     let running;
@@ -106,7 +113,7 @@ export function createSetupSpotifyHandler({
       giveUrl(null);
     });
     const url = await authUrl;
-    if (flow.generation !== generation) return json(410, { error: "expired" });
+    if (flow.generation !== generation || superseded(flow)) return json(410, { error: "expired" });
     if (typeof url !== "string" || !url.startsWith(AUTH_ORIGIN)) return json(502, { error: flow.result.error ?? "spotify_failed" });
     const flowId = newFlowId();
     flows.set(flowId, flow);
@@ -116,7 +123,7 @@ export function createSetupSpotifyHandler({
   function poll(input) {
     if (!onlyKeys(input, ["action", "flowId"]) || typeof input.flowId !== "string") return json(400, { error: "invalid_request" });
     const flow = flows.get(input.flowId);
-    if (!flow || (!flow.committing && flow.expiresAt <= now())) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
+    if (!flow || (!flow.committing && (flow.expiresAt <= now() || superseded(flow)))) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
     if (flow.result.status === "pending") return json(200, { status: "pending" });
     flows.delete(input.flowId);
     if (flow.result.status === "signed_in") return json(200, { status: "signed_in", provider: "spotify", identity: flow.result.identity });
