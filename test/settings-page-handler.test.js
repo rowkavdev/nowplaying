@@ -184,3 +184,17 @@ test("DRPP setup notice uses the real status API and a working server anchor", a
   assert.match(script, /notice.hidden = state === "connected"/);
   assert.match(script, /unconfigured \? "Add a media server to finish setting up\."/);
 });
+
+
+test("DRPP toolbar autostart switch writes the real startup setting", async () => {
+  const h = handler();
+  const page = (await h({url:"/settings"})).body;
+  assert.match(page, /id="drpp-autostart-wrap" hidden/);
+  assert.match(page, /id="drpp-autostart"/);
+  assert.doesNotMatch(page, /Launch on startup: see Windows below/);
+  const script = (await h({url:"/settings.js"})).body;
+  assert.match(script, /startup\.startWithWindows === true/);
+  assert.match(script, /startup: \{ startWithWindows: wanted \}/);
+  assert.match(script, /!startup\.available\) return/);
+  assert.match(script, /startup-enabled/);
+});
