@@ -25,10 +25,9 @@ to it (harness step: checksums-published). In PowerShell, in your Downloads
 folder:
 
 ```powershell
-Get-FileHash .\nowplaying-v<version>-windows-x64-setup.exe -Algorithm SHA256
+$file = ".\nowplaying-v<version>-windows-x64-setup.exe"  # the exe you downloaded
+Get-FileHash $file -Algorithm SHA256
 ```
-
-Substitute the version you actually downloaded.
 
 Expected output: a hash identical to the setup exe's line in `SHA256SUMS`.
 If it differs, delete the file and download again — do not install.
@@ -125,12 +124,13 @@ after 10 minutes without a fresh one, and replayed or tokenless uploads are
 rejected (harness step: stale-and-anonymous-rejected), so a card never shows
 stale media as current.
 
-**Disconnect.** Settings → hosted card → disconnect stops uploads and asks
-the service to delete the uploaded state; the card stops serving media
-(harness step: disconnect-delete). If the app is offline the deletion cannot
-be sent right away: the disconnect stays pending, no uploads resume, and the
-app retries until the service confirms. The saved sign-in is cleared only
-once the deletion succeeds.
+**Disconnect.** Settings → hosted card → **Disconnect this PC** stops
+uploads and asks the service to delete its copy of your card; the card stops
+serving media (harness step: disconnect-delete). If the app is offline the
+deletion request cannot be sent: this PC stops uploading but the old card may
+still be visible, and Settings shows "remote card deletion pending". Press
+**Disconnect this PC** again once you are online — the saved key is kept
+until the deletion succeeds.
 
 Self-hosted and Vercel deployment notes are in [deployment.md](deployment.md)
 and [hosted-card.md](hosted-card.md).
