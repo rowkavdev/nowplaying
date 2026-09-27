@@ -188,7 +188,7 @@ test("moved Windows install reports a broken shortcut without exposing its path"
   try {
     const page = await fetch(`${app.url}/settings`);
     assert.match(await page.text(), /id="startup-result"/);
-    assert.match(await (await fetch(`${app.url}/settings.js`)).text(), /Startup shortcut points to another install/);
+    assert.match(await (await fetch(`${app.url}/settings.js`)).text(), /Start-at-login entry needs repair/);
     const cookie = page.headers.get("set-cookie").split(";")[0];
     const old = await (await fetch(`${app.url}/api/settings`)).json();
     assert.deepEqual(old.startup, { available: true, startWithWindows: false, shortcutBroken: true });

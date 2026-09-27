@@ -382,8 +382,8 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const settings = Object.freeze({
     read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current), card: cardSettingsView(current) }),
-    // Start with Windows is the Startup-folder shortcut, not config.json:
-    // setup and this page change the same shortcut.
+    // Start at login is stored by the platform startup adapter, not config.json:
+    // setup and this page change the same OS entry.
     async updateStartup(changes) {
       if (!changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).length !== 1 || typeof changes.startWithWindows !== "boolean") throw new TypeError("startup settings: expected startWithWindows");
       if (!startup) throw new TypeError("startup settings: not available");

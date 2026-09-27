@@ -109,3 +109,21 @@ test("a failed toolbar save reverts the switch without touching the Windows chec
   assert.equal(node("drpp-autostart").checked, false, "switch reverts on failure");
   assert.equal(node("startup-enabled").checked, false, "Windows checkbox untouched on failure");
 });
+
+
+test("shared startup controls use OS-neutral copy and stay in sync", async () => {
+  const h = createSettingsPageHandler({ settings: { read: () => ({}), updateDiscord: async () => {} }, fallback: async () => ({ status: 299 }) });
+  const html = (await h({ url: "/settings" })).body;
+  assert.match(html, /<h2 id="h-startup">Start at login<\/h2>/);
+  assert.match(html, /id="startup-enabled"> Start NowPlaying when I sign in/);
+  assert.doesNotMatch(html, /sign in to Windows|<h2 id="h-startup">Windows/);
+  const { node, requests } = await page({ available: true, startWithWindows: false, shortcutBroken: true });
+  assert.match(node("drpp-autostart-result").textContent, /entry needs repair/);
+  assert.match(node("startup-result").textContent, /entry needs repair/);
+  assert.doesNotMatch(node("startup-result").textContent + node("drpp-autostart-result").textContent, /Windows|shortcut/);
+  node("drpp-autostart").checked = true;
+  await node("drpp-autostart").listeners.change();
+  assert.equal(node("startup-enabled").checked, true);
+  assert.deepEqual(requests.find((r) => r.method === "PUT").body, { startup: { startWithWindows: true } });
+  assert.equal(node("drpp-autostart-result").textContent, "");
+});

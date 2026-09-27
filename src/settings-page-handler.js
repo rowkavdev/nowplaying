@@ -139,8 +139,8 @@ const PAGE = `<!doctype html>
 </details>
 <details class="drpp-accordion"><summary>Startup Settings</summary>
 <form id="startup-form" hidden>
-<section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
-<p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
+<section aria-labelledby="h-startup"><h2 id="h-startup">Start at login</h2>
+<p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in</label></p>
 <p><button type="submit" id="startup-save">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
@@ -294,20 +294,20 @@ search.addEventListener("input", renderLogs);
 wrap.addEventListener("change", () => { lines.classList.toggle("wrap", wrap.checked); saveLogPreference("logs-wrap-text", wrap.checked); });
 autoScroll.addEventListener("change", () => { saveLogPreference("logs-auto-scroll", autoScroll.checked); renderLogs(); });
 // DRPP AutostartSwitch: lives in the Configuration toolbar and writes the
-// same startup setting as the Windows section. Hidden until the app reports
+// same startup setting as the Startup section. Hidden until the app reports
 // that startup control is available on this install.
 const autostartWrap = document.getElementById("drpp-autostart-wrap");
 const autostartDivider = document.getElementById("drpp-autostart-divider");
 const autostartBox = document.getElementById("drpp-autostart");
 const autostartResult = document.getElementById("drpp-autostart-result");
-// Both startup controls - this switch and the Windows section below - render
+// Both startup controls - this switch and the Startup section below - render
 // from the same returned startup state, so a save in either place leaves the
-// other in sync, including the shortcut-repair note.
+// other in sync, including the entry-repair note.
 function applyStartupState(startup) {
   if (!startup || !startup.available) { autostartWrap.hidden = autostartDivider.hidden = true; return; }
   autostartWrap.hidden = autostartDivider.hidden = false;
   autostartBox.checked = startup.startWithWindows === true;
-  autostartResult.textContent = startup.shortcutBroken ? "Startup shortcut needs repair - use the Windows section below." : "";
+  autostartResult.textContent = startup.shortcutBroken ? "Start-at-login entry needs repair - use the Startup section below." : "";
   const sectionBox = document.getElementById("startup-enabled");
   if (sectionBox) sectionBox.checked = startup.startWithWindows === true;
 }
@@ -648,7 +648,7 @@ function showStartup(s) {
   startup.form.hidden = !s || !s.available;
   if (!s) return;
   startup.enabled.checked = s.startWithWindows;
-  startupSay(s.shortcutBroken ? "Startup shortcut points to another install. Check the box and Save to fix it." : "", s.shortcutBroken ? "warn" : "");
+  startupSay(s.shortcutBroken ? "Start-at-login entry needs repair. Check the box and Save to fix it." : "", s.shortcutBroken ? "warn" : "");
 }
 startup.form.addEventListener("submit", async (event) => {
   event.preventDefault();
