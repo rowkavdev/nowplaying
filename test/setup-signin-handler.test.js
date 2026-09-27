@@ -115,6 +115,27 @@ test("only one provider poll can claim a flow at a time", async () => {
   assert.equal((await post(handler, { action: "poll", flowId: started.flowId })).status, 410);
 });
 
+test("Cancel cannot claim success once a sign-in has started committing", async () => {
+  let release;
+  const pendingSave = new Promise((resolve) => { release = resolve; });
+  const store = fakeStore();
+  const save = store.save;
+  let saving;
+  const startedSaving = new Promise((resolve) => { saving = resolve; });
+  store.save = async (ref, secret) => { saving(); await pendingSave; return save(ref, secret); };
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn: fakeSignIn() });
+  const started = read(await post(handler, { action: "start", provider: "plex" }));
+  const polling = post(handler, { action: "poll", flowId: started.flowId });
+  await startedSaving;
+  const cancelled = await post(handler, { action: "cancel", flowId: started.flowId });
+  assert.equal(cancelled.status, 409);
+  assert.deepEqual(read(cancelled), { error: "signin_in_progress" });
+  assert.deepEqual(read(await post(handler, { action: "poll", flowId: started.flowId })), { error: "poll_in_progress" });
+  release();
+  assert.equal(read(await polling).status, "signed_in");
+  assert.equal(store.saved.length, 1);
+});
+
 test("a provider response arriving after flow expiry cannot save a credential", async () => {
   const store = fakeStore();
   let time = 1000;
