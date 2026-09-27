@@ -181,7 +181,7 @@ test("DRPP setup notice uses the real status API and a working server anchor", a
   assert.match(page, /href="#servers-section"/);
   const script = (await h({url:"/settings.js"})).body;
   assert.match(script, /const state = status.server\?\.state/);
-  assert.match(script, /notice.hidden = state === "connected"/);
+  assert.match(script, /notice.hidden = state === "connected" && !failedServer/);
   assert.match(script, /unconfigured \? "Add a media server to finish setting up\."/);
 });
 
