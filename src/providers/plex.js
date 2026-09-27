@@ -20,7 +20,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   let owner;
   async function isOwner() {
     owner ??= fetchWithTimeout(fetchImpl, `${origin}/accounts`, { headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token } })
-      .then((reply) => reply.ok, () => { owner = undefined; return false; });
+      .then((reply) => { if (!reply.ok) owner = undefined; return reply.ok; }, () => { owner = undefined; return false; });
     return owner;
   }
   async function ownerSession(sessions) {
