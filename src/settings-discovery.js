@@ -24,10 +24,10 @@ export function subnetCandidates(subnet) {
   return Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
 }
 
-export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64 } = {}) {
+export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, localDiscover = discoverLocalServers, hosts = [], signal, timeoutMs = 220, concurrency = 64, onProbeFailure } = {}) {
   if (signal?.aborted) return [];
   if (typeof fetchImpl !== "function" || !Array.isArray(hosts) || hosts.length > 254 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) throw new TypeError("invalid discovery options");
-  const local = await localDiscover({ fetchImpl, timeoutMs: 1200, signal, networkHosts: [] }).catch(() => []);
+  const local = await localDiscover({ fetchImpl, timeoutMs: 2500, signal, networkHosts: [], onProbeFailure }).catch(() => []);
   if (signal?.aborted) return [];
   const jobs = hosts.filter((h) => isPrivateHost(h)).flatMap((host) => {
     // Callers can supply hosts directly, not only via subnetCandidates.
@@ -40,7 +40,7 @@ export async function discoverSettingsServers({ fetchImpl = globalThis.fetch, lo
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
     while (next < jobs.length && !signal?.aborted) {
       const job = jobs[next++];
-      const found = await probeServer(job, fetchImpl, timeoutMs, signal);
+      const found = await probeServer(job, fetchImpl, timeoutMs, signal, onProbeFailure);
       if (found) results.push(found);
     }
   }));
@@ -53,8 +53,9 @@ function isPrivateHost(host) {
   return [a, b, c, d].every((n) => n >= 0 && n <= 255) && (a === 10 || a === 192 && b === 168 || a === 172 && b >= 16 && b <= 31);
 }
 
-async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal) {
+async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProbeFailure) {
   const baseUrl = `${probe.protocol}://${host}:${probe.port}`;
+  const failed = (reason) => onProbeFailure?.({ provider: probe.port === 32400 ? "plex" : probe.port === 4533 ? "navidrome" : "jellyfin_or_emby", baseUrl, reason });
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -62,7 +63,7 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal) {
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const size = Number(response.headers?.get?.("content-length"));
-    if (Number.isFinite(size) && size > MAX_REPLY) return null;
+    if (Number.isFinite(size) && size > MAX_REPLY) { failed("oversize"); return null; }
     // Bound the actual bytes too, even when the peer omits Content-Length.
     const reader = response.body?.getReader?.();
     let text;
@@ -72,17 +73,17 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal) {
         const part = await reader.read();
         if (part.done) break;
         bytes += part.value.byteLength;
-        if (bytes > MAX_REPLY) { await reader.cancel(); return null; }
+        if (bytes > MAX_REPLY) { await reader.cancel(); failed("oversize"); return null; }
         chunks.push(part.value);
       }
       text = Buffer.concat(chunks).toString("utf8");
     } else {
       text = await response.text();
-      if (Buffer.byteLength(text) > MAX_REPLY) return null;
+      if (Buffer.byteLength(text) > MAX_REPLY) { failed("oversize"); return null; }
     }
     const found = probe.classify({ status: response.status, text });
-    if (!found) return null;
+    if (!found) { failed(response.status === 200 ? "unrecognized_response" : "http_status"); return null; }
     return { provider: found.provider, baseUrl, version: typeof found.version === "string" ? found.version.slice(0, 40) : null, ...(found.id && /^[\w-]{1,64}$/.test(found.id) ? { id: found.id } : {}), ...(found.name ? { name: found.name } : {}) };
-  } catch { return null; }
+  } catch { failed(controller.signal.aborted ? "timeout" : "network_error"); return null; }
   finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
 }

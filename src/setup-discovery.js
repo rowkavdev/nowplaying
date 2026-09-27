@@ -18,13 +18,13 @@ export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 32400, path: "/identity", classify: classifyPlex }),
 ]);
 
-export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, discoverPlex = discoverPlexGdm, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT, signal } = {}) {
+export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, discoverPlex = discoverPlexGdm, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT, signal, onProbeFailure } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
   if (signal?.aborted) return [];
   const jobs = probes.map((probe) => ({ host: HOST, probe }));
   for (const host of networkHosts) for (const probe of probes) if (NETWORK_PORTS.includes(probe.port)) jobs.push({ host, probe });
   const [results, lan, plex] = await Promise.all([
-    runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs, signal), signal),
+    runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailure), signal),
     typeof discoverLan === "function" ? discoverLan({ timeoutMs, signal }).catch(() => []) : [],
     typeof discoverPlex === "function" ? discoverPlex({ timeoutMs, signal }).catch(() => []) : [],
   ]);
@@ -79,8 +79,9 @@ export function mergeServers(local, lan) {
   return Object.freeze(merged);
 }
 
-async function runProbe(host, probe, fetchImpl, timeoutMs, signal) {
+async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailure) {
   const baseUrl = `http://${host}:${probe.port}`;
+  const failed = (reason) => onProbeFailure?.({ provider: probe.port === 32400 ? "plex" : probe.port === 4533 ? "navidrome" : "jellyfin_or_emby", baseUrl, reason });
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -89,14 +90,15 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal) {
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const declared = Number(response.headers?.get?.("content-length"));
-    if (Number.isFinite(declared) && declared > MAX_BODY) return null;
+    if (Number.isFinite(declared) && declared > MAX_BODY) { failed("oversize"); return null; }
     const text = await response.text();
-    if (text.length > MAX_BODY) return null;
+    if (text.length > MAX_BODY) { failed("oversize"); return null; }
     const found = probe.classify({ status: response.status, text });
-    if (!found) return null;
+    if (!found) { failed(response.status === 200 ? "unrecognized_response" : "http_status"); return null; }
     const id = cleanId(found.id);
     return Object.freeze({ provider: found.provider, baseUrl, version: cleanVersion(found.version), ...(id ? { id } : {}), ...(found.name ? { name: found.name } : {}) });
   } catch {
+    failed(controller.signal.aborted ? "timeout" : "network_error");
     return null;
   } finally {
     clearTimeout(timer);
