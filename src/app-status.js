@@ -104,7 +104,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       playing: failure ? null : playing,
       servers: serverRows(),
       discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError), ...artworkStatus(discordState?.artwork) }),
-      hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: word(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedState?.lastError ? word(hostedState.lastError) : null }),
+      hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: safeHostedState(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedError(hostedState?.lastError) }),
     });
   }
 
@@ -114,8 +114,12 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   function diagnostics() {
     const s = snapshot();
     const problem = serverProblem(s.servers);
-    const outputs = ["card", ...(s.discord.enabled ? ["discord"] : [])];
-    const health = s.server.state === "connected" && !problem && (!s.discord.enabled || s.discord.state === "ready") ? "healthy" : s.server.state === "starting" ? "starting" : "degraded";
+    const outputs = ["card", ...(s.discord.enabled ? ["discord"] : []), ...(s.hosted.enabled ? ["hosted"] : [])];
+    const serverHealthy = s.server.state === "connected" && !problem;
+    const discordHealthy = !s.discord.enabled || s.discord.state === "ready";
+    const hosting = hostedOutput(s.hosted);
+    const health = serverHealthy && discordHealthy && ["healthy", "disabled"].includes(hosting) ? "healthy"
+      : (s.server.state === "starting" && hosting !== "failed") || (serverHealthy && discordHealthy && hosting === "starting") ? "starting" : "degraded";
     const sensitiveValues = [config.serverUrl, s.server.address, s.server.user, playing?.title, playing?.subtitle].filter((value) => typeof value === "string");
     return createDiagnosticRecord({
       version: s.version ?? undefined,
@@ -124,7 +128,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       enabledOutputs: outputs,
       provider: { type: config.provider, status: s.server.state },
       health,
-      errors: [failure, problem?.reason, s.discord.error].filter((value) => typeof value === "string"),
+      errors: [failure, problem?.reason, s.discord.error, s.hosted.enabled && hosting === "failed" ? `hosted_${s.hosted.error ?? "upload_failed"}` : null].filter((value) => typeof value === "string"),
       sensitiveValues,
       build: build ?? undefined,
     });
@@ -139,7 +143,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     const problem = serverProblem(s.servers);
     const provider = problem ? problem.reason === "unauthorized" ? "authentication_failed" : "unreachable" : s.server.state === "error" ? "unreachable" : s.server.state;
     const discordOutput = !s.discord.enabled ? "disabled" : DISCORD_OUTPUT[s.discord.state] ?? "starting";
-    const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, lastSuccessfulPollAt: lastOkAt, now: now() });
+    const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, hosted: hostedOutput(s.hosted), lastSuccessfulPollAt: lastOkAt, now: now() });
     return Object.freeze({ status: health.status, action: health.action, text: trayText(health, { ...s, server: { ...s.server, state: provider } }) });
   }
 
@@ -154,6 +158,17 @@ function serverProblem(rows) {
     ?? null;
 }
 
+const HOSTED_ERRORS = new Set(["network_error", "upload_failed", "unauthorized", "invalid_registration", "clock_recovery_unavailable", "sequence_recovery_unavailable", "http_error", "clock_skew", "stale_sequence"]);
+const HOSTED_STATES = new Set(["off", "idle", "starting", "connected", "retrying", "unauthorized", "no_credentials", "disconnect_pending"]);
+function safeHostedState(value) { return HOSTED_STATES.has(value) ? value : "unknown"; }
+function hostedError(value) { return HOSTED_ERRORS.has(value) ? value : null; }
+function hostedOutput(hosted) {
+  if (!hosted.enabled) return "disabled";
+  if (hosted.state === "connected") return "healthy";
+  if (hosted.state === "idle" || hosted.state === "starting") return "starting";
+  return "failed";
+}
+
 const DISCORD_OUTPUT = Object.freeze({ ready: "healthy", disconnected: "disabled", off: "disabled", no_app_id: "disabled", degraded: "failed", failed: "failed", closed: "failed" });
 
 function trayText(health, s) {
@@ -163,6 +178,7 @@ function trayText(health, s) {
   if (s.server.state === "authentication_failed") return "NowPlaying: sign-in rejected, run setup";
   if (s.server.state === "unreachable" || s.server.state === "error") return "NowPlaying: can't reach your server";
   if (health.stale) return "NowPlaying: no update from the server lately";
+  if (s.hosted.enabled && hostedOutput(s.hosted) === "failed") return "NowPlaying: hosted card needs attention";
   return "NowPlaying: Discord needs attention";
 }
 
