@@ -17,6 +17,7 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryD
 
   function failed(code) {
     connected = false;
+    lastKey = undefined;
     lastError = code;
     const delay = reconnectDelay(failures, { baseMs: retryDelayMs, maxMs: maxRetryDelayMs });
     const share = Math.min(1, Math.max(0, Number(random()) || 0));
