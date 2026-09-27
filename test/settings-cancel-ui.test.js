@@ -65,6 +65,43 @@ test("commit-phase 409 keeps sign-in visible until the original poll succeeds", 
   assert.match(node("servers-list").children[0].children[0].textContent, /Plex - Me/);
 });
 
+test("switching servers during a credential commit cannot hide the original sign-in", async () => {
+  const { node, fetches, pollTimers } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
+  node("server-url").value = "http://127.0.0.1:32400";
+  node("server-provider").value = "plex";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const start = node("signin-button").click();
+  fetches[1].resolve(json({ status: "pending", flowId: "flow-1", authUrl: "https://app.plex.tv/auth" })); await start;
+  const poll = pollTimers.shift()();
+  node("server-url").value = "http://127.0.0.1:8096";
+  node("server-provider").value = "jellyfin";
+  const switchServer = node("manual-connect").click({ currentTarget: node("manual-connect") });
+  assert.equal(fetches[3].path, "/api/setup/signin");
+  fetches[3].resolve(json({ error: "signin_in_progress" }, false)); await tick();
+  assert.equal(node("signin-title").textContent, "Connect to Plex");
+  assert.match(node("signin-result").textContent, /finishing|still in progress/i);
+  fetches[2].resolve(json({ status: "signed_in", identity: { displayName: "Me" } })); await tick();
+  fetches[4].resolve(json({ servers: [{ provider: "plex", name: "Me", baseUrl: "http://127.0.0.1:32400" }] })); await poll;
+  assert.match(node("servers-list").children[0].children[0].textContent, /Plex - Me/);
+});
+
+test("switching servers waits for successful pre-commit cancellation", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
+  node("server-url").value = "http://127.0.0.1:32400";
+  node("server-provider").value = "plex";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const start = node("signin-button").click();
+  fetches[1].resolve(json({ status: "pending", flowId: "flow-1", authUrl: "https://app.plex.tv/auth" })); await start;
+  node("server-url").value = "http://127.0.0.1:8096";
+  node("server-provider").value = "jellyfin";
+  const switchServer = node("manual-connect").click({ currentTarget: node("manual-connect") });
+  assert.equal(node("signin-title").textContent, "Connect to Plex");
+  fetches[2].resolve(json({ status: "cancelled" })); await tick();
+  assert.equal(node("signin-title").textContent, "Connect to Jellyfin");
+});
+
 test("successful pre-commit cancel hides sign-in only after server acknowledgement", async () => {
   const { node, fetches } = page();
   fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
