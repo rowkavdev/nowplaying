@@ -22,16 +22,21 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   let failure = null;
   let playing = null;
   let inflight = null;
+  let latestPoll = 0;
 
   function record(promise) {
+    const poll = ++latestPoll;
     return promise.then((presence) => {
+      if (poll !== latestPoll) return presence;
       lastPollAt = lastOkAt = now();
       failure = null;
       playing = presence && presence.state !== "idle" ? { state: presence.state, title: text(presence.title), subtitle: text(presence.subtitle) } : null;
       return presence;
     }, (error) => {
-      lastPollAt = now();
-      failure = classifyFailure(error);
+      if (poll === latestPoll) {
+        lastPollAt = now();
+        failure = classifyFailure(error);
+      }
       throw error;
     });
   }
