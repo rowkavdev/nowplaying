@@ -19,13 +19,13 @@ function page() {
     });
     return elements.get(id);
   };
-  const fetches = [];
+  const fetches = []; const pollTimers = [];
   runInNewContext(SERVER_SCRIPT, {
-    document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", append() {} }) },
+    document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", children: [], append(...children) { this.children.push(...children); }, addEventListener() {} }) },
     fetch: (path, options) => { const request = deferred(); fetches.push({ path, options, ...request }); return request.promise; },
-    setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref(); return timer; }, clearTimeout, URL, confirm: () => true, window: { open: () => null },
+    setTimeout: (fn, delay) => { if (delay === 2000) { pollTimers.push(fn); return pollTimers.length; } const timer = setTimeout(fn, delay); timer.unref(); return timer; }, clearTimeout, URL, confirm: () => true, window: { open: () => null },
   });
-  return { node, fetches };
+  return { node, fetches, pollTimers };
 }
 
 test("cancelling manual sign-in restores focus to the Connect button", async () => {
@@ -40,6 +40,43 @@ test("cancelling manual sign-in restores focus to the Connect button", async () 
   node("signin-cancel").click();
   assert.equal(node("signin-panel").hidden, true);
   assert.equal(focused, true, "focus must not remain on a hidden cancel button");
+});
+
+test("commit-phase 409 keeps sign-in visible until the original poll succeeds", async () => {
+  const { node, fetches, pollTimers } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
+  node("server-url").value = "http://127.0.0.1:32400";
+  node("server-provider").value = "plex";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const start = node("signin-button").click();
+  fetches[1].resolve(json({ status: "pending", flowId: "flow-1", authUrl: "https://app.plex.tv/auth" })); await start;
+  const poll = pollTimers.shift()();
+  assert.equal(fetches[2].path, "/api/setup/signin");
+  const cancel = node("signin-cancel").click();
+  assert.equal(fetches[3].path, "/api/setup/signin");
+  assert.equal(node("signin-panel").hidden, false);
+  fetches[3].resolve(json({ error: "signin_in_progress" }, false)); await cancel;
+  assert.equal(node("signin-panel").hidden, false);
+  assert.match(node("signin-result").textContent, /finishing|still in progress/i);
+  fetches[2].resolve(json({ status: "signed_in", identity: { displayName: "Me" } })); await tick();
+  fetches[4].resolve(json({ servers: [{ provider: "plex", name: "Me", baseUrl: "http://127.0.0.1:32400" }] }));
+  await poll;
+  assert.equal(node("signin-panel").hidden, true);
+  assert.match(node("servers-list").children[0].children[0].textContent, /Plex - Me/);
+});
+
+test("successful pre-commit cancel hides sign-in only after server acknowledgement", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
+  node("server-url").value = "http://127.0.0.1:32400";
+  node("server-provider").value = "plex";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const start = node("signin-button").click();
+  fetches[1].resolve(json({ status: "pending", flowId: "flow-1", authUrl: "https://app.plex.tv/auth" })); await start;
+  const cancel = node("signin-cancel").click();
+  assert.equal(node("signin-panel").hidden, false);
+  fetches[2].resolve(json({ status: "cancelled" })); await cancel;
+  assert.equal(node("signin-panel").hidden, true);
 });
 
 test("failed cancel keeps a completed discovery result and never claims cancellation", async () => {
@@ -110,9 +147,9 @@ test("blocked Plex popup leaves a clickable same-origin sign-in link", async () 
   assert.equal(node("signin-open-link").children[0].href, url);
   assert.equal(node("signin-open-link").children[0].target, "_blank");
   assert.equal(node("signin-open-link").children[0].rel, "noopener noreferrer");
-  node("signin-cancel").click();
+  const cancel = node("signin-cancel").click();
   fetches[2].resolve(json({ status: "cancelled" }));
-  await start;
+  await cancel; await start;
   assert.equal(node("signin-open-link").hidden, true);
 });
 
