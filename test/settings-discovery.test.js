@@ -65,3 +65,10 @@ test("directly supplied zero-padded hosts are normalized too", async () => {
   await discoverSettingsServers({ hosts: ["010.0.0.1"], localDiscover: async () => [], fetchImpl: async (url) => { seen = new URL(url).hostname; throw Error("recorded"); } });
   assert.equal(seen, "10.0.0.1");
 });
+
+test("local discovery failure is reported instead of looking like an empty scan", async () => {
+  const failures = [];
+  const servers = await discoverSettingsServers({ localDiscover: async () => { throw Error("failed"); }, fetchImpl: async () => { throw Error("should not probe subnet"); }, onProbeFailure: (failure) => failures.push(failure) });
+  assert.deepEqual(servers, []);
+  assert.deepEqual(failures, [{ provider: "local_discovery", baseUrl: "http://127.0.0.1", reason: "discovery_failed" }]);
+});
