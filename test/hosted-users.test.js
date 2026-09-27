@@ -87,6 +87,28 @@ test("stale PCs expire; replays are refused per device", async () => {
   assert.equal((await service.readUserCardState("RowKav")).state, "idle");
 });
 
+test("concurrent signed-in ingests preserve the newer device state and sequence", async () => {
+  const { redis, now } = setup();
+  let entered, release;
+  const atBarrier = new Promise((resolve) => { entered = resolve; });
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let delayed = false;
+  const controlled = { command: async (args) => {
+    if (args[0] === "EVAL" && args[6] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
+  const { token, deviceId } = await signIn(service);
+  const older = service.ingest({ token, payload: up(now(), { seq: 1, title: "Older" }) });
+  await atBarrier;
+  assert.equal((await service.ingest({ token, payload: up(now(), { seq: 2, title: "Newer" }) })).accepted, true);
+  release();
+  await assert.rejects(older, { status: 409, code: "stale_sequence", details: { lastSeq: 2 } });
+  assert.equal((await service.readUserCardState("RowKav")).title, "Newer");
+  assert.equal(await redis.command(["GET", `np:seq:${deviceId}`]), "2");
+  await assert.rejects(service.ingest({ token, payload: up(now(), { seq: 2, title: "Replay" }) }), { status: 409 });
+});
+
 test("clock skew: order uses server time and progress stays in range", async () => {
   const { service, now, advance } = setup();
   const fast = await signIn(service, "Fast clock");
