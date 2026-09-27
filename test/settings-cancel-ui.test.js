@@ -23,7 +23,7 @@ function page() {
   runInNewContext(SERVER_SCRIPT, {
     document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", append() {} }) },
     fetch: (path, options) => { const request = deferred(); fetches.push({ path, options, ...request }); return request.promise; },
-    setTimeout, clearTimeout, URL, confirm: () => true, window: { open: () => null },
+    setTimeout: (...args) => { const timer = setTimeout(...args); timer.unref(); return timer; }, clearTimeout, URL, confirm: () => true, window: { open: () => null },
   });
   return { node, fetches };
 }
@@ -121,6 +121,23 @@ test("first-run page shows a recovery path when restart rejects", async () => {
   fetches[0].resolve(json({ configured: true, activationFailed: true, servers: [] })); await tick();
   assert.match(node("first-run-state").textContent, /couldn't start/);
   assert.equal(node("activation-recovery").hidden, false);
+});
+
+test("a new successful sign-in retries first-run activation after a failed restart", async () => {
+  const { node, fetches } = page();
+  fetches[0].resolve(json({ configured: true, activationFailed: true, servers: [] })); await tick();
+  assert.match(node("first-run-state").textContent, /couldn't start/);
+  node("server-url").value = "http://127.0.0.1:4533";
+  node("server-provider").value = "navidrome";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const signIn = node("signin-button").click();
+  fetches[1].resolve(json({ status: "signed_in", identity: { displayName: "Me" } }));
+  await tick();
+  assert.equal(fetches[2].path, "/api/settings/servers");
+  fetches[2].resolve(json({ configured: true, activationFailed: false, servers: [] }));
+  await signIn;
+  assert.match(node("first-run-state").textContent, /Starting NowPlaying/);
+  assert.equal(node("activation-recovery").hidden, true);
 });
 
 test("first-run page stops polling with recovery after a startup deadline", async () => {
