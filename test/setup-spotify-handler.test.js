@@ -113,3 +113,92 @@ test("Spotify rollback failure does not claim the draft was the only failure", a
   assert.equal(written, true);
   assert.deepEqual(parse(await handle(post({ action: "poll", flowId: "flow-1" }))), { error: "credential_store_failed" });
 });
+
+test("an expired Spotify completion cannot save a token or update the draft", async () => {
+  let time = 0;
+  const { handle, fake, saved, signedIn } = setup({ now: () => time, flowTtlMs: 1000 });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  time = 1000;
+  assert.equal((await handle(post({ action: "poll", flowId: "flow-1" }))).status, 410);
+  fake.calls[0].resolve(tokens);
+  await settled();
+  assert.deepEqual(saved, []);
+  assert.deepEqual(signedIn, []);
+});
+
+test("a Spotify flow expiring while the keychain read waits cannot save a token", async () => {
+  let time = 0;
+  let finishRead;
+  const saved = [];
+  const signedIn = [];
+  const fake = fakeSignIn();
+  const handle = createSetupSpotifyHandler({
+    now: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
+    credentialStore: {
+      read: () => new Promise((resolve) => { finishRead = resolve; }),
+      save: async (...args) => { saved.push(args); }, remove: async () => {},
+    },
+    onSignedIn: async (...args) => { signedIn.push(args); },
+  });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[0].resolve(tokens);
+  await settled();
+  assert.equal(typeof finishRead, "function");
+  time = 1000;
+  finishRead(null);
+  await settled();
+  assert.equal((await handle(post({ action: "poll", flowId: "flow-1" }))).status, 410);
+  assert.deepEqual(saved, []);
+  assert.deepEqual(signedIn, []);
+});
+
+test("Spotify expiry during credential save restores the prior token and skips the draft", async () => {
+  let time = 0;
+  let finishSave;
+  let stored = "old-token";
+  const signedIn = [];
+  const fake = fakeSignIn();
+  const handle = createSetupSpotifyHandler({
+    now: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
+    credentialStore: {
+      read: async () => stored,
+      save: async (_ref, secret) => {
+        stored = secret;
+        if (secret === "new-token") await new Promise((resolve) => { finishSave = resolve; });
+      },
+      remove: async () => { stored = null; },
+    },
+    onSignedIn: async (...args) => { signedIn.push(args); },
+  });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[0].resolve(tokens);
+  await settled();
+  assert.equal(typeof finishSave, "function");
+  time = 1000;
+  assert.equal((await handle(post({ action: "poll", flowId: "flow-1" }))).status, 410);
+  finishSave();
+  await settled();
+  assert.equal(stored, "old-token");
+  assert.deepEqual(signedIn, []);
+});
+
+test("Spotify expiry during an in-flight draft write waits for the commit outcome", async () => {
+  let time = 0;
+  let finishDraft;
+  const { handle, fake, saved } = setup({
+    now: () => time, flowTtlMs: 1000,
+    onSignedIn: () => new Promise((resolve) => { finishDraft = resolve; }),
+  });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[0].resolve(tokens);
+  await settled();
+  assert.equal(typeof finishDraft, "function");
+  time = 1000;
+  assert.deepEqual(parse(await handle(post({ action: "poll", flowId: "flow-1" }))), { status: "pending" });
+  finishDraft();
+  await settled();
+  assert.deepEqual(parse(await handle(post({ action: "poll", flowId: "flow-1" }))), {
+    status: "signed_in", provider: "spotify", identity: { id: "rowan", displayName: "Rowan" },
+  });
+  assert.equal(saved.length, 1);
+});
