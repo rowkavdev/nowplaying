@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createHostedGitHubSignIn } from "../src/hosted-signin.js";
 import { createHostedCredentials } from "../src/hosted-credentials.js";
 import { createHostedUploader } from "../src/hosted-uploader.js";
+import { createMemoryRedis } from "../hosted/lib/redis.js";
+import { createService } from "../hosted/lib/service.js";
 import { createSetupHostedHandler } from "../src/setup-hosted-handler.js";
 
 const DEV = "d".repeat(22);
@@ -58,6 +60,54 @@ test("an old per-PC key is handed over so its card link keeps working", async ()
   await s.start(); clock += 5000;
   assert.equal((await s.poll()).status, "signed_in");
   assert.equal(gh.calls.find((c) => c.url.endsWith("/api/auth/github")).body.legacyToken, "o".repeat(43));
+});
+
+test("repeat client sign-in replaces the saved device through the hosted service", async () => {
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const now = () => 1_800_000_000_000;
+  const service = createService({ redis: createMemoryRedis({ now }), now, githubUser: async () => ({ id: 101, login: "octo" }) });
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const reply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
+    if (url.endsWith("/login/device/code")) return reply({ device_code: "dc", user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 });
+    if (url.endsWith("/login/oauth/access_token")) return reply({ access_token: "gho_secretsecret" });
+    if (url.endsWith("/api/auth/github")) {
+      requests.push(body);
+      return reply(await service.signInWithGitHub({ ...body, clientKey: "pc" }), 201);
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  let clock = 0;
+  const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl, now: () => clock, deviceName: "This PC" });
+  await signIn.start(); clock += 5000;
+  assert.equal((await signIn.poll()).status, "signed_in");
+  const old = await credentials.load();
+  await service.ingest({ token: old.token, payload: { v: 1, seq: 1, observedAt: now(), state: "playing", kind: "track", title: "Old Private Track" } });
+  await signIn.start(); clock += 5000;
+  assert.equal((await signIn.poll()).status, "signed_in");
+  const current = await credentials.load();
+  assert.notEqual(current.deviceId, old.deviceId);
+  assert.equal(requests[1].previousToken, old.token);
+  assert.equal(requests[1].legacyToken, undefined);
+  assert.deepEqual((await service.listDevices({ token: current.token })).devices.map((d) => [d.deviceId, d.current]), [[current.deviceId, true]]);
+  assert.equal((await service.readUserCardState("octo")).state, "idle");
+  await assert.rejects(service.ingest({ token: old.token, payload: { v: 1, seq: 2, observedAt: now(), state: "playing", title: "Ghost" } }), { status: 401 });
+});
+
+test("failed previous-device replacement leaves the saved credential intact", async () => {
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const old = { login: "octo", deviceId: DEV, token: TOK };
+  await credentials.save(old);
+  const gh = github({ tokenReplies: [{ access_token: "gho_secretsecret" }] });
+  const fetchImpl = async (url, init) => url.endsWith("/api/auth/github")
+    ? { ok: false, status: 409, json: async () => ({ error: "previous_device_missing" }) }
+    : gh.fetchImpl(url, init);
+  let clock = 0;
+  const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl, now: () => clock });
+  await signIn.start(); clock += 5000;
+  assert.equal((await signIn.poll()).status, "hosted_error");
+  assert.deepEqual(await credentials.load(), old);
 });
 
 test("denied, expired and not configured", async () => {

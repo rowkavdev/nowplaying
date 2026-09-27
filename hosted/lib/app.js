@@ -27,7 +27,7 @@ export function createHandlers({ getService }) {
       try {
         const clientKey = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() || req.socket?.remoteAddress || "unknown";
         const body = await readJsonBody(req);
-        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((k) => !["githubToken", "deviceName", "legacyToken"].includes(k))) {
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((k) => !["githubToken", "deviceName", "legacyToken", "previousToken"].includes(k))) {
           return sendJson(res, 400, { error: "invalid_request" });
         }
         sendJson(res, 201, await getService().signInWithGitHub({ ...body, clientKey }));

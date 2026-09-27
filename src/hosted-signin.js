@@ -62,7 +62,7 @@ export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = proc
     const legacy = await credentials.load().catch(() => null);
     let res;
     try {
-      res = await post(`${origin}/api/auth/github`, { githubToken, deviceName: String(deviceName || "PC").slice(0, 40), ...(legacy?.cardId && legacy?.token ? { legacyToken: legacy.token } : {}) });
+      res = await post(`${origin}/api/auth/github`, { githubToken, deviceName: String(deviceName || "PC").slice(0, 40), ...(legacy?.cardId && legacy?.token ? { legacyToken: legacy.token } : {}), ...(legacy?.login && legacy?.token ? { previousToken: legacy.token } : {}) });
     } catch { return { status: "hosted_unreachable" }; }
     const d = res.data;
     if (!res.ok || typeof d?.login !== "string" || typeof d?.deviceId !== "string" || typeof d?.token !== "string") return { status: res.status === 429 ? "rate_limited" : "hosted_error" };
