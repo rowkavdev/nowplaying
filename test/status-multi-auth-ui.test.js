@@ -7,6 +7,39 @@ import { createStatusPageHandler } from "../src/status-page-handler.js";
 
 // Run the real status page script against the real aggregate/per-server status
 // pipeline so a healthy second server cannot mask a revoked first sign-in.
+test("tray and diagnostics flag either revoked server without masking healthy playback", async () => {
+  const config = { provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u1", displayName: "User" }, servers: [
+    { provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u1", displayName: "User" } },
+    { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u2", displayName: "Other" } },
+  ] };
+  for (const failed of [0, 1, null]) {
+    const multi = createMultiServerProvider(config.servers.map((server, index) => ({ server, provider: { getPresence: async () => {
+      if (index === failed) throw Object.assign(new Error("secret token and user detail"), { status: 401 });
+      return { state: "playing", kind: "track", title: "Sensitive Track" };
+    } } })));
+    const status = createAppStatus({ config, platform: "win32" });
+    const provider = status.wrapProvider(multi);
+    status.setServers(() => multi.servers());
+    await provider.getPresence();
+    const snapshot = status.snapshot();
+    assert.equal(snapshot.playing.title, "Sensitive Track");
+    assert.equal(snapshot.servers.filter((row) => row.reason === "unauthorized").length, failed === null ? 0 : 1);
+    const tray = status.tray();
+    const report = status.diagnostics();
+    assert.equal(tray.status, failed === null ? "healthy" : "degraded");
+    assert.equal(report.health, failed === null ? "healthy" : "degraded");
+    if (failed !== null) {
+      assert.equal(tray.action, "test_provider_connection");
+      assert.match(tray.text, /sign-in rejected/);
+      assert.deepEqual(report.errors, ["unauthorized"]);
+    } else assert.deepEqual(report.errors, []);
+    assert.ok(tray.text.length <= 63);
+    for (const secret of ["secret", "token", "Sensitive Track", "127.0.0.1", "User", "Other"]) {
+      assert.equal(JSON.stringify({ tray, report }).includes(secret), false, secret);
+    }
+  }
+});
+
 test("status page tells users to re-sign in when one of two servers returns 401", async () => {
   const config = { provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u1", displayName: "User" }, servers: [
     { provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u1", displayName: "User" } },
