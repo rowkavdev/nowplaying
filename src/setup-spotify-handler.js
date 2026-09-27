@@ -22,10 +22,12 @@ export function createSetupSpotifyHandler({
 
   function prune() {
     const time = now();
-    for (const [id, flow] of flows) if (flow.expiresAt <= time) flows.delete(id);
+    for (const [id, flow] of flows) if (!flow.committing && flow.expiresAt <= time) flows.delete(id);
   }
 
   async function complete(flow, tokens) {
+    // A late OAuth completion must not revive a flow already reported expired.
+    if (flow.expiresAt <= now()) return;
     const identity = tokens?.identity;
     if (typeof tokens?.refreshToken !== "string" || !tokens.refreshToken || typeof identity?.id !== "string" || !identity.id) {
       flow.result = { status: "failed", error: "spotify_failed" };
@@ -42,6 +44,8 @@ export function createSetupSpotifyHandler({
     let previous;
     try { previous = await credentialStore.read(ref); }
     catch { flow.result = { status: "failed", error: "credential_store_failed" }; return; }
+    // Reading a keychain may itself outlast the flow. Check again before writes.
+    if (flow.expiresAt <= now()) return;
     async function restore() {
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
@@ -53,6 +57,15 @@ export function createSetupSpotifyHandler({
       flow.result = { status: "failed", error: "credential_store_failed" };
       return;
     }
+    // The credential save can also cross expiry. Undo it before the draft write.
+    if (flow.expiresAt <= now()) {
+      try { await restore(); }
+      catch { flow.result = { status: "failed", error: "credential_store_failed" }; }
+      return;
+    }
+    // Once the draft write starts it may already be in flight when TTL elapses.
+    // Keep this flow pollable until that write settles rather than reporting 410.
+    flow.committing = true;
     try { await onSignedIn({ clientId: flow.clientId, identity: safeIdentity }); }
     catch {
       try { await restore(); }
@@ -92,7 +105,7 @@ export function createSetupSpotifyHandler({
   function poll(input) {
     if (!onlyKeys(input, ["action", "flowId"]) || typeof input.flowId !== "string") return json(400, { error: "invalid_request" });
     const flow = flows.get(input.flowId);
-    if (!flow || flow.expiresAt <= now()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
+    if (!flow || (!flow.committing && flow.expiresAt <= now())) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
     if (flow.result.status === "pending") return json(200, { status: "pending" });
     flows.delete(input.flowId);
     if (flow.result.status === "signed_in") return json(200, { status: "signed_in", provider: "spotify", identity: flow.result.identity });
