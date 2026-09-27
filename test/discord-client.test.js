@@ -66,6 +66,27 @@ test("backs off exponentially up to the cap and resets once Discord answers", as
   await client.close(); assert.equal(client.status().state, "closed");
 });
 
+test("failed publish invalidates dedupe so an unchanged prior activity reconnects", async () => {
+  let time = 0, fail = false;
+  const t = transport({ setActivity: async (activity) => {
+    t.calls.push(["set", activity]);
+    if (fail) throw new Error("Discord RPC failed");
+  } });
+  const client = createDiscordClient({ transport: t, retryDelayMs: 100, minUpdateIntervalMs: 0,
+    jitter: 0, now: () => time });
+  const first = { details: "A" };
+  assert.equal(await client.publish(first), true);
+  fail = true;
+  assert.equal(await client.publish({ details: "B" }), false);
+  assert.equal(client.status().state, "degraded");
+  assert.equal(await client.publish(first), false, "backoff still applies to the old key");
+  time = 100;
+  fail = false;
+  assert.equal(await client.publish(first), true);
+  assert.deepEqual(t.calls, ["connect", ["set", first], ["set", { details: "B" }], "connect", ["set", first]]);
+  assert.equal(client.status().state, "ready");
+});
+
 test("rejects a retry cap below the first delay", () => {
   assert.throws(() => createDiscordClient({ transport: transport(), retryDelayMs: 1000, maxRetryDelayMs: 500 }), RangeError);
 });
