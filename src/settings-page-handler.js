@@ -17,6 +17,11 @@ const PAGE = `<!doctype html>
 </header><div class="drpp-columns"><main class="drpp-config">
 <div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider"></span><span>Launch on startup: see Windows below</span></div>
 <div class="drpp-config-scroll">
+<div class="drpp-setup" id="drpp-setup" role="status" aria-live="polite" hidden>
+<div class="drpp-setup-title"><span aria-hidden="true">⚠</span><strong id="drpp-setup-title">Setup Incomplete</strong></div>
+<p id="drpp-setup-message">Add a media server to finish setting up.</p>
+<a href="#servers-section" id="drpp-setup-action">Add Server</a>
+</div>
 <details class="drpp-accordion" open><summary>Media servers</summary>${serverPanel()}</details>
 <details class="drpp-accordion"><summary>Connected services</summary>${servicePanel()}</details>
 <details class="drpp-accordion"><summary>Discord Settings</summary>
@@ -193,6 +198,9 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 .drpp-columns{display:flex;height:calc(100vh - 79px);min-height:0}.drpp-config,.drpp-logs{width:50%;min-width:0;display:flex;flex-direction:column}
 .drpp-config{max-width:none;padding:0;margin:0;border-right:1px solid #373a40}.drpp-panel-heading{padding:16px;min-height:69px;border-bottom:1px solid #373a40;flex:none}
 .drpp-config-scroll,.drpp-log-lines{overflow:auto;min-height:0;flex:1}.drpp-config-scroll{padding:16px}.drpp-port-note{color:#909296;margin:0 0 16px}
+.drpp-config .drpp-setup[hidden]{display:none}.drpp-config .drpp-setup{width:min(100%,305px);border:1px solid #373a40;border-radius:4px;padding:16px;margin:0 0 16px;color:#c1c2c5}
+.drpp-setup-title{display:flex;align-items:center;gap:8px}.drpp-setup-title span{color:#ffa552}.drpp-setup p{margin:8px 0 12px}.drpp-setup a{display:block;background:#1971c2;color:white!important;padding:7px 12px;border-radius:4px;text-align:center;text-decoration:none;font-weight:600}
+.drpp-setup a:hover{background:#1864ab}
 .drpp-config .drpp-accordion[hidden]{display:none}.drpp-config .drpp-accordion{display:block;margin:0 0 16px;background:#242424;border:1px solid #373a40;border-radius:4px;padding:0}
 .drpp-config .drpp-accordion>summary{cursor:pointer;list-style:none;padding:12px 16px;color:#f1f3f5;font-weight:500;display:flex;align-items:center;justify-content:space-between}
 .drpp-config .drpp-accordion>summary::-webkit-details-marker{display:none}.drpp-config .drpp-accordion>summary::after{content:"⌄";font-size:18px;line-height:1;color:#909296}.drpp-config .drpp-accordion[open]>summary::after{content:"⌃"}
@@ -259,10 +267,23 @@ search.addEventListener("input", renderLogs);
 wrap.addEventListener("change", () => lines.classList.toggle("wrap", wrap.checked));
 autoScroll.addEventListener("change", renderLogs);
 async function refreshVersion() {
-  try { const res = await fetch("/api/status", { cache: "no-store" }); if (res.ok) document.getElementById("drpp-version").textContent = "Version: v" + (await res.json()).version; }
-  catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
+  try {
+    const res = await fetch("/api/status", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    const status = await res.json();
+    document.getElementById("drpp-version").textContent = "Version: v" + status.version;
+    const notice = document.getElementById("drpp-setup");
+    const state = status.server?.state;
+    notice.hidden = state === "connected";
+    if (!notice.hidden) {
+      const unconfigured = !status.server?.type || state === "safe_mode";
+      document.getElementById("drpp-setup-title").textContent = unconfigured ? "Setup Incomplete" : "Server Needs Attention";
+      document.getElementById("drpp-setup-message").textContent = unconfigured ? "Add a media server to finish setting up." : "Check the media server connection below.";
+      document.getElementById("drpp-setup-action").textContent = unconfigured ? "Add Server" : "Check Server";
+    }
+  } catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
 }
-refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000);
+refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(refreshVersion, 15000);
 `;
 
 const SCRIPT = `"use strict";
