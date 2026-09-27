@@ -254,7 +254,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     await cmd("DEL", `np:dseen:${device.deviceId}`);
   }
 
-  async function signInWithGitHub({ githubToken, deviceName, legacyToken, clientKey = "unknown" } = {}) {
+  async function signInWithGitHub({ githubToken, deviceName, legacyToken, previousToken, clientKey = "unknown" } = {}) {
     const bucket = `np:rl:signin:${hashToken(String(clientKey)).slice(0, 32)}`;
     await cmd("SET", bucket, "0", "EX", 3600, "NX");
     if (await cmd("INCR", bucket) > SIGNINS_PER_HOUR) throw new ServiceError(429, "rate_limited");
@@ -273,6 +273,20 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     await cmd("SET", `np:user:${userId}`, JSON.stringify({ login, createdAt: user?.createdAt ?? now() }));
 
     let devices = await readDevices(userId);
+    if (previousToken !== undefined) {
+      if (typeof previousToken !== "string" || previousToken.length < 20 || previousToken.length > 128) throw new ServiceError(400, "invalid_previous_token");
+      const previousHash = hashToken(previousToken);
+      const previousRaw = await cmd("GET", `np:tok:${previousHash}`);
+      if (!previousRaw) throw new ServiceError(409, "previous_device_missing");
+      const previous = JSON.parse(previousRaw);
+      if (previous.userId !== userId) throw new ServiceError(403, "previous_device_mismatch");
+      const prior = devices.find((d) => d.deviceId === previous.deviceId && d.tokenHash === previousHash);
+      if (!prior) throw new ServiceError(409, "previous_device_mismatch");
+      // Invalidate before deleting playback so a delayed ingest cannot restore it.
+      await dropDevice(prior);
+      devices = devices.filter((d) => d !== prior);
+      await writeDevices(userId, devices);
+    }
     while (devices.length >= MAX_DEVICES_PER_USER) {
       // Full: the device quiet for longest makes room.
       const seen = await Promise.all(devices.map(async (d) => Number(await cmd("GET", `np:dseen:${d.deviceId}`) ?? d.createdAt ?? 0)));

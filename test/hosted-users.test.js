@@ -184,6 +184,37 @@ test("device list, rename, remove, sign out this PC and everywhere", async () =>
   await assert.rejects(service.listDevices({ token: desk.token }), { status: 401 });
 });
 
+test("same-PC sign-in replaces its prior signed-in device and clears old playback", async () => {
+  const { service, redis, now } = setup();
+  const old = await signIn(service, "This PC");
+  const secondPc = await signIn(service, "Other PC");
+  await service.ingest({ token: old.token, payload: up(now(), { title: "Old Private Track" }) });
+  assert.equal((await service.readUserCardState("RowKav")).title, "Old Private Track");
+  const replacement = await signIn(service, "This PC", { previousToken: old.token });
+  const list = (await service.listDevices({ token: replacement.token })).devices;
+  assert.deepEqual(list.map((d) => d.name), ["Other PC", "This PC"]);
+  assert.equal(list.find((d) => d.current)?.deviceId, replacement.deviceId);
+  assert.equal((await service.readUserCardState("RowKav")).state, "idle");
+  assert.equal(await redis.command(["GET", `np:dstate:${old.deviceId}`]), null);
+  await assert.rejects(service.ingest({ token: old.token, payload: up(now()) }), { status: 401 });
+  await service.ingest({ token: replacement.token, payload: up(now(), { title: "New Track" }) });
+  assert.equal((await service.readUserCardState("RowKav")).title, "New Track");
+  await service.ingest({ token: replacement.token, payload: up(now(), { state: "idle" }) });
+  assert.equal((await service.readUserCardState("RowKav")).state, "idle");
+  await service.ingest({ token: secondPc.token, payload: up(now(), { title: "Other PC Track" }) });
+  assert.equal((await service.readUserCardState("RowKav")).title, "Other PC Track");
+});
+
+test("same-PC replacement cannot retire a different GitHub user's device", async () => {
+  const { service, now } = setup();
+  const other = await service.signInWithGitHub({ githubToken: "gho_other000000000", deviceName: "Other user" });
+  await service.ingest({ token: other.token, payload: up(now(), { title: "Other user track" }) });
+  await assert.rejects(signIn(service, "This PC", { previousToken: other.token }), { status: 403, code: "previous_device_mismatch" });
+  assert.equal((await service.readUserCardState("someone")).title, "Other user track");
+  await service.ingest({ token: other.token, payload: up(now(), { title: "Still authorized" }) });
+  await assert.rejects(signIn(service, "This PC", { previousToken: "x".repeat(43) }), { status: 409, code: "previous_device_missing" });
+});
+
 test("an old per-PC card link becomes an alias for the user's card", async () => {
   const { service, now } = setup();
   const old = await service.register({ clientKey: "legacy" });

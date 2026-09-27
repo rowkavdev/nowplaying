@@ -13,7 +13,7 @@ What it never does:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/register` | Create an opaque card ID, device ID and device token. Rate limited per client. |
-| `POST` | `/api/auth/github` | Body `{ githubToken, deviceName?, legacyToken? }`. Signs this PC in to the GitHub user's card. The GitHub token is checked once with `api.github.com/user` and never stored. Returns `{ login, deviceId, token, cardPath }`. Passing an old per-PC `legacyToken` makes that old card link show the user's card. Rate limited per client. |
+| `POST` | `/api/auth/github` | Body `{ githubToken, deviceName?, legacyToken?, previousToken? }`. Signs this PC in to the GitHub user's card. The GitHub token is checked once with `api.github.com/user` and never stored. Returns `{ login, deviceId, token, cardPath }`. Passing an old per-PC `legacyToken` makes that old card link show the user's card. Passing the current signed-in `previousToken` replaces this PC's device for the same GitHub user, revoking its old key and playback; another user's key is rejected. Rate limited per client. |
 | `GET` / `POST` | `/api/devices` | `Authorization: Bearer <device token>` of a signed-in PC. `GET` lists the user's PCs; `POST { action: "rename", deviceId?, name }`, `{ action: "remove", deviceId }` or `{ action: "remove-all" }`. |
 | `POST` | `/api/ingest` | `Authorization: Bearer <device token>`. Push one state update (schema below). |
 | `POST` / `DELETE` | `/api/revoke` | Delete the device token and any stored state. |
