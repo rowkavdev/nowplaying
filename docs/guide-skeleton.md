@@ -58,13 +58,12 @@ _Phase 2 prose pending: application/client setup screenshots, buttons, troublesh
 <!-- guide-path: hosted-card -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run hosted-card`.
 
-Scope: local renderer and committed-gallery checks only. The harness renders through `src/card.js` and compares `docs/assets/cards/`; it does not exercise the hosted HTTP service (`hosted/`).
+Walkthrough outline (each entry is asserted by the named harness step over real HTTP against the hosted service):
 
-Walkthrough outline (each entry is asserted by the named harness step):
+1. Register a card, then push privacy-filtered playback state with the upload token (harness step: register-and-ingest).
+2. Music, paused, TV episode and movie states all render through `GET /card/<id>.svg` (harness step: render-states-over-http).
+3. Unchanged cards answer 304 to a matching ETag (harness step: cache-behavior).
+4. Replayed sequences and tokenless uploads are rejected (harness step: stale-and-anonymous-rejected).
+5. Disconnect deletes the uploaded state; the card stops serving media (harness step: disconnect-delete).
 
-1. Every documented card state renders with its media title (harness step: render-all-states).
-2. The same playback state renders byte-identical output (harness step: deterministic-output).
-3. The committed gallery in `docs/assets/cards/` always matches the shipped renderer (harness step: gallery-in-sync).
-4. Card markup never embeds credentials (harness step: no-secrets-in-markup).
-
-_Phase 2 prose pending: privacy field selection, Vercel-hosted and self-hosted setup, README Markdown, cache/stale behavior, disconnect/delete._
+_Phase 2 prose pending: privacy field selection, Vercel-hosted and self-hosted setup, README Markdown, stale/expiry timing._
