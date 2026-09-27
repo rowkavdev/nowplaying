@@ -116,6 +116,26 @@ test("successful pre-commit cancel hides sign-in only after server acknowledgeme
   assert.equal(node("signin-panel").hidden, true);
 });
 
+test("Cancel before provider start returns cannot open a late sign-in", async () => {
+  const { node, fetches, pollTimers } = page();
+  fetches[0].resolve(json({ servers: [], firstRun: false })); await tick();
+  node("server-url").value = "http://127.0.0.1:32400";
+  node("server-provider").value = "plex";
+  node("manual-connect").click({ currentTarget: node("manual-connect") });
+  const start = node("signin-button").click();
+  assert.equal(fetches[1].path, "/api/setup/signin");
+  const cancel = node("signin-cancel").click(); await cancel;
+  assert.equal(node("signin-panel").hidden, true);
+  fetches[1].resolve(json({ status: "pending", flowId: "late-flow", authUrl: "https://app.plex.tv/auth" }));
+  await start;
+  assert.equal(node("signin-panel").hidden, true);
+  assert.equal(node("signin-open-link").hidden, true);
+  assert.equal(pollTimers.length, 0);
+  assert.equal(fetches[2].path, "/api/setup/signin");
+  assert.match(fetches[2].options.body, /"action":"cancel"/);
+  fetches[2].resolve(json({ status: "cancelled" }));
+});
+
 test("failed cancel keeps a completed discovery result and never claims cancellation", async () => {
   const { node, fetches } = page();
   fetches[0].resolve(json({ servers: [], firstRun: true })); await tick();
