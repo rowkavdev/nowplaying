@@ -120,3 +120,54 @@ test("Spotify disconnect reports OS keychain removal failure without keeping con
   assert.deepEqual(JSON.parse(result.body),{removed:true,tokenRemoved:false});
   assert.equal(JSON.parse(await readFile(file,"utf8")).spotify,undefined);
 });
+
+test("Spotify Disconnect invalidates a pending sign-in before it can reconnect", async () => {
+  const file = await configFile();
+  await writeFile(file, serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true,
+    spotify: { clientId: CID, identity: { id: "rowan", displayName: "Rowan" } } }));
+  let finish;
+  const writes = [];
+  const svc = createSettingsConnectedServices({ file,
+    credentialStore: { read: async () => null, save: async (...args) => { writes.push(["save", ...args]); }, remove: async (...args) => { writes.push(["remove", ...args]); return true; } },
+    spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }),
+  });
+  const started = await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
+  const flowId = JSON.parse(started.body).flowId;
+  const disconnected = await svc.handler(post("/api/settings/services", { action: "remove-spotify" }));
+  assert.equal(disconnected.status, 200);
+  finish({ refreshToken: "new-secret", identity: { id: "rowan", displayName: "Rowan" } });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await svc.handler(post("/api/setup/spotify", { action: "poll", flowId }))).status, 410);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).spotify, undefined);
+  assert.deepEqual(writes.map(([action]) => action), ["remove"]);
+});
+
+test("Spotify Disconnect waits for a draft write already in flight", async () => {
+  const file = await configFile();
+  await writeFile(file, serializeSetupConfig({ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "R" }, credentialStored: true,
+    spotify: { clientId: CID, identity: { id: "rowan", displayName: "Rowan" } } }));
+  let finish, releaseUpdate, updateStarted;
+  const startedUpdate = new Promise((resolve) => { updateStarted = resolve; });
+  const writes = [];
+  const settingsStore = { updateSpotify: async (account) => {
+    if (account) { updateStarted(); await new Promise((resolve) => { releaseUpdate = resolve; }); }
+    const config = JSON.parse(await readFile(file, "utf8"));
+    if (account) config.spotify = account; else delete config.spotify;
+    await writeFile(file, JSON.stringify(config));
+  } };
+  const svc = createSettingsConnectedServices({ file, settingsStore,
+    credentialStore: { read: async () => null, save: async (...args) => { writes.push(["save", ...args]); }, remove: async (...args) => { writes.push(["remove", ...args]); return true; } },
+    spotifySignIn: ({ openUrl }) => new Promise((resolve) => { finish = resolve; openUrl("https://accounts.spotify.com/authorize"); }),
+  });
+  await svc.handler(post("/api/setup/spotify", { action: "start", clientId: CID }));
+  finish({ refreshToken: "new-secret", identity: { id: "rowan", displayName: "Rowan" } });
+  await startedUpdate;
+  let disconnected = false;
+  const pending = svc.handler(post("/api/settings/services", { action: "remove-spotify" })).then(() => { disconnected = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(disconnected, false);
+  releaseUpdate();
+  await pending;
+  assert.equal(JSON.parse(await readFile(file, "utf8")).spotify, undefined);
+  assert.deepEqual(writes.map(([action]) => action), ["save", "remove"]);
+});

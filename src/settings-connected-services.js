@@ -14,6 +14,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
   if (!file || typeof credentialStore?.save !== "function") throw new TypeError("Spotify credential store required");
   const store = settingsStore ?? createAppSettingsStore({ file });
   let pendingSpotify = null;
+  let removingSpotify = false;
   let pendingHosted = null;
   let activeHostedUrl = null;
   let hostedSigningIn = false;
@@ -54,6 +55,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     const site = request.headers?.["sec-fetch-site"];
     if (site !== undefined && !SAFE.has(String(site).toLowerCase())) return json(403, { error: "forbidden" });
     if (path === "/api/setup/spotify") {
+      if (removingSpotify && request.method === "POST") return json(409, { error: "disconnect_in_progress" });
       const result = await spotify(request);
       if (request.method === "POST" && result?.status === 200) {
         let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
@@ -96,18 +98,23 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     if (request.method !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "GET, POST" });
     let input; try { input = JSON.parse(request.body ?? "{}"); } catch { return json(400, { error: "invalid_json" }); }
     if (input?.action === "remove-spotify" && Object.keys(input).length === 1) {
-      const config = await current();
-      if (config?.spotify) await store.updateSpotify(null);
-      pendingSpotify = null;
-      // Remove the saved refresh token. Config is removed first, so a failed
-      // keychain delete cannot make the app keep using it.
-      let tokenRemoved = !config?.spotify;
-      if (config?.spotify && typeof credentialStore.remove === "function") {
-        try { tokenRemoved = await credentialStore.remove(config.spotify.credentialRef); }
-        catch { tokenRemoved = false; }
-      }
-      restart();
-      return json(200, { removed: true, tokenRemoved });
+      if (removingSpotify) return json(409, { error: "disconnect_in_progress" });
+      removingSpotify = true;
+      try {
+        await spotify.cancelPending();
+        const config = await current();
+        if (config?.spotify) await store.updateSpotify(null);
+        pendingSpotify = null;
+        // Remove the saved refresh token. Config is removed first, so a failed
+        // keychain delete cannot make the app keep using it.
+        let tokenRemoved = !config?.spotify;
+        if (config?.spotify && typeof credentialStore.remove === "function") {
+          try { tokenRemoved = await credentialStore.remove(config.spotify.credentialRef); }
+          catch { tokenRemoved = false; }
+        }
+        restart();
+        return json(200, { removed: true, tokenRemoved });
+      } finally { removingSpotify = false; }
     }
     return json(400, { error: "invalid_request" });
   }
