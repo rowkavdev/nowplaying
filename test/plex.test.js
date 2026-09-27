@@ -52,6 +52,35 @@ test("returns idle when no matching session exists", async () => {
   assert.equal(presence.state, "idle");
 });
 
+test("retries an uncertain Plex owner lookup after a transient HTTP failure", async () => {
+  let accountCalls = 0;
+  const provider = createPlexProvider({ baseUrl: "http://plex.test", token: "secret",
+    fetchImpl: async (url) => url.endsWith("/accounts")
+      ? { ok: ++accountCalls > 1, status: accountCalls === 1 ? 503 : 200 }
+      : { ok: true, json: async () => ({ MediaContainer: { Metadata: [
+        { title: "Owner track", type: "track", User: { id: "1" }, Player: { state: "playing" } },
+      ] } }) },
+  });
+  assert.equal((await provider.getPresence({ userId: "plex-tv-id" })).state, "idle");
+  assert.equal((await provider.getPresence({ userId: "plex-tv-id" })).title, "Owner track");
+  assert.equal((await provider.getPresence({ userId: "plex-tv-id" })).title, "Owner track");
+  assert.equal(accountCalls, 2, "a successful owner check is still cached");
+});
+
+test("a shared Plex token never reads the owner's local session", async () => {
+  let calls = 0;
+  const provider = createPlexProvider({ baseUrl: "http://plex.test", token: "shared-token",
+    fetchImpl: async (url) => url.endsWith("/accounts")
+      ? (calls++, { ok: false, status: 401 })
+      : { ok: true, json: async () => ({ MediaContainer: { Metadata: [
+        { title: "Owner's track", type: "track", User: { id: "1" }, Player: { state: "playing" } },
+      ] } }) },
+  });
+  assert.equal((await provider.getPresence({ userId: "shared-user-id" })).state, "idle");
+  assert.equal((await provider.getPresence({ userId: "shared-user-id" })).state, "idle");
+  assert.equal(calls, 2);
+});
+
 test("rejects missing configuration", () => {
   assert.throws(() => createPlexProvider({ baseUrl: "http://plex.test", token: "" }), /Plex token is required/);
   assert.throws(() => createPlexProvider({ baseUrl: "", token: "secret" }), /Plex baseUrl is required/);
