@@ -158,3 +158,17 @@ test("DRPP split shell keeps real NowPlaying controls and safe log endpoint", as
   assert.match(script, /fetch\("\/api\/status"/);
   assert.doesNotMatch(script, /innerHTML/);
 });
+
+
+test("DRPP configuration accordions keep existing form IDs and labels", async () => {
+  const h = handler();
+  const page = (await h({url:"/settings"})).body;
+  for (const title of ["Media servers", "Connected services", "Discord Settings", "Privacy Settings", "Card Settings", "YouTube Settings", "Startup Settings", "Hosted Card Settings", "Hosted Card Devices"]) {
+    assert.match(page, new RegExp(`<summary>${title}</summary>`));
+  }
+  assert.match(page, /<details class="drpp-accordion" open>/);
+  for (const id of ["servers-section", "services-section", "discord-form", "privacy-form", "card-form", "youtube-section", "startup-form", "hosted-form", "hosted-devices"]) {
+    assert.match(page, new RegExp(`id="${id}"`));
+  }
+  assert.match((await h({url:"/settings.js"})).body, /MutationObserver\(syncAccordionVisibility\)/);
+});

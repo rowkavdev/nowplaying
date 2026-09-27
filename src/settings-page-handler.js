@@ -17,8 +17,9 @@ const PAGE = `<!doctype html>
 </header><div class="drpp-columns"><main class="drpp-config">
 <div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider"></span><span>Launch on startup: see Windows below</span></div>
 <div class="drpp-config-scroll">
-${serverPanel()}
-${servicePanel()}
+<details class="drpp-accordion" open><summary>Media servers</summary>${serverPanel()}</details>
+<details class="drpp-accordion"><summary>Connected services</summary>${servicePanel()}</details>
+<details class="drpp-accordion"><summary>Discord Settings</summary>
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
@@ -47,6 +48,8 @@ ${servicePanel()}
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
 </form>
+</details>
+<details class="drpp-accordion"><summary>Privacy Settings</summary>
 <form id="privacy-form" hidden>
 <section aria-labelledby="h-privacy"><h2 id="h-privacy">Privacy</h2>
 <p class="hint">Applies to Discord, the hosted card and your local card.</p>
@@ -60,6 +63,8 @@ ${servicePanel()}
 <p><button type="submit" id="privacy-save">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+</details>
+<details class="drpp-accordion"><summary>Card Settings</summary>
 <form id="card-form" hidden>
 <section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
 <p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save. The hosted card link below uses these settings too, apart from artwork, which the hosted card never shows.</p>
@@ -116,6 +121,8 @@ ${servicePanel()}
 <p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+</details>
+<details class="drpp-accordion"><summary>YouTube Settings</summary>
 <section id="youtube-section" aria-labelledby="h-youtube" hidden><h2 id="h-youtube">YouTube</h2>
 <p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
 <dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
@@ -123,12 +130,16 @@ ${servicePanel()}
 <p class="row"><button type="button" id="youtube-show" aria-pressed="false">Show code</button> <button type="button" id="youtube-copy">Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
 </section>
+</details>
+<details class="drpp-accordion"><summary>Startup Settings</summary>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
 <p><button type="submit" id="startup-save">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+</details>
+<details class="drpp-accordion"><summary>Hosted Card Settings</summary>
 <form id="hosted-form">
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card</h2>
 <p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in, artwork or Discord details. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
@@ -138,12 +149,15 @@ ${servicePanel()}
 <p><button type="submit" id="hosted-save">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
+</details>
 <!-- Hosted card devices (#140): markup only; script and route live in src/hosted-devices.js. -->
+<details class="drpp-accordion"><summary>Hosted Card Devices</summary>
 <section id="hosted-devices" aria-labelledby="h-hosted-devices" hidden><h2 id="h-hosted-devices">Hosted card devices</h2>
 <p class="hint">PCs signed in as <strong id="hosted-devices-login">-</strong> that update your card. The one playing shows on the card.</p>
 <ul id="hosted-devices-list" class="plain"></ul>
 <p><button type="button" id="hosted-devices-everywhere">Sign out everywhere</button> <span id="hosted-devices-result" role="status" aria-live="polite"></span></p>
 </section>
+</details>
 <!-- /Hosted card devices -->
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
 <div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
@@ -179,7 +193,10 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 .drpp-columns{display:flex;height:calc(100vh - 79px);min-height:0}.drpp-config,.drpp-logs{width:50%;min-width:0;display:flex;flex-direction:column}
 .drpp-config{max-width:none;padding:0;margin:0;border-right:1px solid #373a40}.drpp-panel-heading{padding:16px;min-height:69px;border-bottom:1px solid #373a40;flex:none}
 .drpp-config-scroll,.drpp-log-lines{overflow:auto;min-height:0;flex:1}.drpp-config-scroll{padding:16px}.drpp-port-note{color:#909296;margin:0 0 16px}
-.drpp-config section{background:#2e2e2e;border:1px solid #373a40;border-radius:4px;margin:0 0 16px;padding:16px}.drpp-config section h2{margin:0 0 8px}.drpp-config section[hidden],.drpp-config form[hidden]{display:none}
+.drpp-config .drpp-accordion[hidden]{display:none}.drpp-config .drpp-accordion{display:block;margin:0 0 16px;background:#242424;border:1px solid #373a40;border-radius:4px;padding:0}
+.drpp-config .drpp-accordion>summary{cursor:pointer;list-style:none;padding:12px 16px;color:#f1f3f5;font-weight:500;display:flex;align-items:center;justify-content:space-between}
+.drpp-config .drpp-accordion>summary::-webkit-details-marker{display:none}.drpp-config .drpp-accordion>summary::after{content:"⌄";font-size:18px;line-height:1;color:#909296}.drpp-config .drpp-accordion[open]>summary::after{content:"⌃"}
+.drpp-config .drpp-accordion[open]>summary{border-bottom:1px solid #373a40}.drpp-config .drpp-accordion section>h2{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.drpp-config .drpp-accordion section{background:transparent;border:0;border-radius:0;margin:0;padding:16px}.drpp-config section h2{margin:0 0 8px}.drpp-config section[hidden],.drpp-config form[hidden]{display:none}
 .drpp-config .hint,.drpp-config legend,.drpp-config .row label[for],.drpp-config dt,.drpp-config output{color:#909296}.drpp-config a{color:#74c0fc}.drpp-config .preview{border-color:#373a40}
 .drpp-logs .drpp-panel-heading{gap:12px}.drpp-panel-heading label{white-space:nowrap}.drpp-panel-heading input[type=search]{flex:1;min-width:125px}.drpp-panel-heading small{color:#909296;white-space:nowrap}
 .drpp-indicator{width:9px;height:9px;background:#868e96;border-radius:50%;flex:none}.drpp-indicator.connected{background:#7ab8ff}.drpp-indicator.disconnected{background:#ffa552}
@@ -191,6 +208,19 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 const DRPP_SHELL_SCRIPT = `"use strict";
 // A bounded poll of the existing safe JSON log API; DRPP uses SSE, which
 // NowPlaying does not expose. No network request leaves loopback.
+const optionalSections = ["privacy-form", "card-form", "youtube-section", "startup-form", "hosted-devices"];
+function syncAccordionVisibility() {
+  for (const id of optionalSections) {
+    const section = document.getElementById(id);
+    if (section) section.parentElement.hidden = section.hidden;
+  }
+}
+const visibilityObserver = new MutationObserver(syncAccordionVisibility);
+for (const id of optionalSections) {
+  const section = document.getElementById(id);
+  if (section) visibilityObserver.observe(section, { attributes: true, attributeFilter: ["hidden"] });
+}
+syncAccordionVisibility();
 const lines = document.getElementById("drpp-log-lines");
 const indicator = document.getElementById("drpp-log-indicator");
 const search = document.getElementById("drpp-search");
