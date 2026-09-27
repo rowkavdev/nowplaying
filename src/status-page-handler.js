@@ -15,6 +15,8 @@ const PAGE = `<!doctype html>
 <div id="servers-block" hidden><h3>All servers</h3><ul id="servers"></ul></div></section>
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <dl><dt>Status</dt><dd id="discord-state">-</dd><dt>Last update</dt><dd id="discord-last">-</dd></dl></section>
+<section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card upload</h2>
+<dl><dt>Status</dt><dd id="hosted-state">-</dd><dt>Last upload</dt><dd id="hosted-last">-</dd></dl></section>
 <section aria-labelledby="h-card"><h2 id="h-card">Your card</h2>
 <p>Card address: <a id="card-link" href="/card.svg">/card.svg</a></p>
 <p><img id="card" src="/card.svg" alt="Your now playing card" width="480"></p></section>
@@ -43,6 +45,7 @@ button{font:inherit;padding:6px 12px;border:1px solid #888;border-radius:6px;bac
 
 const SCRIPT = `"use strict";
 const SERVER_WORDS = { connected: ["Connected", "ok"], starting: ["Checking...", "warn"], unreachable: ["Can't reach the server", "bad"], authentication_failed: ["Sign-in rejected - run setup again", "bad"], error: ["Server returned an error", "bad"], safe_mode: ["Safe mode - server checks are off. Run setup again from the tray", "warn"] };
+const HOSTED_WORDS = { off: ["Turned off", ""], connected: ["Uploading", "ok"], idle: ["Starting upload...", "warn"], starting: ["Starting upload...", "warn"], retrying: ["Upload failed - retrying. Check your connection or hosted service", "bad"], unauthorized: ["Sign-in rejected - reconnect in Settings", "bad"], no_credentials: ["Not signed in - connect in Settings", "bad"], disconnect_pending: ["Remote deletion pending - retry in Settings", "bad"], unknown: ["Upload status unavailable", "bad"] };
 const DISCORD_WORDS = { ready: ["Connected", "ok"], disconnected: ["Waiting for Discord to open", "warn"], degraded: ["Having trouble reaching Discord", "warn"], closed: ["Stopped", "warn"], off: ["Turned off", ""], no_app_id: ["Not set up", "warn"], failed: ["Couldn't start", "bad"], unknown: ["Unknown", "warn"] };
 function set(id, value, tone) { const el = document.getElementById(id); el.textContent = value ?? "-"; el.className = tone || ""; }
 function ago(iso) {
@@ -65,8 +68,12 @@ async function load() {
     const discord = s.discord.enabled ? (DISCORD_WORDS[s.discord.state] || DISCORD_WORDS.unknown) : DISCORD_WORDS.off;
     const rows = Array.isArray(s.servers) ? s.servers : [];
     const failedServer = rows.length > 1 && rows.some((row) => row.state === "error" || row.state === "unavailable");
-    const healthy = !failedServer && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready");
-    set("summary", healthy ? "Everything is working." : s.server.state === "starting" && !failedServer ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : s.server.state === "starting" && !failedServer ? "warn" : "bad");
+    const hosted = s.hosted && s.hosted.enabled ? (HOSTED_WORDS[s.hosted.state] || HOSTED_WORDS.unknown) : HOSTED_WORDS.off;
+    const hostedStarting = s.hosted && s.hosted.enabled && ["idle", "starting"].includes(s.hosted.state);
+    const hostedHealthy = !s.hosted || !s.hosted.enabled || s.hosted.state === "connected";
+    const healthy = !failedServer && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready") && hostedHealthy;
+    const starting = !failedServer && (s.server.state === "starting" && (hostedHealthy || hostedStarting) || (hostedStarting && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready")));
+    set("summary", healthy ? "Everything is working." : starting ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : starting ? "warn" : "bad");
     set("playing", s.playing ? [s.playing.title, s.playing.subtitle].filter(Boolean).join(" - ") + (s.playing.state === "paused" ? " (paused)" : "") : "Nothing playing");
     set("server-type", s.server.type);
     set("server-address", s.server.address);
@@ -83,6 +90,8 @@ async function load() {
     })));
     set("discord-state", discord[0] + (s.discord.error ? " (" + s.discord.error + ")" : ""), discord[1]);
     set("discord-last", s.discord.enabled ? ago(s.discord.lastPublishedAt) : "-");
+    set("hosted-state", hosted[0], hosted[1]);
+    set("hosted-last", s.hosted && s.hosted.enabled ? ago(s.hosted.lastSuccessAt) : "-");
     set("version", s.version);
     const b = s.build;
     set("build", b ? " - build " + b.commit + ", " + b.channel + ", " + (b.signed ? "signed" : "unsigned") + ", built " + new Date(b.builtAt).toLocaleString() : "");
