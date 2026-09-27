@@ -172,3 +172,15 @@ test("DRPP configuration accordions keep existing form IDs and labels", async ()
   }
   assert.match((await h({url:"/settings.js"})).body, /MutationObserver\(syncAccordionVisibility\)/);
 });
+
+
+test("DRPP setup notice uses the real status API and a working server anchor", async () => {
+  const h = handler();
+  const page = (await h({url:"/settings"})).body;
+  assert.match(page, /id="drpp-setup"[^>]*hidden/);
+  assert.match(page, /href="#servers-section"/);
+  const script = (await h({url:"/settings.js"})).body;
+  assert.match(script, /const state = status.server\?\.state/);
+  assert.match(script, /notice.hidden = state === "connected"/);
+  assert.match(script, /unconfigured \? "Add a media server to finish setting up\."/);
+});
