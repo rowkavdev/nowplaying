@@ -242,9 +242,19 @@ const wrap = document.getElementById("drpp-wrap");
 let entries = [];
 function renderLogs() {
   let match;
-  try { match = search.value ? new RegExp(search.value) : null; error.hidden = true; }
-  catch { error.textContent = "Invalid search expression"; error.hidden = false; return; }
-  const shown = entries.filter((e) => !match || match.test([e.time,e.level,e.component,e.status,e.code].join(" ")));
+  try {
+    const text = search.value.trim();
+    const lastSlash = text.lastIndexOf("/");
+    match = !text ? null : text.startsWith("/") && lastSlash > 0
+      ? new RegExp(text.slice(1, lastSlash), text.slice(lastSlash + 1))
+      : new RegExp(text);
+    error.hidden = true;
+  } catch { error.textContent = "[Search] Invalid search expression"; error.hidden = false; return; }
+  const shown = entries.filter((e) => {
+    if (!match) return true;
+    match.lastIndex = 0; // /g and /y patterns must start at the beginning for every log row.
+    return match.test([e.time, "[" + e.level + "]", "[" + e.component + "]", e.status, e.code].join(" "));
+  });
   count.textContent = shown.length + (shown.length === 1 ? " entry" : " entries") + (shown.length !== entries.length ? " (" + entries.length + " total)" : "");
   lines.replaceChildren(...shown.map((e) => {
     const line = document.createElement("div"); line.className = "drpp-log-line " + (e.level === "warn" || e.level === "error" ? e.level : "");
