@@ -94,6 +94,23 @@ test("handshakes, sets and clears the activity, answers pings, and closes", unix
   }
 });
 
+test("oversized activity rejects asynchronously without leaving a pending waiter", unix, async () => {
+  const discord = await fakeDiscord();
+  const client = createDiscordIpcClient({ paths: [discord.path], timeoutMs: 100 });
+  try {
+    await client.login({ clientId: APP });
+    let oversized;
+    assert.doesNotThrow(() => { oversized = client.setActivity({ details: "x".repeat(70 * 1024) }); });
+    await assert.rejects(oversized, /frame is too large/);
+    assert.equal(discord.frames.filter((frame) => frame.op === OP.FRAME).length, 0, "invalid command is never written");
+    await client.setActivity({ details: "Still connected" });
+    await client.destroy();
+  } finally {
+    await client.destroy();
+    await discord.close();
+  }
+});
+
 test("reports Discord not running, a rejected app id and a rejected command", unix, async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-ipc-"));
   await assert.rejects(createDiscordIpcClient({ paths: [join(dir, "discord-ipc-0")] }).login({ clientId: APP }), /not running/);
