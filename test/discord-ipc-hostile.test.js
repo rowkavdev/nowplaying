@@ -168,3 +168,18 @@ test("overlapping commands resolve by nonce even when replies arrive out of orde
   await client.destroy();
   await discord.close();
 });
+
+test("an oversized activity rejects cleanly and the connection keeps working (#634)", unix, async () => {
+  const { discord, client } = await loggedIn(ready);
+  try {
+    // A synchronous throw here would fail assert.rejects outright.
+    await assert.rejects(client.setActivity({ details: "x".repeat(70 * 1024) }), RangeError);
+    assert.equal(client.connected, true, "the failed command never poisons the socket");
+    await client.setActivity({ details: "Song" });
+    assert.equal(discord.frames.filter((f) => f.payload?.cmd === "SET_ACTIVITY").length, 1, "only the valid activity hit the wire");
+  } finally {
+    // With the waiter leaked, this teardown crashed on an unhandled rejection.
+    await client.destroy();
+    await discord.close();
+  }
+});
