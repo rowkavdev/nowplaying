@@ -7,6 +7,7 @@
 // nothing playing anywhere the first server's result shows, as before, so a
 // one-server setup behaves exactly the same.
 import { classifyFailure } from "./resilient-card.js";
+import { presenceItemKey } from "./presence-identity.js";
 
 export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   if (!Array.isArray(entries) || entries.length < 1) throw new TypeError("servers: expected at least one server");
@@ -25,15 +26,11 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   let nextActivityOrder = 0;
   let inflight = null;
 
-  function itemKey(presence) {
-    return JSON.stringify([presence?.kind ?? null, presence?.title ?? null, presence?.subtitle ?? null]);
-  }
-
   function noteActivity(index, before, presence) {
     const was = before?.state === "ok" ? before.presence : null;
     if (presence?.state !== "playing" && presence?.state !== "paused") return;
     const wasActive = was?.state === "playing" || was?.state === "paused";
-    const newItem = !wasActive || itemKey(was) !== itemKey(presence);
+    const newItem = !wasActive || presenceItemKey(was) !== presenceItemKey(presence);
     const resumed = presence.state === "playing" && was?.state !== "playing";
     if (newItem || resumed) activeOrder[index] = ++nextActivityOrder;
   }

@@ -1,6 +1,7 @@
 import { createSpotifyTokenSource } from "./spotify-auth.js";
 import { createSpotifyProvider } from "./providers/spotify.js";
 import { withProviderBackoff } from "./provider-backoff.js";
+import { presenceItemKey } from "./presence-identity.js";
 
 // Runtime pieces for Spotify (#135).
 
@@ -40,7 +41,7 @@ export function combinePresence({ primary, secondary, prefer = "recent" }) {
   function track(side, result) {
     const value = result.status === "fulfilled" ? result.value : null;
     if (value?.state !== "playing") { started[side] = null; return; }
-    const key = JSON.stringify([value.kind, value.title, value.subtitle]);
+    const key = presenceItemKey(value);
     if (started[side]?.key !== key) started[side] = { key, order: ++nextActivityOrder };
   }
   return Object.freeze({

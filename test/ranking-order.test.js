@@ -56,6 +56,49 @@ test("multi-server: a down server is skipped and wins again once it recovers wit
   assert.equal((await multi.getPresence()).title, "A-new");
 });
 
+test("multi-server: distinct media IDs outrank same-title playback without progress re-bumps (#700)", async () => {
+  const song = (itemId, positionMs = 0, imageTag = "cover-v1") => ({
+    state: "playing", kind: "track", title: "Intro", subtitle: "Same Artist", positionMs,
+    artwork: { provider: "jellyfin", itemId, imageTag, type: "primary" },
+  });
+  const a = { presence: song("album-one-track"), getPresence: async function () { return this.presence; } };
+  const b = { presence: { state: "idle" }, getPresence: async function () { return this.presence; } };
+  const multi = createMultiServerProvider([{ ...serverEntry("jellyfin"), provider: a }, { ...serverEntry("plex"), provider: b }]);
+  await multi.getPresence();
+  b.presence = { state: "playing", kind: "track", title: "Other" };
+  assert.equal((await multi.getPresence()).title, "Other");
+  a.presence = song("album-one-track", 5000, "cover-v2");
+  assert.equal((await multi.getPresence()).title, "Other", "progress and a refreshed image tag do not count as a new item");
+  a.presence = song("album-two-track");
+  assert.equal((await multi.getPresence()).artwork.itemId, "album-two-track", "different media ID wins despite the same display text");
+});
+
+test("combinePresence: a distinct server media ID overtakes Spotify at the same title (#700)", async () => {
+  const server = { value: { state: "playing", kind: "track", title: "Intro", subtitle: "Same Artist", artwork: { provider: "jellyfin", itemId: "one", type: "primary" } }, getPresence: async function () { return this.value; } };
+  const spotify = { value: { state: "idle" }, getPresence: async function () { return this.value; } };
+  const card = combinePresence({ primary: server, secondary: spotify });
+  await card.getPresence();
+  spotify.value = { state: "playing", kind: "track", title: "Other" };
+  assert.equal((await card.getPresence()).title, "Other");
+  server.value = { ...server.value, positionMs: 10000 };
+  assert.equal((await card.getPresence()).title, "Other", "position alone keeps older order");
+  server.value = { ...server.value, artwork: { provider: "jellyfin", itemId: "two", type: "primary" } };
+  assert.equal((await card.getPresence()).artwork.itemId, "two");
+});
+
+test("multi-server: no media item ID falls back to display identity (#700)", async () => {
+  const a = { presence: { state: "playing", kind: "track", title: "Intro", subtitle: "Artist" }, getPresence: async function () { return this.presence; } };
+  const b = { presence: { state: "idle" }, getPresence: async function () { return this.presence; } };
+  const multi = createMultiServerProvider([{ ...serverEntry("plex"), provider: a }, { ...serverEntry("jellyfin"), provider: b }]);
+  await multi.getPresence();
+  b.presence = { state: "playing", kind: "track", title: "Other" };
+  await multi.getPresence();
+  a.presence = { ...a.presence, positionMs: 3000 };
+  assert.equal((await multi.getPresence()).title, "Other");
+  a.presence = { ...a.presence, subtitle: "Another Artist" };
+  assert.equal((await multi.getPresence()).title, "Intro");
+});
+
 test("combinePresence: the most recent starter wins, an unchanged item keeps priority", async () => {
   const server = { value: { state: "playing", kind: "track", title: "Server A" }, getPresence: async function () { return this.value; } };
   const spotify = { value: { state: "idle" }, getPresence: async function () { return this.value; } };
