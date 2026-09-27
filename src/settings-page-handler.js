@@ -23,13 +23,13 @@ const STARTUP_COPY = {
     heading: "Startup",
     label: "Start NowPlaying at login",
     toolbarRepair: "Startup entry needs repair - use the Startup section below.",
-    formRepair: "The saved LaunchAgent points to another install. Check the box and Save to fix it.",
+    formRepair: "The saved LaunchAgent is disabled or was edited. Check the box and Save to repair it.",
   },
   linux: {
     heading: "Startup",
     label: "Start NowPlaying at login",
     toolbarRepair: "Startup entry needs repair - use the Startup section below.",
-    formRepair: "The autostart entry points to another install. Check the box and Save to fix it.",
+    formRepair: "The autostart entry is disabled or was edited. Check the box and Save to repair it.",
   },
 };
 // Unknown platforms get the generic Unix wording - it names no OS.
