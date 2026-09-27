@@ -18,7 +18,7 @@ node scripts/guide-paths.js check-docs    # verify this page against a fresh run
 <!-- guide-path: windows-install -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run windows-install`.
 
-Scope: static artifact and workflow checks only. The harness does not run the installer or any Windows E2E; the manual GUI steps are asserted as checklist coverage of shipped artifacts and release-workflow behavior.
+Beyond the static checks, the guide-drift workflow's `windows-installer-e2e` job silent-installs the real setup exe nightly, proves the installed layout and sign-in shortcut, launches the installed app, then silent-uninstalls and proves removal (`scripts/windows-installer-e2e.js`, same JSONL step shape).
 
 Checklist (each entry is asserted by the named harness step):
 
