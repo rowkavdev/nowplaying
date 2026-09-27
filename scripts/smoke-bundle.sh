@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Smoke-check a built bundle: the launcher must run, and the app must
-# answer on its settings route AS THE BUNDLE'S OWN CHILD PROCESS.
+# Smoke-check a built bundle: the launcher must run, the app must answer on
+# its settings route AS THE BUNDLE'S OWN CHILD PROCESS, and the Info modal
+# routes must serve the packaged project files.
 #
 # Why the ceremony: a hardcoded probe port can already be serving - a
 # stray nowplaying (or anything else) would make a dead bundle look
@@ -32,9 +33,7 @@ ok=0
 for _ in $(seq 1 30); do
   kill -0 "$pid" 2>/dev/null || break
   if curl -fsS "http://127.0.0.1:$port/settings" > /dev/null 2>&1; then
-    if [ "$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" = "$pid" ]; then
-      ok=1
-    fi
+    [ "$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" = "$pid" ] && ok=1
     break
   fi
   sleep 1
@@ -48,3 +47,24 @@ if [ "$ok" != 1 ]; then
   exit 1
 fi
 rm -f "$log"
+
+# Packaged-layout check (#673 review): the Info modal handler reads
+# ../NOTICE, ../README.md and ../LICENSE relative to app/src, so the files
+# must ship next to the app sources or every /api/info/* answers 503. A
+# full configured boot is fatal headless (the OS keychain read fails), so
+# exercise the bundle's own route handler in-process instead.
+bundle_abs="$(cd "$bundle" && pwd)"
+"$bundle_abs/runtime/node" --input-type=module -e "
+import { createSettingsPageHandler } from 'file://$bundle_abs/app/src/settings-page-handler.js';
+const handler = createSettingsPageHandler({
+  settings: { read: async () => ({}), updateDiscord: async () => {} },
+  fallback: () => ({ status: 404, headers: {}, body: 'Not Found' }),
+});
+for (const name of ['NOTICE', 'README.md', 'LICENSE']) {
+  const res = await handler({ method: 'GET', url: '/api/info/' + name, headers: {} });
+  if (res?.status !== 200) {
+    console.error('smoke-bundle.sh: /api/info/' + name + ' answered ' + (res?.status ?? 'nothing'));
+    process.exit(1);
+  }
+}
+"

@@ -30,6 +30,10 @@ cp "$(command -v node)" "$bundle/runtime/node"
 cp -r src scripts package.json "$bundle/app/"
 cp -r node_modules "$bundle/app/node_modules"
 cp NOTICE README.md LICENSE "$bundle/"
+# The Info modal handler reads ../NOTICE, ../README.md and ../LICENSE
+# relative to app/src - they must ship alongside src, as in the Windows
+# bundle, or every /api/info/* answers 503 in the packaged layout.
+cp NOTICE README.md LICENSE "$bundle/app/"
 
 cat > "$bundle/nowplaying" <<'LAUNCH'
 #!/bin/sh

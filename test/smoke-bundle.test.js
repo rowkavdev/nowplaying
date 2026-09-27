@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import http from "node:http";
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,19 +32,28 @@ async function startDecoy() {
   return server;
 }
 
-async function makeBundle({ healthy }) {
+async function makeBundle({ healthy, infoFiles = true }) {
   const dir = await mkdtemp(join(tmpdir(), "nowplaying-smoke-"));
   const bundle = join(dir, "nowplaying");
   await mkdir(join(bundle, "runtime"), { recursive: true });
   await mkdir(join(bundle, "app"), { recursive: true });
   await symlink(process.execPath, join(bundle, "runtime", "node"));
   if (healthy) {
-    // Symlink the real app instead of copying node_modules - the launcher
-    // resolves through the links exactly like the copied bundle.
-    await symlink(join(root, "src"), join(bundle, "app", "src"));
-    await symlink(join(root, "scripts"), join(bundle, "app", "scripts"));
+    // Copy the app like the real build does: Node resolves import.meta.url
+    // through symlinked module paths, so a symlinked src would let the Info
+    // handler find the checkout's own NOTICE/README.md/LICENSE and the
+    // missing-packaged-files case below could never fail. Only
+    // node_modules stays a symlink (module resolution walks up to it).
+    await cp(join(root, "src"), join(bundle, "app", "src"), { recursive: true });
+    await cp(join(root, "scripts"), join(bundle, "app", "scripts"), { recursive: true });
     await symlink(join(root, "node_modules"), join(bundle, "app", "node_modules"));
-    await symlink(join(root, "package.json"), join(bundle, "app", "package.json"));
+    await cp(join(root, "package.json"), join(bundle, "app", "package.json"));
+    if (infoFiles) {
+      // Mirroring the build: the Info modal files ship alongside app/src.
+      for (const name of ["NOTICE", "README.md", "LICENSE"]) {
+        await cp(join(root, name), join(bundle, "app", name));
+      }
+    }
   } else {
     // --version/--help succeed, but "start" dies immediately: the bundle
     // can never serve, however convincingly something else answers.
@@ -82,4 +91,10 @@ test("a healthy bundle passes the smoke while the decoy is up", { skip: !hasTool
   } finally {
     decoy.close();
   }
+});
+
+test("a bundle missing the packaged Info files fails the smoke (#673 review)", { skip: !hasTools, timeout: 60000 }, async () => {
+  const bundle = await makeBundle({ healthy: true, infoFiles: false });
+  const run = spawnSync("bash", [smoke, bundle], { encoding: "utf8" });
+  assert.notEqual(run.status, 0, `smoke accepted a bundle without app-level NOTICE/README.md/LICENSE:\n${run.stdout}\n${run.stderr}`);
 });
