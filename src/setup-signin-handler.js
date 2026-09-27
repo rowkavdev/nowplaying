@@ -94,15 +94,25 @@ export function createSetupSignInHandler({
     if (!onlyKeys(input, ["action", "flowId"]) || !text(input.flowId)) return json(400, { error: "invalid_request" });
     prune();
     const flow = flows.get(input.flowId);
-    if (!flow) return json(410, { error: "expired" });
+    if (!flow || flow.expiresAt <= now()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
+    if (flow.polling) return json(409, { error: "poll_in_progress" });
+    flow.polling = true;
     let result;
     try {
       result = flow.provider === "plex"
         ? await signIn.pollPlexPin({ clientId: deviceId, pinId: flow.pinId })
         : await signIn.pollJellyfinQuickConnect({ baseUrl: flow.baseUrl, secret: flow.secret, deviceId, version });
     } catch (error) {
-      flows.delete(input.flowId);
+      if (flows.get(input.flowId) === flow) flows.delete(input.flowId);
       throw error;
+    } finally {
+      flow.polling = false;
+    }
+    // A cancellation, expiry, or replacement while the provider request was
+    // in flight must not write a credential or update the draft.
+    if (flows.get(input.flowId) !== flow || flow.expiresAt <= now()) {
+      if (flows.get(input.flowId) === flow) flows.delete(input.flowId);
+      return json(410, { error: "expired" });
     }
     if (result.status !== "signed_in") return json(200, { status: "pending" });
     flows.delete(input.flowId);

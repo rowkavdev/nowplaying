@@ -76,6 +76,60 @@ test("Jellyfin: shows the Quick Connect code, stays pending, keeps the secret se
   assert.deepEqual(store.saved, [{ provider: "jellyfin", identityId: "j1", secret: "jf-token" }]);
 });
 
+test("an in-flight provider poll cannot save credentials after cancellation", async () => {
+  for (const provider of ["plex", "jellyfin"]) {
+    const store = fakeStore();
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const done = provider === "plex"
+      ? { status: "signed_in", provider, identity: { id: "7", displayName: "Rowan" }, secret: "token" }
+      : { status: "signed_in", provider, identity: { id: "j7", displayName: "Rowan" }, secret: "token" };
+    const signIn = fakeSignIn({ [provider === "plex" ? "pollPlexPin" : "pollJellyfinQuickConnect"]: async () => pending });
+    let updates = 0;
+    const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn, onSignedIn: async () => { updates++; } });
+    const started = read(await post(handler, { action: "start", provider, baseUrl: "http://127.0.0.1:32400" }));
+    const polling = post(handler, { action: "poll", flowId: started.flowId });
+    assert.deepEqual(read(await post(handler, { action: "cancel", flowId: started.flowId })), { status: "cancelled" });
+    release(done);
+    assert.deepEqual(read(await polling), { error: "expired" });
+    assert.deepEqual(store.saved, []);
+    assert.equal(updates, 0);
+  }
+});
+
+test("only one provider poll can claim a flow at a time", async () => {
+  const store = fakeStore();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let polls = 0;
+  const signIn = fakeSignIn({ pollPlexPin: async () => { polls++; return pending; } });
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn });
+  const started = read(await post(handler, { action: "start", provider: "plex" }));
+  const first = post(handler, { action: "poll", flowId: started.flowId });
+  const second = await post(handler, { action: "poll", flowId: started.flowId });
+  assert.deepEqual(read(second), { error: "poll_in_progress" });
+  assert.equal(polls, 1);
+  release({ status: "signed_in", provider: "plex", identity: { id: "7", displayName: "Rowan" }, secret: "token" });
+  assert.equal(read(await first).status, "signed_in");
+  assert.equal(store.saved.length, 1);
+  assert.equal((await post(handler, { action: "poll", flowId: started.flowId })).status, 410);
+});
+
+test("a provider response arriving after flow expiry cannot save a credential", async () => {
+  const store = fakeStore();
+  let time = 1000;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const signIn = fakeSignIn({ pollPlexPin: async () => pending });
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn, now: () => time, flowTtlMs: 100 });
+  const started = read(await post(handler, { action: "start", provider: "plex" }));
+  const polling = post(handler, { action: "poll", flowId: started.flowId });
+  time += 101;
+  release({ status: "signed_in", provider: "plex", identity: { id: "7", displayName: "Rowan" }, secret: "token" });
+  assert.deepEqual(read(await polling), { error: "expired" });
+  assert.deepEqual(store.saved, []);
+});
+
 test("Emby and Navidrome: password sign-in saves the secret and never echoes the password", async () => {
   const store = fakeStore();
   const signIn = fakeSignIn();
