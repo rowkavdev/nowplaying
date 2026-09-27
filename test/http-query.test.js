@@ -5,7 +5,7 @@ import { createCardHandler, parseCardQuery } from "../src/http-handler.js";
 const query = (value) => parseCardQuery(new URLSearchParams(value));
 
 test("accepts bounded public card options", () => {
-  assert.deepEqual(query("theme=paper&width=560&show=state,progress"), {
+  assert.deepEqual(query("theme=paper&width=560&show=state,progress&t=1800000000000"), {
     theme: "paper",
     width: 560,
     show: { artwork: false, mediaType: false, progress: true, state: true, subtitle: false },
@@ -13,7 +13,7 @@ test("accepts bounded public card options", () => {
 });
 
 test("rejects unknown, duplicate and invalid values", () => {
-  for (const value of ["debug=true", "theme=paper&theme=compact", "theme=x", "width=027", "width=801", "show=state,state", "show=title"]) {
+  for (const value of ["debug=true", "theme=paper&theme=compact", "theme=x", "width=027", "width=801", "show=state,state", "show=title", "t=bad", "t=1", "t=1800000000000&t=1800000000001", "t=1800000000000&debug=true"]) {
     assert.throws(() => query(value), { message: "invalid card query" });
   }
 });

@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppStatus } from "../src/app-status.js";
 import { createStatusPageHandler } from "../src/status-page-handler.js";
+import { createCardHandler } from "../src/http-handler.js";
+import { runInNewContext } from "node:vm";
 
 const config = { provider: "jellyfin", serverUrl: "http://user:pw@192.168.1.5:8096/jf?api_key=secret", identity: { id: "u1", displayName: "Rowan" } };
 
@@ -157,6 +159,39 @@ test("status page, assets and api are served; other paths fall through", async (
   assert.equal(api.headers["Cache-Control"], "no-store");
   assert.equal((await h({ method: "GET", url: "/card.svg?x=1" })).status, 299);
   assert.equal((await h({ method: "HEAD", url: "/" })).body, "");
+});
+
+test("status page's first card refresh loads current SVG without relaxing card options", async () => {
+  const status = createAppStatus({ config });
+  const card = createCardHandler({ resolveCard: async () => `<svg><text>${title}</text></svg>`, cacheControl: "no-store" });
+  const handler = createStatusPageHandler({ status, fallback: card });
+  let title = "Before";
+  const first = await handler({ url: "/card.svg" });
+  assert.equal(first.status, 200);
+  assert.match(first.body, /Before/);
+  const nodes = new Map();
+  const get = (id) => {
+    if (!nodes.has(id)) nodes.set(id, { textContent: "", className: "", hidden: false, src: "", addEventListener() {}, replaceChildren() {} });
+    return nodes.get(id);
+  };
+  let load;
+  const script = (await handler({ url: "/status.js" })).body;
+  runInNewContext(script, {
+    document: { getElementById: get, createElement: () => ({ textContent: "" }) },
+    fetch: async () => ({ ok: true, json: async () => status.snapshot() }),
+    Date: { now: () => 1_800_000_000_000, parse: Date.parse },
+    setInterval: (fn) => { load = fn; },
+    navigator: { clipboard: { writeText: async () => {} } },
+  });
+  assert.equal(typeof load, "function");
+  title = "After";
+  await load(); await load(); await load();
+  assert.equal(get("card").src, "/card.svg?t=1800000000000");
+  const refreshed = await handler({ url: get("card").src });
+  assert.equal(refreshed.status, 200);
+  assert.match(refreshed.body, /After/);
+  assert.equal(refreshed.headers["Cache-Control"], "no-store");
+  assert.equal((await handler({ url: "/card.svg?t=1800000000000&debug=true" })).status, 400);
 });
 
 test("status api refuses cross-site requests and writes", async () => {
