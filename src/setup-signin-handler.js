@@ -117,8 +117,6 @@ export function createSetupSignInHandler({
     } catch (error) {
       if (flows.get(input.flowId) === flow) flows.delete(input.flowId);
       throw error;
-    } finally {
-      flow.polling = false;
     }
     // A cancellation, expiry, or replacement while the provider request was
     // in flight must not write a credential or update the draft.
@@ -126,11 +124,11 @@ export function createSetupSignInHandler({
       if (flows.get(input.flowId) === flow) flows.delete(input.flowId);
       return json(410, { error: "expired" });
     }
-    if (result.status !== "signed_in") return json(200, { status: "pending" });
+    if (result.status !== "signed_in") { flow.polling = false; return json(200, { status: "pending" }); }
     try { return await finish(result, flow.serverUrl,
       () => flows.get(input.flowId) === flow && flow.expiresAt > now(),
       () => { flow.committing = true; }); }
-    finally { if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
+    finally { flow.polling = false; if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
   }
 
   async function password(input) {
