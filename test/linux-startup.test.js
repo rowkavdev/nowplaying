@@ -150,3 +150,32 @@ test("a bare single % on disk (field-code-invalid) reads as broken", async () =>
   await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("100%%", "100%"));
   assert.deepEqual(await startup.status(), { enabled: false, broken: true });
 });
+
+test("reserved ; in an Exec path is quoted per the spec (#672 review)", async () => {
+  const autostartDir = await dir();
+  const startup = createLinuxStartup({ autostartDir, execPath: "/usr/bin/node", args: ["/home/u/a;b/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const text = await readFile(startup.file, "utf8");
+  assert.match(text, /^Exec=\/usr\/bin\/node "\/home\/u\/a;b\/nowplaying\.js" start$/m);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+// Validator-backed: where desktop-file-utils is installed, the written entry
+// must pass the spec validator, not just our own reader.
+import { execFileSync } from "node:child_process";
+
+const hasValidator = (() => {
+  try {
+    execFileSync("sh", ["-c", "command -v desktop-file-validate"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+test("the written entry passes desktop-file-validate", { skip: !hasValidator }, async () => {
+  const autostartDir = await dir();
+  const startup = createLinuxStartup({ autostartDir, execPath: "/usr/bin/node", args: ["/home/u/a;b/100% done/now playing.js", "start"] });
+  await startup.setEnabled(true);
+  execFileSync("desktop-file-validate", [startup.file]);
+});

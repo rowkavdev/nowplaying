@@ -27,7 +27,7 @@ export function xdgAutostartDir({ env = process.env, home = env?.HOME } = {}) {
 // codes (%f, %U, ...) that the launcher expands or rejects.
 function quoteExecArg(arg) {
   const escaped = arg.replaceAll("%", "%%");
-  if (!/[ \t"'\\|><~$&*?#()`]/.test(arg)) return escaped;
+  if (!/[ \t"'\\|><~$&*?#()`;]/.test(arg)) return escaped;
   return `"${escaped.replace(/["`$\\]/g, "\\$&")}"`;
 }
 
