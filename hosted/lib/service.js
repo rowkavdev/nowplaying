@@ -34,9 +34,10 @@ const INGEST_KEYS = new Set(["v", "seq", "observedAt", "state", "kind", "title",
 const TEXT_LIMIT = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
-// Keep the per-device sequence check and card-state write in one Redis action.
+// Keep authorization, per-device sequence check and card-state write in one Redis action.
 // EVAL is atomic on Upstash Redis, including across concurrent function calls.
 export const INGEST_ATOMIC_SCRIPT = `
+if not redis.call('GET', KEYS[4]) then return {-1, -1} end
 local previous = tonumber(redis.call('GET', KEYS[1]) or '-1')
 local incoming = tonumber(ARGV[1])
 if incoming <= previous then return {0, previous} end
@@ -208,8 +209,9 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const seenKey = device.userId ? `np:dseen:${device.deviceId}` : seqKey;
     const receivedAt = now();
     const record = { ...update, receivedAt };
-    const [accepted, lastSeq] = await cmd("EVAL", INGEST_ATOMIC_SCRIPT, 3, seqKey, stateKey, seenKey,
+    const [accepted, lastSeq] = await cmd("EVAL", INGEST_ATOMIC_SCRIPT, 4, seqKey, stateKey, seenKey, `np:tok:${hashToken(token)}`,
       String(update.seq), SEQ_TTL_SECONDS, device.userId ? "1" : "0", JSON.stringify(record), String(receivedAt), STATE_TTL_SECONDS);
+    if (Number(accepted) === -1) throw new ServiceError(401, "unauthorized");
     if (Number(accepted) !== 1) throw new ServiceError(409, "stale_sequence", { lastSeq: Number(lastSeq) });
     await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
@@ -224,9 +226,10 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       await writeDevices(device.userId, devices.filter((d) => d.deviceId !== device.deviceId));
       return { revoked: true };
     }
+    // Invalidate first: no in-flight commit may follow the state deletion.
+    await cmd("DEL", `np:tok:${hashToken(token)}`);
     await cmd("DEL", `np:state:${device.cardId}`);
     await cmd("DEL", `np:seq:${device.deviceId}`);
-    await cmd("DEL", `np:tok:${hashToken(token)}`);
     return { revoked: true };
   }
 
@@ -292,10 +295,10 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       const raw = await cmd("GET", `np:tok:${legacyHash}`);
       const legacy = raw ? JSON.parse(raw) : null;
       if (legacy?.cardId && !legacy.userId) {
+        await cmd("DEL", `np:tok:${legacyHash}`);
         await cmd("SET", `np:alias:${legacy.cardId}`, userId);
         await cmd("DEL", `np:state:${legacy.cardId}`);
         await cmd("DEL", `np:seq:${legacy.deviceId}`);
-        await cmd("DEL", `np:tok:${legacyHash}`);
         aliased = true;
       }
     }

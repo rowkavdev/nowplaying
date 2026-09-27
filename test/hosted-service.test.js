@@ -59,7 +59,7 @@ test("concurrent anonymous ingests cannot let an older sequence overwrite newer 
   const barrier = new Promise((resolve) => { release = resolve; });
   let delayed = false;
   const controlled = { command: async (args) => {
-    if (args[0] === "EVAL" && args[6] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    if (args[0] === "EVAL" && args[7] === "1" && !delayed) { delayed = true; entered(); await barrier; }
     return redis.command(args);
   } };
   const service = createService({ redis: controlled, now });
@@ -74,6 +74,29 @@ test("concurrent anonymous ingests cannot let an older sequence overwrite newer 
   assert.equal(await redis.command(["GET", `np:seq:${deviceId}`]), "2");
   await assert.rejects(service.ingest({ token, payload: update(now(), { seq: 2, title: "Replay" }) }), { status: 409 });
   assert.equal((await service.readCardState(cardId)).title, "Newer");
+});
+
+test("a delayed anonymous ingest cannot restore playback after revocation", async () => {
+  const { redis, now } = setup();
+  let entered, release;
+  const atBarrier = new Promise((resolve) => { entered = resolve; });
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let delayed = false;
+  const controlled = { command: async (args) => {
+    if (args[0] === "EVAL" && !delayed) { delayed = true; entered(); await barrier; }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now });
+  const { cardId, deviceId, token } = await service.register();
+  const pending = service.ingest({ token, payload: update(now(), { title: "Sensitive Track" }) });
+  await atBarrier;
+  assert.deepEqual(await service.revoke({ token }), { revoked: true });
+  assert.equal((await service.readCardState(cardId)).state, "idle");
+  release();
+  await assert.rejects(pending, { status: 401, code: "unauthorized" });
+  assert.equal((await service.readCardState(cardId)).state, "idle");
+  assert.equal(await redis.command(["GET", `np:seq:${deviceId}`]), null);
+  await assert.rejects(service.ingest({ token, payload: update(now(), { seq: 2 }) }), { status: 401 });
 });
 
 test("validation rejects unknown fields, skew, oversize text and bad times", () => {
