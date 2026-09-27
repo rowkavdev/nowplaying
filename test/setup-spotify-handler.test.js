@@ -221,3 +221,32 @@ test("disconnect invalidates a Spotify start awaiting its consent URL", async ()
   await settled();
   assert.equal(readCount, 0);
 });
+
+test("an older overlapping Spotify sign-in cannot overwrite the newer completion (#703)", async () => {
+  let seq = 0;
+  const { handle, fake, values, saved, signedIn } = setup({ newFlowId: () => `flow-${++seq}` });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  fake.calls[1].resolve({ refreshToken: "newer", identity: { id: "rowan", displayName: "Rowan" } });
+  await settled();
+  const newer = await handle(post({ action: "poll", flowId: "flow-2" }));
+  assert.equal(newer.status, 200);
+  assert.equal(parse(newer).status, "signed_in");
+  fake.calls[0].resolve({ refreshToken: "older", identity: { id: "rowan", displayName: "Rowan" } });
+  await settled();
+  const stale = await handle(post({ action: "poll", flowId: "flow-1" }));
+  assert.deepEqual([stale.status, parse(stale)], [410, { error: "expired" }]);
+  assert.equal(values.get("spotify:rowan"), "newer");
+  assert.deepEqual(saved.map(([, secret]) => secret), ["newer"]);
+  assert.equal(signedIn.length, 1);
+});
+
+test("a superseded Spotify sign-in does not pin a flow slot (#703)", async () => {
+  let seq = 0;
+  const { handle } = setup({ newFlowId: () => `flow-${++seq}` });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  const third = await handle(post({ action: "start", clientId: CLIENT_ID }));
+  assert.equal(third.status, 200);
+  assert.equal(parse(third).flowId, "flow-3");
+});
