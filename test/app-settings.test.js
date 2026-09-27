@@ -161,14 +161,14 @@ test("the settings page turns Start with Windows on and off through the shared s
   try {
     const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
     const put = (body) => fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify(body) });
-    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: true, startWithWindows: false });
-    const on = await put({ startup: { startWithWindows: true } });
-    assert.deepEqual([on.status, (await on.json()).startup], [200, { available: true, startWithWindows: true }]);
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: true, enabled: false });
+    const on = await put({ startup: { enabled: true } });
+    assert.deepEqual([on.status, (await on.json()).startup], [200, { available: true, enabled: true }]);
     assert.equal(enabled, true);
-    assert.equal((await put({ startup: { startWithWindows: "yes" } })).status, 400);
-    assert.equal((await put({ startup: { startWithWindows: false, path: "C:\\evil.exe" } })).status, 400);
+    assert.equal((await put({ startup: { enabled: "yes" } })).status, 400);
+    assert.equal((await put({ startup: { enabled: false, path: "C:\\evil.exe" } })).status, 400);
     const before = await readFile(file, "utf8");
-    await put({ startup: { startWithWindows: false } });
+    await put({ startup: { enabled: false } });
     assert.equal(enabled, false);
     assert.equal(await readFile(file, "utf8"), before);
   } finally {
@@ -191,11 +191,11 @@ test("moved Windows install reports a broken shortcut without exposing its path"
     assert.match(await (await fetch(`${app.url}/settings.js`)).text(), /Startup shortcut points to another install/);
     const cookie = page.headers.get("set-cookie").split(";")[0];
     const old = await (await fetch(`${app.url}/api/settings`)).json();
-    assert.deepEqual(old.startup, { available: true, startWithWindows: false, shortcutBroken: true });
+    assert.deepEqual(old.startup, { available: true, enabled: false, broken: true });
     assert.doesNotMatch(JSON.stringify(old.startup), /\\old|\\new|exe/i);
-    const response = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { startWithWindows: true } }) });
+    const response = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { enabled: true } }) });
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).startup, { available: true, startWithWindows: true });
+    assert.deepEqual((await response.json()).startup, { available: true, enabled: true });
   } finally { await app.close(); }
 });
 
@@ -203,8 +203,8 @@ test("Start with Windows is hidden when the build can't offer it", async () => {
   const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" } });
   try {
     const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
-    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: false, startWithWindows: false });
-    const put = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { startWithWindows: true } }) });
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).startup, { available: false, enabled: false });
+    const put = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ startup: { enabled: true } }) });
     assert.equal(put.status, 400);
   } finally {
     await app.close();

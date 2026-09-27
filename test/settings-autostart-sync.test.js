@@ -42,7 +42,7 @@ async function page(startup) {
       if (state.failNextPut) { state.failNextPut = false; return { ok: false, json: async () => ({}) }; }
       const body = JSON.parse(options.body);
       // The real save recreates the shortcut, so a successful save repairs it.
-      if (body.startup) state.startup = { available: true, startWithWindows: body.startup.startWithWindows, shortcutBroken: false };
+      if (body.startup) state.startup = { available: true, enabled: body.startup.enabled, broken: false };
       return ok({ startup: state.startup });
     }
     return ok({ events: [], servers: [], firstRun: false });
@@ -74,24 +74,24 @@ test("toolbar autostart switch loads hidden until startup control is available",
 });
 
 test("toolbar autostart switch shows the current state and the repair note", async () => {
-  const { node } = await page({ available: true, startWithWindows: false, shortcutBroken: true });
+  const { node } = await page({ available: true, enabled: false, broken: true });
   assert.equal(node("drpp-autostart-wrap").hidden, false);
   assert.equal(node("drpp-autostart").checked, false);
   assert.match(node("drpp-autostart-result").textContent, /repair/);
 });
 
 test("a toolbar save syncs the Windows checkbox and clears the repair note", async () => {
-  const { node, requests } = await page({ available: true, startWithWindows: false, shortcutBroken: true });
+  const { node, requests } = await page({ available: true, enabled: false, broken: true });
   node("drpp-autostart").checked = true;
   await node("drpp-autostart").listeners.change();
   const put = requests.find((r) => r.method === "PUT");
-  assert.deepEqual(put.body, { startup: { startWithWindows: true } });
+  assert.deepEqual(put.body, { startup: { enabled: true } });
   assert.equal(node("startup-enabled").checked, true, "Windows section checkbox must follow the toolbar save");
   assert.equal(node("drpp-autostart-result").textContent, "", "repair note must clear once the returned state is repaired");
 });
 
 test("a Windows section save syncs the toolbar switch and clears its repair note", async () => {
-  const { node } = await page({ available: true, startWithWindows: true, shortcutBroken: true });
+  const { node } = await page({ available: true, enabled: true, broken: true });
   assert.equal(node("drpp-autostart").checked, true);
   assert.match(node("drpp-autostart-result").textContent, /repair/);
   node("startup-enabled").checked = false;
@@ -102,7 +102,7 @@ test("a Windows section save syncs the toolbar switch and clears its repair note
 });
 
 test("a failed toolbar save reverts the switch without touching the Windows checkbox", async () => {
-  const { node, state } = await page({ available: true, startWithWindows: false, shortcutBroken: true });
+  const { node, state } = await page({ available: true, enabled: false, broken: true });
   node("drpp-autostart").checked = true;
   state.failNextPut = true;
   await node("drpp-autostart").listeners.change();

@@ -373,21 +373,21 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     return { ...view, state: connection.state ?? "idle", lastSuccessAt: connection.lastSuccessAt ? new Date(connection.lastSuccessAt).toISOString() : null, error: connection.lastError ?? null, cardUrl };
   };
   const startupView = async () => {
-    if (typeof startup?.isEnabled !== "function") return { available: false, startWithWindows: false };
+    if (typeof startup?.isEnabled !== "function") return { available: false, enabled: false };
     try {
       const state = typeof startup.status === "function" ? await startup.status() : { enabled: await startup.isEnabled(), broken: false };
-      return { available: true, startWithWindows: state.enabled, ...(state.broken ? { shortcutBroken: true } : {}) };
+      return { available: true, enabled: state.enabled, ...(state.broken ? { broken: true } : {}) };
     }
-    catch { return { available: false, startWithWindows: false }; }
+    catch { return { available: false, enabled: false }; }
   };
   const settings = Object.freeze({
     read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current), card: cardSettingsView(current) }),
-    // Start with Windows is the Startup-folder shortcut, not config.json:
-    // setup and this page change the same shortcut.
+    // Startup launch is the platform autostart entry, not config.json:
+    // setup and this page change the same entry.
     async updateStartup(changes) {
-      if (!changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).length !== 1 || typeof changes.startWithWindows !== "boolean") throw new TypeError("startup settings: expected startWithWindows");
+      if (!changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).length !== 1 || typeof changes.enabled !== "boolean") throw new TypeError("startup settings: expected enabled");
       if (!startup) throw new TypeError("startup settings: not available");
-      await startup.setEnabled(changes.startWithWindows);
+      await startup.setEnabled(changes.enabled);
     },
     async updateDiscord(changes) {
       const next = await settingsStore.updateDiscord(changes);

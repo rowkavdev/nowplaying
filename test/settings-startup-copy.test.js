@@ -32,7 +32,7 @@ test("linux renders login wording with no Windows references", async () => {
   assert.doesNotMatch(html, /sign in to Windows/);
   assert.doesNotMatch(html, /Windows section/);
   const script = await pageScript("linux");
-  // The API field stays shortcutBroken (#677 scope is the copy), so assert on
+  // The API field stays broken (#677 scope is the copy), so assert on
   // the user-visible phrases only.
   assert.doesNotMatch(script, /Startup shortcut/);
   assert.doesNotMatch(script, /Windows section/);
@@ -102,7 +102,7 @@ async function page(platform, startup) {
   return { node };
 }
 
-const broken = { available: true, startWithWindows: true, shortcutBroken: true };
+const broken = { available: true, enabled: true, broken: true };
 
 test("broken Windows shortcut: toolbar hint and lower form agree on the shortcut wording", async () => {
   const { node } = await page("win32", broken);
