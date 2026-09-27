@@ -1,0 +1,28 @@
+# Drift gate for the tested-examples guide harness (#142 phase 1).
+# Non-blocking until it has a stable week, mirroring the corpus gate's
+# promotion shape: then drop continue-on-error and add the job to required checks.
+name: guide-drift
+on:
+  schedule:
+    - cron: "43 4 * * *"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "scripts/guide-paths.js"
+      - "scripts/render-card-examples.js"
+      - "test/guide-paths.test.js"
+      - "src/providers/**"
+      - "src/discord-*.js"
+      - "src/card.js"
+permissions: {}
+jobs:
+  guide-paths:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: node scripts/guide-paths.js run --all
+      - run: node scripts/guide-paths.js check-docs
