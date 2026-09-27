@@ -3,6 +3,12 @@ name: Rolling development build
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - scripts/build-windows.ps1
+      - scripts/build-posix.sh
+      - scripts/release-notes.js
+      - .github/workflows/beta.yml
   workflow_dispatch:
 
 permissions:
@@ -10,7 +16,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: rolling-development-build
+  group: rolling-development-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,7 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -41,16 +46,6 @@ jobs:
             $name = $_.Name -replace '^nowplaying-v[0-9]+\.[0-9]+\.[0-9]+-', 'nowplaying-dev-'
             if ($name -ne $_.Name) { Rename-Item $_.FullName $name }
           }
-      - name: Checksums
-        shell: pwsh
-        run: |
-          $lines = Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | Sort-Object Name | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)"
-          }
-          # PowerShell's Add-Content writes CRLF on Windows; GNU sha256sum then
-          # treats the CR as part of the asset name. Write UTF-8 with LF only.
-          [IO.File]::WriteAllText((Join-Path (Resolve-Path dist/windows) 'SHA256SUMS'), ($lines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
       - name: Attest development build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
@@ -58,6 +53,109 @@ jobs:
           subject-path: |
             dist/windows/*.exe
             dist/windows/*.zip
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
+          retention-days: 1
+
+  macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev
+      - name: Build macOS ZIP
+        shell: bash
+        run: ./scripts/build-posix.sh macos
+      - name: Attest development build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/macos/*.zip
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos
+          path: dist/macos/*.zip
+          retention-days: 1
+
+  linux:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev
+      - name: Build Linux tarball
+        shell: bash
+        run: ./scripts/build-posix.sh linux
+      - name: Attest development build provenance
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/linux/*.tar.gz
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux
+          path: dist/linux/*.tar.gz
+          retention-days: 1
+
+  # One moving pre-release: the "dev" tag and its release are updated in place
+  # on every push to main, so the releases page shows a single development
+  # build instead of one per merge. It is never marked Latest.
+  release:
+    needs: [windows, macos, linux]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Download platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: '*'
+          path: dist
+          merge-multiple: true
+      - name: Combined checksums
+        shell: bash
+        run: |
+          cd dist
+          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' \) -printf '%f\n' | sort | while IFS= read -r f; do
+            sha256sum "$f"
+          done > SHA256SUMS
+          cat SHA256SUMS
       - name: Name this development build
         shell: bash
         run: |
@@ -102,9 +200,6 @@ jobs:
             cat ranked-changes.md
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' "$GITHUB_REPOSITORY" "$stable_tag" "$GITHUB_SHA"
           } > development-release-notes.md
-      # One moving pre-release: the "dev" tag and its release are updated in place
-      # on every push to main, so the releases page shows a single development
-      # build instead of one per merge. It is never marked Latest.
       - name: Update the development pre-release
         shell: bash
         env:
@@ -113,7 +208,7 @@ jobs:
           set -euo pipefail
           title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          mapfile -t files < <(find dist/windows -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name SHA256SUMS \) | sort)
+          mapfile -t files < <(find dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' -o -name SHA256SUMS \) | sort)
           # Only a 404 means there is no dev release yet. Any other lookup error
           # (rate limit, outage) used to fall through to "create", which moved the
           # tag and then failed with "a release with the same tag name already
