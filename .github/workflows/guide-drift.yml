@@ -26,3 +26,24 @@ jobs:
           node-version: 22
       - run: node scripts/guide-paths.js run --all
       - run: node scripts/guide-paths.js check-docs
+  windows-installer-e2e:
+    if: github.event_name == 'schedule'
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev
+      - name: Build installer
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Installer E2E
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          node scripts/windows-installer-e2e.js "dist/windows/nowplaying-v$version-windows-x64-setup.exe"
