@@ -15,7 +15,7 @@ const PAGE = `<!doctype html>
   <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
   <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" disabled title="Info panel not ported yet">Info (coming soon)</button></div>
 </header><div class="drpp-columns"><main class="drpp-config">
-<div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider"></span><span>Launch on startup: see Windows below</span></div>
+<div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider" id="drpp-autostart-divider" hidden></span><label id="drpp-autostart-wrap" hidden><input type="checkbox" id="drpp-autostart"> Launch app on system startup</label><small id="drpp-autostart-result" role="status" aria-live="polite"></small></div>
 <div class="drpp-config-scroll">
 <div class="drpp-setup" id="drpp-setup" role="status" aria-live="polite" hidden>
 <div class="drpp-setup-title"><span aria-hidden="true">⚠</span><strong id="drpp-setup-title">Setup Incomplete</strong></div>
@@ -266,6 +266,47 @@ async function refreshLogs() {
 search.addEventListener("input", renderLogs);
 wrap.addEventListener("change", () => lines.classList.toggle("wrap", wrap.checked));
 autoScroll.addEventListener("change", renderLogs);
+// DRPP AutostartSwitch: lives in the Configuration toolbar and writes the
+// same startup setting as the Windows section. Hidden until the app reports
+// that startup control is available on this install.
+const autostartWrap = document.getElementById("drpp-autostart-wrap");
+const autostartDivider = document.getElementById("drpp-autostart-divider");
+const autostartBox = document.getElementById("drpp-autostart");
+const autostartResult = document.getElementById("drpp-autostart-result");
+// Both startup controls - this switch and the Windows section below - render
+// from the same returned startup state, so a save in either place leaves the
+// other in sync, including the shortcut-repair note.
+function applyStartupState(startup) {
+  if (!startup || !startup.available) { autostartWrap.hidden = autostartDivider.hidden = true; return; }
+  autostartWrap.hidden = autostartDivider.hidden = false;
+  autostartBox.checked = startup.startWithWindows === true;
+  autostartResult.textContent = startup.shortcutBroken ? "Startup shortcut needs repair - use the Windows section below." : "";
+  const sectionBox = document.getElementById("startup-enabled");
+  if (sectionBox) sectionBox.checked = startup.startWithWindows === true;
+}
+async function loadAutostart() {
+  try {
+    const res = await fetch("/api/settings", { cache: "no-store", headers: { Accept: "application/json" } });
+    if (!res.ok) return;
+    applyStartupState((await res.json()).startup);
+  } catch {}
+}
+autostartBox.addEventListener("change", async () => {
+  const wanted = autostartBox.checked;
+  autostartBox.disabled = true;
+  autostartResult.textContent = "";
+  try {
+    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: wanted } }) });
+    if (!res.ok) throw new Error();
+    applyStartupState((await res.json()).startup);
+  } catch {
+    autostartBox.checked = !wanted;
+    autostartResult.textContent = "Couldn't save. Nothing was changed.";
+  } finally {
+    autostartBox.disabled = false;
+  }
+});
+loadAutostart();
 async function refreshVersion() {
   try {
     const res = await fetch("/api/status", { cache: "no-store" });
@@ -563,7 +604,9 @@ startup.form.addEventListener("submit", async (event) => {
   try {
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: startup.enabled.checked } }) });
     if (!res.ok) throw new Error(String(res.status));
-    showStartup((await res.json()).startup);
+    const updated = (await res.json()).startup;
+    showStartup(updated);
+    applyStartupState(updated);
     startupSay("Saved.", "ok");
   } catch {
     startupSay("Couldn't save. Nothing was changed.", "bad");
