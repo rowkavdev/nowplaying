@@ -80,7 +80,7 @@ Every dev build also ships `nowplaying-dev-macos-arm64.zip` (Apple Silicon). The
 
 - [ ] Download `nowplaying-dev-macos-arm64.zip` and `SHA256SUMS`. Run `shasum -a 256 -c SHA256SUMS --ignore-missing`; the ZIP line says OK.
 - [ ] Unzip and move the `nowplaying` folder somewhere yours, for example `~/Applications`.
-- [ ] The download is unsigned, so the first run is blocked: `xattr -d com.apple.quarantine nowplaying-dev-macos-arm64.zip` before unzipping, or on the folder after.
+- [ ] The download is unsigned, so Gatekeeper blocks the first run. Either clear the flag on the verified ZIP before unzipping (`xattr -d com.apple.quarantine nowplaying-dev-macos-arm64.zip`), or clear it recursively on the extracted folder (`xattr -dr com.apple.quarantine nowplaying`). Files unpacked from a quarantined archive inherit the flag, so a plain `xattr -d` on the folder alone is not enough.
 - [ ] In a terminal run `./nowplaying start`. With no saved config it prints a Settings link (`http://127.0.0.1:47832/settings`); open it. Sections 3-5 above apply in the browser (skip tray-only items; there is no macOS tray yet).
 - [ ] Settings > "Launch app on system startup" on: `~/Library/LaunchAgents/dev.rowkav.nowplaying.plist` exists. Log out and back in; nowplaying starts on its own. Turn it off and log in again; it doesn't.
 - [ ] Stop nowplaying (Ctrl+C if started from a terminal). To remove it, delete the folder and the LaunchAgents plist.

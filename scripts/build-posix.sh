@@ -40,27 +40,11 @@ exec "$here/runtime/node" "$here/app/scripts/nowplaying.js" "$@"
 LAUNCH
 chmod +x "$bundle/nowplaying"
 
-# Smoke: the launcher runs, and the app answers on its settings route (the
-# bundle always boots first-run on CI, where /healthz does not exist yet).
-# A dev asset that cannot boot is worse than no asset.
-"$bundle/nowplaying" --version > /dev/null
-"$bundle/nowplaying" --help > /dev/null
-port=47839
-log="$(mktemp)"
-NOWPLAYING_PORT=$port "$bundle/nowplaying" start --no-setup > "$log" 2>&1 &
-pid=$!
-ok=0
-for _ in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:$port/settings" > /dev/null 2>&1; then ok=1; break; fi
-  sleep 1
-done
-kill "$pid" 2> /dev/null || true
-wait "$pid" 2> /dev/null || true
-if [ "$ok" != 1 ]; then
-  echo "build-posix.sh: smoke failed - the bundle did not answer on :$port" >&2
-  cat "$log" >&2
-  exit 1
-fi
+# Smoke: the launcher runs, and the app answers on its settings route as
+# the bundle's own child process (the bundle always boots first-run on CI,
+# where /healthz does not exist yet). A dev asset that cannot boot - or a
+# probe a stray listener can fake - is worse than no asset.
+bash scripts/smoke-bundle.sh "$bundle"
 
 if [ "$os" = macos ]; then
   (cd "dist/$os" && zip -q -r "nowplaying-dev-$os-$arch.zip" nowplaying)
