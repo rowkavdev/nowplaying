@@ -82,7 +82,7 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal) {
     }
     const found = probe.classify({ status: response.status, text });
     if (!found) return null;
-    return { provider: found.provider, baseUrl, version: typeof found.version === "string" ? found.version.slice(0, 40) : null, ...(found.id && /^[\w-]{1,64}$/.test(found.id) ? { id: found.id } : {}) };
+    return { provider: found.provider, baseUrl, version: typeof found.version === "string" ? found.version.slice(0, 40) : null, ...(found.id && /^[\w-]{1,64}$/.test(found.id) ? { id: found.id } : {}), ...(found.name ? { name: found.name } : {}) };
   } catch { return null; }
   finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
 }

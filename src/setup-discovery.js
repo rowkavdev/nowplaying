@@ -1,15 +1,16 @@
 // Finds media servers so the setup wizard can offer them first: HTTP probes
-// on this PC and the LAN gateway, plus Jellyfin/Emby UDP discovery on the
+// on this PC and the LAN gateway, plus Jellyfin/Emby and Plex UDP discovery on the
 // local network. Read-only, no credentials, short timeouts.
 
 import { networkInterfaces as osNetworkInterfaces } from "node:os";
 import { discoverLanServers } from "./setup-lan-discovery.js";
+import { discoverPlexGdm } from "./setup-plex-gdm.js";
 
 const MAX_BODY = 64 * 1024;
 const HOST = "127.0.0.1";
 const MAX_CONCURRENT = 4;
-// Servers with no broadcast discovery are looked for on the LAN at these ports.
-const NETWORK_PORTS = Object.freeze([4533, 8096]);
+// Check likely gateway addresses by HTTP as well as loopback and UDP discovery.
+const NETWORK_PORTS = Object.freeze([4533, 8096, 32400]);
 
 export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 4533, path: "/rest/ping.view?f=json&v=1.16.1&c=nowplaying-setup", classify: classifySubsonic }),
@@ -17,18 +18,19 @@ export const DISCOVERY_PROBES = Object.freeze([
   Object.freeze({ port: 32400, path: "/identity", classify: classifyPlex }),
 ]);
 
-export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT, signal } = {}) {
+export async function discoverLocalServers({ fetchImpl = globalThis.fetch, timeoutMs = 1500, probes = DISCOVERY_PROBES, discoverLan = discoverLanServers, discoverPlex = discoverPlexGdm, networkHosts = gatewayCandidates(), concurrency = MAX_CONCURRENT, signal } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
   if (signal?.aborted) return [];
   const jobs = probes.map((probe) => ({ host: HOST, probe }));
   for (const host of networkHosts) for (const probe of probes) if (NETWORK_PORTS.includes(probe.port)) jobs.push({ host, probe });
-  const [results, lan] = await Promise.all([
+  const [results, lan, plex] = await Promise.all([
     runLimited(jobs, concurrency, ({ host, probe }) => runProbe(host, probe, fetchImpl, timeoutMs, signal), signal),
     typeof discoverLan === "function" ? discoverLan({ timeoutMs, signal }).catch(() => []) : [],
+    typeof discoverPlex === "function" ? discoverPlex({ timeoutMs, signal }).catch(() => []) : [],
   ]);
   if (signal?.aborted) return [];
   const found = results.filter(Boolean);
-  return mergeServers(found.filter((s) => s.baseUrl.startsWith(`http://${HOST}:`)), [...found.filter((s) => !s.baseUrl.startsWith(`http://${HOST}:`)), ...(Array.isArray(lan) ? lan : [])]);
+  return mergeServers(found.filter((s) => s.baseUrl.startsWith(`http://${HOST}:`)), [...found.filter((s) => !s.baseUrl.startsWith(`http://${HOST}:`)), ...(Array.isArray(lan) ? lan : []), ...(Array.isArray(plex) ? plex : [])]);
 }
 
 // Likely gateway addresses (x.y.z.1) of this PC's private IPv4 networks,
@@ -93,7 +95,7 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal) {
     const found = probe.classify({ status: response.status, text });
     if (!found) return null;
     const id = cleanId(found.id);
-    return Object.freeze({ provider: found.provider, baseUrl, version: cleanVersion(found.version), ...(id ? { id } : {}) });
+    return Object.freeze({ provider: found.provider, baseUrl, version: cleanVersion(found.version), ...(id ? { id } : {}), ...(found.name ? { name: found.name } : {}) });
   } catch {
     return null;
   } finally {
@@ -121,7 +123,7 @@ export function classifyJellyfinOrEmby({ status, text }) {
 
 export function classifyPlex({ status, text }) {
   if (status !== 200 || !/<MediaContainer\b[^>]*\bmachineIdentifier="[^"]+"/.test(text)) return null;
-  return { provider: "plex", version: /\bversion="([^"]+)"/.exec(text)?.[1] };
+  return { provider: "plex", version: /\bversion="([^"]+)"/.exec(text)?.[1], id: /\bmachineIdentifier="([^"]+)"/.exec(text)?.[1], name: "Plex Media Server" };
 }
 
 function parseJson(text) { try { return JSON.parse(text); } catch { return null; } }
