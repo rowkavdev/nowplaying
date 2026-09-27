@@ -206,6 +206,65 @@ test("a stale server without a prior sequence reports recovery unavailable", asy
   assert.equal(restarted.status().lastError, "sequence_recovery_unavailable");
 });
 
+test("overlapping pushes cannot retry old playback above a newer title, idle, or redacted state", async () => {
+  for (const newer of ["title", "idle", "redacted"]) {
+    const env = setup();
+    let entered, release;
+    const held = new Promise((resolve) => { entered = resolve; });
+    const barrier = new Promise((resolve) => { release = resolve; });
+    let first = true;
+    const fetchImpl = async (url, init) => {
+      if (url.endsWith("/api/ingest") && first) {
+        first = false;
+        entered();
+        await barrier;
+      }
+      return env.fetchImpl(url, init);
+    };
+    let settings = {};
+    const up = env.uploader({ fetchImpl, settings: () => settings });
+    await up.cardUrl();
+    const cardId = env.stored().cardId;
+    const old = up.push(track({ title: "OLD" }));
+    await held;
+    if (newer === "redacted") settings = { privacy: { redactTitles: true } };
+    const next = newer === "idle" ? createPresence({ state: "idle" }) : track({ title: "NEW" });
+    assert.deepEqual(await up.push(next), { sent: true });
+    release();
+    assert.deepEqual(await old, { sent: false, reason: "superseded" });
+    const state = await env.service.readCardState(cardId);
+    if (newer === "idle") assert.equal(state.state, "idle");
+    else assert.equal(state.title, newer === "redacted" ? "Private media" : "NEW");
+    assert.equal(up.status().pending, false);
+    assert.equal(ingests(env.calls).length, 2, "old stale upload must not retry");
+  }
+});
+
+test("a rejected old push cannot clear a newer pending update after an offline failure", async () => {
+  const env = setup();
+  let entered, release;
+  const held = new Promise((resolve) => { entered = resolve; });
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let first = true;
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith("/api/ingest") && first) { first = false; entered(); await barrier; }
+    return env.fetchImpl(url, init);
+  };
+  const up = env.uploader({ fetchImpl });
+  await up.cardUrl();
+  const old = up.push(track({ title: "OLD" }));
+  await held;
+  env.setOffline(true);
+  assert.deepEqual(await up.push(track({ title: "NEW" })), { sent: false, reason: "network_error" });
+  release();
+  assert.deepEqual(await old, { sent: false, reason: "superseded" });
+  assert.equal(up.status().pending, true);
+  env.setOffline(false);
+  env.advanceElapsed(5000);
+  assert.deepEqual(await up.push(track({ title: "NEW" })), { sent: true });
+  assert.equal((await env.service.readCardState(env.stored().cardId)).title, "NEW");
+});
+
 test("paused card heartbeat survives a client-only hour rollback without per-poll uploads", async () => {
   const env = setup();
   const up = env.uploader();
