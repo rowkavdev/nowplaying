@@ -9,7 +9,35 @@ import { normalizeCard } from "./setup-config.js";
 import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
 import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
 
-const PAGE = `<!doctype html>
+// Startup copy is platform-aware (#677): the control drives a Windows
+// shortcut, a macOS LaunchAgent or an XDG autostart entry depending on the
+// OS, so naming Windows on Unix tells the user it controls the wrong OS.
+const STARTUP_COPY = {
+  win32: {
+    heading: "Windows",
+    label: "Start NowPlaying when I sign in to Windows",
+    toolbarRepair: "Startup shortcut needs repair - use the Windows section below.",
+    formRepair: "Startup shortcut points to another install. Check the box and Save to fix it.",
+  },
+  darwin: {
+    heading: "Startup",
+    label: "Start NowPlaying at login",
+    toolbarRepair: "Startup entry needs repair - use the Startup section below.",
+    formRepair: "The saved LaunchAgent points to another install. Check the box and Save to fix it.",
+  },
+  linux: {
+    heading: "Startup",
+    label: "Start NowPlaying at login",
+    toolbarRepair: "Startup entry needs repair - use the Startup section below.",
+    formRepair: "The autostart entry points to another install. Check the box and Save to fix it.",
+  },
+};
+// Unknown platforms get the generic Unix wording - it names no OS.
+function startupCopyFor(platform) {
+  return STARTUP_COPY[platform] ?? STARTUP_COPY.linux;
+}
+
+const buildPage = (startupCopy) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
 <body class="drpp-shell"><header class="drpp-header">
@@ -139,8 +167,8 @@ const PAGE = `<!doctype html>
 </details>
 <details class="drpp-accordion"><summary>Startup Settings</summary>
 <form id="startup-form" hidden>
-<section aria-labelledby="h-startup"><h2 id="h-startup">Windows</h2>
-<p class="row"><label><input type="checkbox" id="startup-enabled"> Start NowPlaying when I sign in to Windows</label></p>
+<section aria-labelledby="h-startup"><h2 id="h-startup">${startupCopy.heading}</h2>
+<p class="row"><label><input type="checkbox" id="startup-enabled"> ${startupCopy.label}</label></p>
 <p><button type="submit" id="startup-save">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
@@ -216,7 +244,7 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 @media(max-width:900px){#drpp-info{width:95%}.drpp-columns{height:auto;flex-direction:column}.drpp-config,.drpp-logs{width:100%;border-right:0}.drpp-config-scroll{max-height:65vh}.drpp-log-lines{min-height:250px;max-height:45vh}.drpp-header{flex-wrap:wrap}}
 `;
 
-const DRPP_SHELL_SCRIPT = `"use strict";
+const buildDrppShellScript = (startupCopy) => `"use strict";
 // A bounded poll of the existing safe JSON log API; DRPP uses SSE, which
 // NowPlaying does not expose. No network request leaves loopback.
 const optionalSections = ["privacy-form", "card-form", "youtube-section", "startup-form", "hosted-devices"];
@@ -294,20 +322,20 @@ search.addEventListener("input", renderLogs);
 wrap.addEventListener("change", () => { lines.classList.toggle("wrap", wrap.checked); saveLogPreference("logs-wrap-text", wrap.checked); });
 autoScroll.addEventListener("change", () => { saveLogPreference("logs-auto-scroll", autoScroll.checked); renderLogs(); });
 // DRPP AutostartSwitch: lives in the Configuration toolbar and writes the
-// same startup setting as the Windows section. Hidden until the app reports
-// that startup control is available on this install.
+// same startup setting as the Startup section below. Hidden until the app
+// reports that startup control is available on this install.
 const autostartWrap = document.getElementById("drpp-autostart-wrap");
 const autostartDivider = document.getElementById("drpp-autostart-divider");
 const autostartBox = document.getElementById("drpp-autostart");
 const autostartResult = document.getElementById("drpp-autostart-result");
-// Both startup controls - this switch and the Windows section below - render
+// Both startup controls - this switch and the Startup section below - render
 // from the same returned startup state, so a save in either place leaves the
-// other in sync, including the shortcut-repair note.
+// other in sync, including the repair note.
 function applyStartupState(startup) {
   if (!startup || !startup.available) { autostartWrap.hidden = autostartDivider.hidden = true; return; }
   autostartWrap.hidden = autostartDivider.hidden = false;
   autostartBox.checked = startup.startWithWindows === true;
-  autostartResult.textContent = startup.shortcutBroken ? "Startup shortcut needs repair - use the Windows section below." : "";
+  autostartResult.textContent = startup.shortcutBroken ? "${startupCopy.toolbarRepair}" : "";
   const sectionBox = document.getElementById("startup-enabled");
   if (sectionBox) sectionBox.checked = startup.startWithWindows === true;
 }
@@ -380,7 +408,7 @@ for (const tab of infoTabs) tab.addEventListener("click", () => selectInfoTab(ta
 refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(refreshVersion, 15000);
 `;
 
-const SCRIPT = `"use strict";
+const buildScript = (startupCopy) => `"use strict";
 const form = document.getElementById("discord-form");
 const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), idleBehavior: document.getElementById("discord-idle") };
 const save = document.getElementById("discord-save");
@@ -648,7 +676,7 @@ function showStartup(s) {
   startup.form.hidden = !s || !s.available;
   if (!s) return;
   startup.enabled.checked = s.startWithWindows;
-  startupSay(s.shortcutBroken ? "Startup shortcut points to another install. Check the box and Save to fix it." : "", s.shortcutBroken ? "warn" : "");
+  startupSay(s.shortcutBroken ? "${startupCopy.formRepair}" : "", s.shortcutBroken ? "warn" : "");
 }
 startup.form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -779,15 +807,20 @@ export const YOUTUBE_PAIRING_RESET_PATH = "/api/settings/youtube/pairing/reset";
 
 const SECTIONS = { discord: "updateDiscord", hosted: "updateHosted", startup: "updateStartup", privacy: "updatePrivacy", card: "updateCard" };
 
-export function createSettingsPageHandler({ settings, fallback } = {}) {
+export function createSettingsPageHandler({ settings, fallback, platform = process.platform } = {}) {
   if (!settings || typeof settings.read !== "function" || typeof settings.updateDiscord !== "function") throw new TypeError("settings: expected read() and updateDiscord()");
   if (typeof fallback !== "function") throw new TypeError("fallback: expected a handler");
+  // The startup section's wording is baked for this app's platform (#677).
+  const startupCopy = startupCopyFor(platform);
+  const pageHtml = buildPage(startupCopy);
+  const scriptText = buildScript(startupCopy);
+  const drppShellScriptText = buildDrppShellScript(startupCopy);
   const assets = {
-    "/settings": { body: PAGE, type: "text/html; charset=utf-8", page: true },
+    "/settings": { body: pageHtml, type: "text/html; charset=utf-8", page: true },
     "/servers.js": { body: SERVER_SCRIPT, type: "text/javascript; charset=utf-8" },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
     "/drpp-shell.css": { body: DRPP_SHELL_CSS, type: "text/css; charset=utf-8" },
-    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${DRPP_SHELL_SCRIPT}`, type: "text/javascript; charset=utf-8" },
+    "/settings.js": { body: `${scriptText}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${drppShellScriptText}`, type: "text/javascript; charset=utf-8" },
   };
   // Explicit allowlist only; project files ship alongside src in installed builds.
   const infoFiles = Object.fromEntries(["NOTICE", "README.md", "LICENSE"].map((name) => {
