@@ -11,7 +11,7 @@ test("recognises each server from its public, unauthenticated response", () => {
   assert.equal(classifyJellyfinOrEmby({ status: 200, text: JSON.stringify({ Id: "a", Version: "10.10.3", ProductName: "Jellyfin Server" }) }).provider, "jellyfin");
   assert.equal(classifyJellyfinOrEmby({ status: 200, text: JSON.stringify({ Id: "a", Version: "4.8.0" }) }).provider, "emby");
   assert.equal(classifyJellyfinOrEmby({ status: 200, text: JSON.stringify({ Id: "a", Version: "1", ProductName: "Other" }) }), null);
-  assert.deepEqual(classifyPlex({ status: 200, text: '<MediaContainer size="0" machineIdentifier="abc" version="1.41.0"/>' }), { provider: "plex", version: "1.41.0" });
+  assert.deepEqual(classifyPlex({ status: 200, text: '<MediaContainer size="0" machineIdentifier="abc" version="1.41.0"/>' }), { provider: "plex", version: "1.41.0", id: "abc", name: "Plex Media Server" });
   assert.equal(classifyPlex({ status: 200, text: "<html>" }), null);
 });
 
@@ -95,7 +95,7 @@ test("guesses gateways from private IPv4 interfaces only", () => {
   assert.deepEqual(gatewayCandidates(() => { throw new Error("nope"); }), []);
 });
 
-test("probes the gateway for Navidrome and Jellyfin/Emby, but not Plex", async () => {
+test("probes gateway Navidrome, Jellyfin/Emby, and Plex identity", async () => {
   const seen = [];
   const fetchImpl = async (url) => {
     seen.push(url);
@@ -104,8 +104,8 @@ test("probes the gateway for Navidrome and Jellyfin/Emby, but not Plex", async (
   };
   const servers = await discoverLocalServers({ fetchImpl, discoverLan: async () => [], networkHosts: ["192.168.1.1"] });
   assert.deepEqual(servers, [{ provider: "navidrome", baseUrl: "http://192.168.1.1:4533", version: "0.53.3" }]);
-  assert.deepEqual(seen.filter((u) => u.includes("192.168.1.1")).map((u) => new URL(u).port).sort(), ["4533", "8096"]);
-  assert.equal(seen.length, 5);
+  assert.deepEqual(seen.filter((u) => u.includes("192.168.1.1")).map((u) => new URL(u).port).sort(), ["32400", "4533", "8096"]);
+  assert.equal(seen.length, 6);
 });
 
 test("keeps at most N probes in flight", async () => {
