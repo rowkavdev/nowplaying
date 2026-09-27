@@ -53,6 +53,14 @@ test("normalizes an opaque artwork reference", () => {
   assert.equal(presence.artworkUrl, null);
 });
 
+test("server artwork source index is bounded and preserved through normalization", () => {
+  const artwork = { provider: "jellyfin", itemId: "same-id", type: "primary", sourceIndex: 7 };
+  assert.equal(createPresence({ artwork }).artwork.sourceIndex, 7);
+  for (const sourceIndex of [-1, 8, 1.5, "0"]) {
+    assert.throws(() => createPresence({ artwork: { ...artwork, sourceIndex } }), /sourceIndex/);
+  }
+});
+
 test("defaults to an idle unknown presence", () => {
   const presence = createPresence({ updatedAt: 0 });
   assert.equal(presence.state, "idle");

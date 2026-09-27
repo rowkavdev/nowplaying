@@ -42,7 +42,7 @@ export function createPresence(input = {}) {
 function normalizeArtwork(value) {
   if (value == null) return null;
   if (typeof value !== "object" || Array.isArray(value)) throw new TypeError("artwork must be an object");
-  const allowed = new Set(["provider", "itemId", "imageId", "imageTag", "type"]);
+  const allowed = new Set(["provider", "itemId", "imageId", "imageTag", "type", "sourceIndex"]);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) throw new TypeError(`artwork.${key} is not allowed`);
   }
@@ -54,9 +54,15 @@ function normalizeArtwork(value) {
     imageId: optionalArtworkId(value.imageId, "artwork.imageId"),
     imageTag: optionalArtworkId(value.imageTag, "artwork.imageTag"),
     type: value.type,
+    ...(value.sourceIndex === undefined ? {} : { sourceIndex: sourceIndex(value.sourceIndex) }),
   };
   if (!artwork.itemId && !artwork.imageId) throw new TypeError("artwork requires itemId or imageId");
   return Object.freeze(artwork);
+}
+
+function sourceIndex(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 7) throw new TypeError("artwork.sourceIndex must be a server index from 0 to 7");
+  return value;
 }
 
 function optionalArtworkId(value, name) {

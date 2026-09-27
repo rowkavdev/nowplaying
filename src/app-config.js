@@ -519,18 +519,24 @@ const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idl
 
 async function createServersProvider(config, credentialStore, fetchImpl, providerBackoff) {
   const entries = [];
-  // Album art for the local card (#449). Each server records the artwork refs
-  // it returns so the card can fetch them with that server's sign-in; nothing
-  // secret goes on the presence itself. Refs are matched by value because
-  // presence normalising copies them. Each server has its own cache, since two
-  // servers can use the same image path; if two report the very same ref, the
-  // one polled last is used.
+  // Local card artwork is bound to the server that supplied the selected
+  // presence. Two servers can reuse the same opaque item ID and image tag;
+  // never choose an artwork service by that value alone. This bounded index
+  // is process-local, not an address or credential, and hosted uploads omit art.
   const artworkSources = new Map();
   for (const [index, server] of config.servers.entries()) {
     try {
       const signedIn = await createSignedInProvider(server, credentialStore, fetchImpl);
       const artwork = createServerArtwork(server, signedIn.secret, fetchImpl);
-      const tagged = { ...signedIn.provider, getPresence: async () => { const presence = await signedIn.provider.getPresence(); if (artwork && presence?.artwork && typeof presence.artwork === "object") { if (artworkSources.size >= 256) artworkSources.clear(); artworkSources.set(artworkRefKey(presence.artwork), artwork); } return presence; } };
+      const tagged = {
+        ...signedIn.provider,
+        getPresence: async () => {
+          const presence = await signedIn.provider.getPresence();
+          if (!artwork || !presence?.artwork || typeof presence.artwork !== "object") return presence;
+          return { ...presence, artwork: { ...presence.artwork, sourceIndex: index } };
+        },
+      };
+      if (artwork) artworkSources.set(index, artwork);
       entries.push({ server, provider: withProviderBackoff(tagged, providerBackoff) });
     } catch (error) {
       if (index === 0) throw error;
@@ -541,7 +547,7 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
   const artwork = Object.freeze({
     // Artwork is a nice-to-have: any failure shows the card without it.
     async resolve(ref) {
-      const source = ref && typeof ref === "object" ? artworkSources.get(artworkRefKey(ref)) : null;
+      const source = ref && typeof ref === "object" && Number.isInteger(ref.sourceIndex) ? artworkSources.get(ref.sourceIndex) : null;
       if (!source) return null;
       try { return await source.resolve(ref); } catch { return null; }
     },
@@ -563,10 +569,6 @@ async function tintFor(dataUri) {
   if (tints.size >= 128) tints.delete(tints.keys().next().value);
   tints.set(dataUri, tint);
   return tint;
-}
-
-function artworkRefKey(ref) {
-  return JSON.stringify([ref.provider ?? null, ref.type ?? null, ref.itemId ?? null, ref.imageId ?? null, ref.imageTag ?? null]);
 }
 
 function createServerArtwork(server, secret, fetchImpl) {
