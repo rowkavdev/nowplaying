@@ -424,6 +424,53 @@ test("reads a config saved with a UTF-8 byte order mark (Notepad, PowerShell 5)"
   assert.throws(() => parseAppConfig(`{\uFEFF${serializeSetupConfig(JELLYFIN).slice(1)}`), code("CONFIG_INVALID"));
 });
 
+test("saved card appearance invalidates offline last-good output", async () => {
+  const session = { UserId: "u1", PlayState: { IsPaused: false, PositionTicks: 0 }, NowPlayingItem: { Id: "item1", Type: "Audio", Name: "Appearance Track", Artists: ["Artist"], RunTimeTicks: 1_000_000_000 } };
+  let offline = false;
+  let elapsed = 0;
+  const fetchImpl = async () => {
+    if (offline) throw Object.assign(new Error("provider unavailable"), { code: "ECONNREFUSED" });
+    return Response.json([session]);
+  };
+  const app = await startAppFromConfig({ configFile: await configFile(), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" }, providerBackoff: { elapsedNow: () => elapsed, random: () => 0 } });
+  try {
+    const card = () => fetch(`${app.url}/card.svg`);
+    const original = await card();
+    const originalEtag = original.headers.get("etag");
+    const svg = await original.text();
+    assert.match(svg, /Appearance Track/);
+    assert.match(svg, /#0d1117/);
+    offline = true;
+    const stale = await card();
+    assert.equal(stale.headers.get("x-nowplaying-source"), "last-good", "ordinary outage retains the old design until settings change");
+    assert.equal(await stale.text(), svg);
+    const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+    const saveCard = async (card) => {
+      const result = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { Cookie: cookie, Origin: app.url, "Content-Type": "application/json" }, body: JSON.stringify({ card }) });
+      assert.equal(result.status, 200);
+      return result.json();
+    };
+    const paper = await saveCard({ theme: "paper" });
+    assert.equal(paper.card.theme, "paper");
+    const afterTheme = await fetch(`${app.url}/card.svg`, { headers: { "If-None-Match": originalEtag } });
+    assert.notEqual(afterTheme.status, 304);
+    assert.notEqual(afterTheme.headers.get("x-nowplaying-source"), "last-good");
+    assert.doesNotMatch(await afterTheme.text(), /Appearance Track|#0d1117/);
+    assert.equal(afterTheme.headers.get("cache-control"), "no-store");
+    offline = false;
+    elapsed += 5_001;
+    const paperLive = await card();
+    assert.match(await paperLive.text(), /Appearance Track/);
+    offline = true;
+    assert.equal((await card()).headers.get("x-nowplaying-source"), "last-good");
+    const hidden = await saveCard({ showProgress: false });
+    assert.equal(hidden.card.showProgress, false);
+    const afterVisibility = await card();
+    assert.notEqual(afterVisibility.headers.get("x-nowplaying-source"), "last-good");
+    assert.doesNotMatch(await afterVisibility.text(), /Appearance Track/);
+  } finally { await app.close(); }
+});
+
 test("artwork restriction does not replay old artwork when provider fails (#577)", async () => {
   const sharp = (await import("sharp")).default;
   const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#f28c28" } }).png().toBuffer();

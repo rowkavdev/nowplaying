@@ -404,10 +404,12 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
     },
-    // Card appearance (#94): the local card reads config.card on every
-    // render, so a save shows on the next /card.svg request.
+    // Card appearance (#94): discard prior rendered SVGs after a save so
+    // an offline last-good card cannot present the old design as current.
     async updateCard(changes) {
-      current = await settingsStore.updateCard(changes);
+      const next = await settingsStore.updateCard(changes);
+      current = next;
+      resolveCard.invalidate();
     },
     // Preview for the settings page: what's playing now (privacy applied),
     // or a sample track when nothing is, so layout changes are visible.
