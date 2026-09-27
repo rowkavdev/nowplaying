@@ -56,7 +56,8 @@ try {
   console.log("Windows WebUI: sign-in screenshot saved");
   await page.locator("#signin-button").click();
   await page.getByRole("heading", { name: "Set up NowPlaying" }).waitFor({ state: "detached", timeout: 30000 });
-  await page.locator("h1").filter({ hasText: /^Settings$/ }).waitFor({ timeout: 15000 });
+  await page.getByRole("heading", { name: "NowPlaying", level: 1 }).waitFor({ timeout: 15000 });
+  await page.getByRole("heading", { name: "Configuration", level: 2 }).waitFor();
   const state = await page.evaluate(async () => (await fetch("/api/settings/servers")).json());
   assert.equal(state.servers.length, 1);
   assert.equal(state.servers[0].provider, "navidrome");
