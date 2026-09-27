@@ -117,9 +117,10 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     const outputs = ["card", ...(s.discord.enabled ? ["discord"] : []), ...(s.hosted.enabled ? ["hosted"] : [])];
     const serverHealthy = s.server.state === "connected" && !problem;
     const discordHealthy = !s.discord.enabled || s.discord.state === "ready";
+    const discordFailed = s.discord.enabled && ["degraded", "failed", "closed"].includes(s.discord.state);
     const hosting = hostedOutput(s.hosted);
     const health = serverHealthy && discordHealthy && ["healthy", "disabled"].includes(hosting) ? "healthy"
-      : (s.server.state === "starting" && hosting !== "failed") || (serverHealthy && discordHealthy && hosting === "starting") ? "starting" : "degraded";
+      : (s.server.state === "starting" && hosting !== "failed" && !problem && !discordFailed) || (serverHealthy && discordHealthy && hosting === "starting") ? "starting" : "degraded";
     const sensitiveValues = [config.serverUrl, s.server.address, s.server.user, playing?.title, playing?.subtitle].filter((value) => typeof value === "string");
     return createDiagnosticRecord({
       version: s.version ?? undefined,

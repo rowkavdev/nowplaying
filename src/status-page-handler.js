@@ -72,7 +72,7 @@ async function load() {
     const hostedStarting = s.hosted && s.hosted.enabled && ["idle", "starting"].includes(s.hosted.state);
     const hostedHealthy = !s.hosted || !s.hosted.enabled || s.hosted.state === "connected";
     const healthy = !failedServer && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready") && hostedHealthy;
-    const starting = !failedServer && (s.server.state === "starting" && (hostedHealthy || hostedStarting) || (hostedStarting && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready")));
+    const starting = !failedServer && (!s.discord.enabled || !["degraded", "failed", "closed"].includes(s.discord.state)) && (s.server.state === "starting" && (hostedHealthy || hostedStarting) || (hostedStarting && s.server.state === "connected"));
     set("summary", healthy ? "Everything is working." : starting ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : starting ? "warn" : "bad");
     set("playing", s.playing ? [s.playing.title, s.playing.subtitle].filter(Boolean).join(" - ") + (s.playing.state === "paused" ? " (paused)" : "") : "Nothing playing");
     set("server-type", s.server.type);
