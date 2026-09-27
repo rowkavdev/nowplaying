@@ -18,6 +18,8 @@ node scripts/guide-paths.js check-docs    # verify this page against a fresh run
 <!-- guide-path: windows-install -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run windows-install`.
 
+Scope: static artifact and workflow checks only. The harness does not run the installer or any Windows E2E; the manual GUI steps are asserted as checklist coverage of shipped artifacts and release-workflow behavior.
+
 Checklist (each entry is asserted by the named harness step):
 
 1. Download the release or dev build and verify the download against the published SHA256SUMS (harness step: checksums-published).
@@ -55,6 +57,8 @@ _Phase 2 prose pending: application/client setup screenshots, buttons, troublesh
 ## Hosted SVG card render
 <!-- guide-path: hosted-card -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run hosted-card`.
+
+Scope: local renderer and committed-gallery checks only. The harness renders through `src/card.js` and compares `docs/assets/cards/`; it does not exercise the hosted HTTP service (`hosted/`).
 
 Walkthrough outline (each entry is asserted by the named harness step):
 

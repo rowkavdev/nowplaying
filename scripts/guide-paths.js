@@ -238,17 +238,41 @@ export async function runPath(id) {
   return path.run();
 }
 
+// Splits the doc into guide-path sections. A section runs from its
+// <!-- guide-path: <id> --> marker to the next H2 heading, so a status line or
+// step reference only ever counts for the path section it sits in.
+function sections(doc) {
+  const found = [];
+  const marker = /<!-- guide-path: ([a-z-]+) -->/g;
+  let match;
+  while ((match = marker.exec(doc))) found.push({ id: match[1], start: match.index });
+  for (const section of found) {
+    const rest = doc.slice(section.start);
+    const nextHeading = rest.indexOf("\n## ");
+    section.text = nextHeading === -1 ? rest : rest.slice(0, nextHeading);
+  }
+  return found;
+}
+
 // The skeleton claims a status per path and lists every harness step; both
-// must match a fresh run or the doc is drifting from shipped behavior.
+// must match a fresh run, read within the path's own section, or the doc is
+// drifting from shipped behavior.
 export async function checkDocs(docFile = DEFAULT_DOC) {
   const doc = await readFile(docFile, "utf8");
+  const found = sections(doc);
   const failures = [];
+  for (const section of found)
+    if (!PATHS.some(({ id }) => id === section.id))
+      failures.push(`${section.id}: guide-path marker for an unknown path`);
   for (const { id } of PATHS) {
-    if (!doc.includes(`<!-- guide-path: ${id} -->`)) {
+    const matches = found.filter((section) => section.id === id);
+    if (matches.length === 0) {
       failures.push(`${id}: missing guide-path marker`);
       continue;
     }
-    const claimed = doc.match(new RegExp(`<!-- guide-path: ${id} -->[^]*?Harness status: \\*\\*(pass|fail)\\*\\*`));
+    if (matches.length > 1) failures.push(`${id}: duplicate guide-path markers`);
+    const text = matches[0].text;
+    const claimed = text.match(/Harness status: \*\*(pass|fail)\*\*/);
     if (!claimed) {
       failures.push(`${id}: missing harness status line`);
       continue;
@@ -257,7 +281,8 @@ export async function checkDocs(docFile = DEFAULT_DOC) {
     if (claimed[1] !== result.status)
       failures.push(`${id}: doc claims ${claimed[1]} but a fresh run reports ${result.status}`);
     for (const step of result.steps)
-      if (!doc.includes(`harness step: ${step.step}`)) failures.push(`${id}: doc never mentions harness step ${step.step}`);
+      if (!text.includes(`harness step: ${step.step}`))
+        failures.push(`${id}: section never mentions harness step ${step.step}`);
   }
   return { status: failures.length ? "fail" : "pass", failures };
 }
