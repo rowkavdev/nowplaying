@@ -142,8 +142,11 @@ export function createDiscordIpcClient({ paths = discordIpcPaths(), connectImpl 
   function command(cmd, args) {
     if (!socket) return Promise.reject(new Error("Discord IPC is not connected"));
     const nonce = newNonce();
+    let frame;
+    try { frame = encodeFrame(OP.FRAME, { cmd, args, nonce }); }
+    catch (error) { return Promise.reject(error); }
     const reply = new Promise((resolve, reject) => pending.set(nonce, { resolve, reject }));
-    socket.write(encodeFrame(OP.FRAME, { cmd, args, nonce }));
+    socket.write(frame);
     return withTimeout(reply, cmd).finally(() => pending.delete(nonce));
   }
 
