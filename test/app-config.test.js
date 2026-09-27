@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { StartupError, createProviderFromConfig, loadAppConfig, parseAppConfig, startAppFromConfig } from "../src/app-config.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
+import { createMemoryRedis } from "../hosted/lib/redis.js";
+import { createService, ServiceError } from "../hosted/lib/service.js";
 
 const JELLYFIN = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
 
@@ -422,6 +424,56 @@ test("reads a config saved with a UTF-8 byte order mark (Notepad, PowerShell 5)"
   assert.equal(config.serverUrl, "http://127.0.0.1:8096");
   // Only a leading mark is allowed; one anywhere else is still invalid.
   assert.throws(() => parseAppConfig(`{\uFEFF${serializeSetupConfig(JELLYFIN).slice(1)}`), code("CONFIG_INVALID"));
+});
+
+test("privacy saves clear the hosted card during a provider outage; ordinary grace remains", async () => {
+  for (const [privacy, field] of [[{ hideTitles: true }, "title"], [{ hideMusic: true }, "state"], [{ hideProgress: true }, "positionMs"]]) {
+    const session = { UserId: "u1", PlayState: { IsPaused: false, PositionTicks: 10_000_000 }, NowPlayingItem: { Id: "item1", Type: "Audio", Name: "Secret Track", Artists: ["Artist"], RunTimeTicks: 1_000_000_000 } };
+    let offline = false;
+    const service = createService({ redis: createMemoryRedis() });
+    let registered = null;
+    const hostedCredentials = {
+      load: async () => registered,
+      save: async (value) => { registered = value; },
+      clear: async () => { registered = null; },
+    };
+    const fetchImpl = async (url, init) => {
+      if (String(url).startsWith("https://cards.example.test/")) {
+        const path = new URL(url).pathname;
+        const token = /^Bearer (.+)$/.exec(init.headers.authorization ?? "")?.[1];
+        const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+        try {
+          if (path === "/api/register") return reply(201, await service.register({ clientKey: "fixture" }));
+          if (path === "/api/ingest") return reply(202, await service.ingest({ token, payload: JSON.parse(init.body) }));
+          return reply(404, { error: "not_found" });
+        } catch (error) {
+          if (error instanceof ServiceError) return reply(error.status, { error: error.code, ...error.details });
+          throw error;
+        }
+      }
+      if (offline) throw Object.assign(new Error("provider down"), { code: "ECONNREFUSED" });
+      return Response.json([session]);
+    };
+    const configuration = JSON.parse(serializeSetupConfig(JELLYFIN));
+    configuration.hosted = { enabled: true, url: "https://cards.example.test" };
+    const app = await startAppFromConfig({ configFile: await configFile(JSON.stringify(configuration)), credentialStore: fakeStore({ "jellyfin:u1": "jf-token" }), hostedCredentials, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" }, hosted: { intervalMs: 60_000 } });
+    try {
+      for (let attempt = 0; attempt < 30 && !registered; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.ok(registered, "hosted loop registered");
+      for (let attempt = 0; attempt < 30 && (await service.readCardState(registered.cardId)).title !== "Secret Track"; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.equal((await service.readCardState(registered.cardId)).title, "Secret Track");
+      offline = true;
+      await fetch(`${app.url}/card.svg`); // induce provider error without waiting out hosted-loop grace
+      assert.equal((await service.readCardState(registered.cardId)).title, "Secret Track", "outage alone preserves grace");
+      const cookie = (await fetch(`${app.url}/settings`)).headers.get("set-cookie").split(";")[0];
+      const saved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { Cookie: cookie, Origin: app.url, "Content-Type": "application/json" }, body: JSON.stringify({ privacy }) });
+      assert.equal(saved.status, 200);
+      assert.equal((await saved.json()).privacy[Object.keys(privacy)[0]], true);
+      const state = await service.readCardState(registered.cardId);
+      assert.equal(state[field], field === "state" ? "idle" : null);
+      assert.equal(state.title, null, "no prior title may survive the privacy save");
+    } finally { await app.close(); }
+  }
 });
 
 test("saved card appearance invalidates offline last-good output", async () => {
