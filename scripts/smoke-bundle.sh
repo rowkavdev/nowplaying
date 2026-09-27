@@ -12,10 +12,28 @@ set -euo pipefail
 
 bundle="${1:?usage: smoke-bundle.sh <bundle-dir>}"
 
-if ! command -v lsof > /dev/null 2>&1; then
-  echo "smoke-bundle.sh: lsof is required to verify the answering process" >&2
+# The answering process must be the child we spawned. Preferred check is
+# lsof; on Linux without it, match the LISTEN socket inode from
+# /proc/net/tcp(6) against the child's /proc/<pid>/fd (#683).
+listener_is_child() {
+  if command -v lsof > /dev/null 2>&1; then
+    [ "$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" = "$pid" ]
+    return
+  fi
+  if [ -r /proc/net/tcp ]; then
+    local hexport
+    hexport=$(printf '%04X' "$port")
+    local inode
+    for inode in $(awk -v port=":$hexport" '$4 == "0A" && substr($2, length($2) - 4) == port { print $10 }' /proc/net/tcp /proc/net/tcp6 2>/dev/null); do
+      if ls -l "/proc/$pid/fd" 2>/dev/null | grep -q "socket:\[$inode\]"; then
+        return 0
+      fi
+    done
+    return 1
+  fi
+  echo "smoke-bundle.sh: need lsof or /proc to verify the answering process" >&2
   exit 2
-fi
+}
 
 "$bundle/nowplaying" --version > /dev/null
 "$bundle/nowplaying" --help > /dev/null
@@ -33,7 +51,7 @@ ok=0
 for _ in $(seq 1 30); do
   kill -0 "$pid" 2>/dev/null || break
   if curl -fsS "http://127.0.0.1:$port/settings" > /dev/null 2>&1; then
-    [ "$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)" = "$pid" ] && ok=1
+    listener_is_child && ok=1
     break
   fi
   sleep 1

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import http from "node:http";
-import { cp, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,4 +97,34 @@ test("a bundle missing the packaged Info files fails the smoke (#673 review)", {
   const bundle = await makeBundle({ healthy: true, infoFiles: false });
   const run = spawnSync("bash", [smoke, bundle], { encoding: "utf8" });
   assert.notEqual(run.status, 0, `smoke accepted a bundle without app-level NOTICE/README.md/LICENSE:\n${run.stdout}\n${run.stderr}`);
+});
+
+// #683: the child-identity check must not hard-require lsof - minimal Linux
+// containers lack it. With lsof off the PATH, the smoke verifies the child
+// through /proc instead, in both directions.
+const hasProc = process.platform === "linux";
+const hasBasics = ["bash", "curl"].every((tool) => spawnSync("sh", ["-c", `command -v ${tool}`], { stdio: "ignore" }).status === 0);
+
+async function pathWithoutLsof() {
+  const dir = await mkdtemp(join(tmpdir(), "nowplaying-no-lsof-"));
+  const bin = join(dir, "bin");
+  await mkdir(bin);
+  for (const source of ["/usr/bin", "/bin"]) {
+    for (const name of await readdir(source)) {
+      if (name === "lsof") continue;
+      await symlink(join(source, name), join(bin, name)).catch(() => {});
+    }
+  }
+  return bin;
+}
+
+test("without lsof, a healthy bundle passes and a dead bundle fails (Linux /proc fallback)", { skip: !(hasProc && hasBasics), timeout: 90000 }, async () => {
+  const bin = await pathWithoutLsof();
+  const env = { ...process.env, PATH: bin };
+  const healthy = await makeBundle({ healthy: true });
+  const good = spawnSync("bash", [smoke, healthy], { encoding: "utf8", env });
+  assert.equal(good.status, 0, `healthy bundle rejected without lsof:\n${good.stdout}\n${good.stderr}`);
+  const dead = await makeBundle({ healthy: false });
+  const bad = spawnSync("bash", [smoke, dead], { encoding: "utf8", env });
+  assert.notEqual(bad.status, 0, "dead bundle accepted without lsof");
 });
