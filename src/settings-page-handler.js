@@ -334,10 +334,10 @@ const autostartResult = document.getElementById("drpp-autostart-result");
 function applyStartupState(startup) {
   if (!startup || !startup.available) { autostartWrap.hidden = autostartDivider.hidden = true; return; }
   autostartWrap.hidden = autostartDivider.hidden = false;
-  autostartBox.checked = startup.startWithWindows === true;
-  autostartResult.textContent = startup.shortcutBroken ? "${startupCopy.toolbarRepair}" : "";
+  autostartBox.checked = startup.enabled === true;
+  autostartResult.textContent = startup.broken ? "${startupCopy.toolbarRepair}" : "";
   const sectionBox = document.getElementById("startup-enabled");
-  if (sectionBox) sectionBox.checked = startup.startWithWindows === true;
+  if (sectionBox) sectionBox.checked = startup.enabled === true;
 }
 async function loadAutostart() {
   try {
@@ -351,7 +351,7 @@ autostartBox.addEventListener("change", async () => {
   autostartBox.disabled = true;
   autostartResult.textContent = "";
   try {
-    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: wanted } }) });
+    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { enabled: wanted } }) });
     if (!res.ok) throw new Error();
     applyStartupState((await res.json()).startup);
   } catch {
@@ -675,15 +675,15 @@ function startupSay(text, tone) { const el = document.getElementById("startup-re
 function showStartup(s) {
   startup.form.hidden = !s || !s.available;
   if (!s) return;
-  startup.enabled.checked = s.startWithWindows;
-  startupSay(s.shortcutBroken ? "${startupCopy.formRepair}" : "", s.shortcutBroken ? "warn" : "");
+  startup.enabled.checked = s.enabled;
+  startupSay(s.broken ? "${startupCopy.formRepair}" : "", s.broken ? "warn" : "");
 }
 startup.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   startup.save.disabled = true;
   startupSay("Saving...", "warn");
   try {
-    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: startup.enabled.checked } }) });
+    const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { enabled: startup.enabled.checked } }) });
     if (!res.ok) throw new Error(String(res.status));
     const updated = (await res.json()).startup;
     showStartup(updated);
