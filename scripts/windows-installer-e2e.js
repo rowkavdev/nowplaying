@@ -4,8 +4,10 @@
 // app and probes its WebUI, then silent-uninstalls and proves removal.
 // Emits the same machine-visible JSONL step shape as scripts/guide-paths.js
 // (path "windows-install") and exits non-zero on the first broken step.
-// win32-only: the guide-drift workflow runs it on windows-latest.
-// Guard test: test/guide-paths-installer-e2e.test.js.
+// Whatever happens, the finally pass stops the app process tree, runs the
+// uninstaller and removes the sign-in shortcut, so a failed run never leaves
+// machine state behind. win32-only: the guide-drift workflow runs it on
+// windows-latest. Guard test: test/guide-paths-installer-e2e.test.js.
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, rm, stat } from "node:fs/promises";
@@ -75,6 +77,25 @@ const installDir = join(root, "install");
 const appData = join(root, "appdata");
 const startupShortcut = join(homedir(), "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "nowplaying.lnk");
 let child = null;
+
+// nowplaying.exe is a launcher: the bundled runtime/node.exe is a descendant
+// process, so stopping the app needs the whole tree, not child.kill().
+async function stopApp() {
+  const pid = child?.pid;
+  child = null;
+  if (pid) await run("taskkill", ["/pid", String(pid), "/T", "/F"]).catch(() => {});
+}
+
+async function uninstall() {
+  await stopApp();
+  if (await exists(join(installDir, "unins000.exe"))) {
+    await run(join(installDir, "unins000.exe"), ["/VERYSILENT", "/NORESTART"]).catch(() => {});
+    const deadline = Date.now() + 60000;
+    while ((await exists(join(installDir, "nowplaying.exe"))) && Date.now() < deadline)
+      await new Promise((done) => setTimeout(done, 1000));
+  }
+}
+
 try {
   if (await step("silent-install", async () => {
     await run(setup, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", `/DIR=${installDir}`, "/TASKS=startup", `/LOG=${join(root, "install.log")}`]);
@@ -96,17 +117,15 @@ try {
     await getOk(`http://127.0.0.1:${port}/settings`);
   }))
   await step("silent-uninstall", async () => {
-    child?.kill();
-    child = null;
-    await run(join(installDir, "unins000.exe"), ["/VERYSILENT", "/NORESTART"]);
-    const deadline = Date.now() + 60000;
-    while ((await exists(join(installDir, "nowplaying.exe"))) && Date.now() < deadline)
-      await new Promise((done) => setTimeout(done, 1000));
+    await uninstall();
     expect(!(await exists(join(installDir, "nowplaying.exe"))), "uninstall must remove the installed app");
     expect(!(await exists(startupShortcut)), "uninstall must remove the sign-in shortcut");
   });
 } finally {
-  child?.kill();
+  // Best-effort restore, even when a step failed: stop the tree, uninstall,
+  // drop any leftover shortcut, then the temp root.
+  await uninstall();
+  await rm(startupShortcut, { force: true }).catch(() => {});
   await rm(root, { recursive: true, force: true });
 }
 
