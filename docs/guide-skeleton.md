@@ -1,10 +1,12 @@
 # User guide: tested example paths
 
-Every claim on this page is executable. The harness in
-`scripts/guide-paths.js` runs each path against the current tree and the
-drift gate re-checks the page nightly, so the examples below describe what is
-actually shipped. Where a step needs manual verification (a real installer, a
-real Discord client), the harness asserts the checklist coverage instead.
+Each path below is covered by executable checks in `scripts/guide-paths.js`,
+re-run nightly by the drift gate: the Plex steps run against a local probe
+server, the Discord steps against a fake desktop client over real IPC frames,
+and the hosted-card steps over real HTTP against the actual hosted service.
+The Windows install steps are checklist coverage of the shipped installer
+artifacts and release workflow (a nightly installer E2E is pending - see that
+section). The prose describes the shipped UI, not a planned one.
 
 Run the checks locally:
 
@@ -54,24 +56,25 @@ harness steps above are the active gate.
 <!-- guide-path: provider-connect -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run provider-connect`.
 
-**1. Server URL.** Enter your Plex server's address, for example
-`http://192.168.1.20:32400`. A trailing slash is fine either way (harness step: server-url-shape).
+**1. Choose your server.** The setup page lists Plex servers it discovers on
+your network; otherwise add one by address, for example
+`http://192.168.1.20:32400` — a trailing slash is fine either way (harness step: server-url-shape).
 
-**2. Token.** In Plex Web, open any media item → **Get Info** → **View XML**,
-then copy the `X-Plex-Token=` value from the address bar. Treat the token
-like a password: Plex tokens are account-scoped, so use yours only against
-your own server. nowplaying stores it in the operating system's credential
-store, never in plain files.
+**2. Sign in.** Choose **Start sign-in**; a Plex page (app.plex.tv) opens in
+your browser. Sign in there as the user whose playback you want to show.
+Plex grants account-level access through this sign-in, so do this only for
+your own server. The settings page updates by itself when you finish, and the
+sign-in is stored in the operating system's credential store, never in plain
+files. From then on the app polls the server and shows what is playing
+(harness step: probe-connect). Nothing playing simply shows idle — that is
+normal.
 
-**3. Connect.** The wizard polls the server and shows what is playing for
-your user (harness step: probe-connect). Nothing playing simply shows idle —
-that is normal.
+**Common errors.** If the saved sign-in expires or is revoked, the server
+rejects it with a 401 and playback stops updating; remove the server in
+Settings and sign in again (harness step: bad-token-rejected).
 
-**Common errors.** A 401 means the token is wrong or expired; copy a fresh
-one from Plex Web and try again (harness step: bad-token-rejected).
-
-**Undo:** remove the server in Settings; its credential is deleted from the
-OS credential store.
+**Undo:** remove the server in Settings; its saved sign-in is deleted from
+the OS credential store.
 
 Jellyfin, Navidrome and Emby walkthroughs follow the same shape and join this
 page when their guide paths land.
@@ -98,18 +101,20 @@ Presence clears automatically when playback stops.
 <!-- guide-path: hosted-card -->
 Harness status: **pass** — verified by `node scripts/guide-paths.js run hosted-card`.
 
-**1. Connect.** In Settings → hosted card, connect: the app registers a card
-and receives an upload token (harness step: register-and-ingest).
+**1. Connect.** In Settings → hosted card, sign in with GitHub: the app
+registers your card and starts pushing privacy-filtered playback state with
+its upload token (harness step: register-and-ingest).
 
 **2. Pick your fields.** The app pushes only the privacy-filtered playback
 fields you enable. Music, paused, TV episode and movie states all render on
 the card (harness step: render-states-over-http).
 
-**3. Use the card.** The app shows your card URL, which serves an SVG — for
-example in a README:
+**3. Use the card.** The app shows your card link in Settings once you are
+signed in — it ends in `/u/<your-github-login>.svg`. Copy that link wherever
+you want the card, for example in a README:
 
 ```md
-![now playing](https://<your-hosted-card>/card/<your-card-id>.svg)
+![now playing](<paste the card link the app shows in Settings>)
 ```
 
 **Cache and stale behavior.** An unchanged card answers 304 to a conditional
