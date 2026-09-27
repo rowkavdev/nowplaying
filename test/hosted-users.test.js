@@ -94,7 +94,7 @@ test("concurrent signed-in ingests preserve the newer device state and sequence"
   const barrier = new Promise((resolve) => { release = resolve; });
   let delayed = false;
   const controlled = { command: async (args) => {
-    if (args[0] === "EVAL" && args[6] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    if (args[0] === "EVAL" && args[7] === "1" && !delayed) { delayed = true; entered(); await barrier; }
     return redis.command(args);
   } };
   const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
@@ -107,6 +107,33 @@ test("concurrent signed-in ingests preserve the newer device state and sequence"
   assert.equal((await service.readUserCardState("RowKav")).title, "Newer");
   assert.equal(await redis.command(["GET", `np:seq:${deviceId}`]), "2");
   await assert.rejects(service.ingest({ token, payload: up(now(), { seq: 2, title: "Replay" }) }), { status: 409 });
+});
+
+test("a delayed signed-in ingest cannot restore playback after removal or sign-out", async () => {
+  for (const removal of ["removeDevice", "signOutEverywhere"]) {
+    const { redis, now } = setup();
+    let entered, release;
+    const atBarrier = new Promise((resolve) => { entered = resolve; });
+    const barrier = new Promise((resolve) => { release = resolve; });
+    let delayed = false;
+    const controlled = { command: async (args) => {
+      if (args[0] === "EVAL" && !delayed) { delayed = true; entered(); await barrier; }
+      return redis.command(args);
+    } };
+    const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
+    const desk = await signIn(service, "Desktop");
+    const lap = await signIn(service, "Laptop");
+    const pending = service.ingest({ token: lap.token, payload: up(now(), { title: "Sensitive Track" }) });
+    await atBarrier;
+    if (removal === "removeDevice") await service.removeDevice({ token: desk.token, deviceId: lap.deviceId });
+    else await service.signOutEverywhere({ token: desk.token });
+    assert.equal((await service.readUserCardState("RowKav")).state, "idle");
+    release();
+    await assert.rejects(pending, { status: 401, code: "unauthorized" });
+    assert.equal((await service.readUserCardState("RowKav")).state, "idle");
+    assert.equal(await redis.command(["GET", `np:seq:${lap.deviceId}`]), null);
+    await assert.rejects(service.ingest({ token: lap.token, payload: up(now()) }), { status: 401 });
+  }
 });
 
 test("clock skew: order uses server time and progress stays in range", async () => {

@@ -42,8 +42,9 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
         case "EVAL": {
           // Emulates the hosted ingest script as one synchronous Redis action.
           // No await may split its comparison from the card-state write.
-          if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 3) throw new Error("unsupported script");
-          const [seqKey, stateKey, seenKey, seqText, seqTtl, userFlag, recordText, receivedAt, stateTtl] = rest.slice(1);
+          if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 4) throw new Error("unsupported script");
+          const [seqKey, stateKey, seenKey, tokenKey, seqText, seqTtl, userFlag, recordText, receivedAt, stateTtl] = rest.slice(1);
+          if (!live(tokenKey)) return [-1, -1];
           const previous = Number(live(seqKey)?.value ?? -1);
           const incoming = Number(seqText);
           if (incoming <= previous) return [0, previous];
