@@ -49,6 +49,7 @@ export function createHostedUploader({
   }
   const origin = normalizeHostedUrl(baseUrl);
   let registration = null;
+  let registering = null;
   let lastSeq = -1;
   let serverClockOffset = 0;
   let lastSent = null; // { key, at }
@@ -77,15 +78,22 @@ export function createHostedUploader({
     }
   }
 
-  async function ensureRegistered() {
-    if (registration) return registration;
-    const stored = await credentials.load();
-    if (validRegistration(stored)) return (registration = { ...stored });
-    const created = await request("/api/register");
-    if (!validRegistration(created)) throw new HostedUploadError("invalid_registration");
-    registration = { cardId: created.cardId, deviceId: created.deviceId, token: created.token };
-    await credentials.save(registration);
-    return registration;
+  function ensureRegistered() {
+    if (registration) return Promise.resolve(registration);
+    if (registering) return registering;
+    // Share the entire load, register and save transaction. Publish the
+    // registration only after the durable credential save has succeeded.
+    registering = (async () => {
+      const stored = await credentials.load();
+      if (validRegistration(stored)) return (registration = { ...stored });
+      const created = await request("/api/register");
+      if (!validRegistration(created)) throw new HostedUploadError("invalid_registration");
+      const device = { cardId: created.cardId, deviceId: created.deviceId, token: created.token };
+      await credentials.save(device);
+      registration = device;
+      return device;
+    })().finally(() => { registering = null; });
+    return registering;
   }
 
   // Wall-clock based so the sequence keeps rising across restarts without

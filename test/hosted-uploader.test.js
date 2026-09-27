@@ -74,6 +74,68 @@ test("reuses stored credentials instead of registering again", async () => {
   assert.equal(env.calls.filter((call) => call.url.endsWith("/api/register")).length, 1);
 });
 
+test("first upload and card link share one registration and credential save", async () => {
+  const env = setup();
+  let entered, release;
+  const started = new Promise((resolve) => { entered = resolve; });
+  const barrier = new Promise((resolve) => { release = resolve; });
+  let saves = 0;
+  const credentials = { ...env.credentials, save: async (value) => { saves++; await env.credentials.save(value); } };
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith("/api/register")) {
+      const response = await env.fetchImpl(url, init);
+      entered();
+      await barrier;
+      return response;
+    }
+    return env.fetchImpl(url, init);
+  };
+  const up = env.uploader({ credentials, fetchImpl });
+  const push = up.push(track({ title: "Current Track" }));
+  await started;
+  const link = up.cardUrl();
+  await Promise.resolve();
+  assert.equal(env.calls.filter((call) => call.url.endsWith("/api/register")).length, 1);
+  release();
+  const [sent, cardUrl] = await Promise.all([push, link]);
+  assert.deepEqual(sent, { sent: true });
+  assert.equal(saves, 1);
+  assert.equal(cardUrl, `${BASE}/card/${env.stored().cardId}.svg`);
+  assert.equal((await env.service.readCardState(env.stored().cardId)).title, "Current Track");
+});
+
+test("a failed first registration or credential save clears the shared flight for retry", async () => {
+  const env = setup();
+  let attempts = 0;
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith("/api/register") && ++attempts === 1) throw new Error("offline");
+    return env.fetchImpl(url, init);
+  };
+  const up = env.uploader({ fetchImpl });
+  const [first, second] = await Promise.allSettled([up.cardUrl(), up.cardUrl()]);
+  assert.equal(first.status, "rejected");
+  assert.equal(second.status, "rejected");
+  assert.equal(attempts, 1);
+  assert.equal(await up.cardUrl(), `${BASE}/card/${env.stored().cardId}.svg`);
+  assert.equal(attempts, 2);
+
+  const another = setup();
+  let saves = 0;
+  const credentials = { ...another.credentials, save: async (value) => {
+    saves++;
+    if (saves === 1) throw new Error("save failed");
+    await another.credentials.save(value);
+  } };
+  const failingSave = another.uploader({ credentials });
+  const [a, b] = await Promise.allSettled([failingSave.cardUrl(), failingSave.cardUrl()]);
+  assert.equal(a.status, "rejected");
+  assert.equal(b.status, "rejected");
+  assert.equal(saves, 1);
+  const recovered = await failingSave.cardUrl();
+  assert.equal(recovered, `${BASE}/card/${another.stored().cardId}.svg`);
+  assert.equal(saves, 2);
+});
+
 test("only sends on change or heartbeat, not every progress tick", async () => {
   const env = setup();
   const up = env.uploader();
