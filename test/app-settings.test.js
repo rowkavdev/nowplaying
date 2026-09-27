@@ -184,7 +184,7 @@ test("moved Windows install reports a broken shortcut without exposing its path"
     isEnabled: async () => !broken,
     setEnabled: async (enabled) => { broken = !enabled; },
   };
-  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" }, startup });
+  const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, platform: "win32", fetchImpl: async () => Response.json([]), discord: { env: {}, builtInClientId: "" }, startup });
   try {
     const page = await fetch(`${app.url}/settings`);
     assert.match(await page.text(), /id="startup-result"/);

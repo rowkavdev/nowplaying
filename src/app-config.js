@@ -277,7 +277,7 @@ export function youtubeForDiscord(source) {
   });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, deviceId = null, onConfigured = async () => {}, discoverServers, signIn, spotifySignIn, hostedSignIn, createServer = createHttpServer } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, platform = process.platform, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, deviceId = null, onConfigured = async () => {}, discoverServers, signIn, spotifySignIn, hostedSignIn, createServer = createHttpServer } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   let config;
   try { config = await loadAppConfig(configFile); }
@@ -480,7 +480,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: settingsStore.serial, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
     : null;
   const managementFallback = async (request) => (await services?.handler(request)) ?? (await management?.handler(request)) ?? devicesHandler(request);
-  const pageHandler = createSettingsPageHandler({ settings, fallback: managementFallback });
+  const pageHandler = createSettingsPageHandler({ settings, fallback: managementFallback, platform });
   const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
