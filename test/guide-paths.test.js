@@ -45,9 +45,14 @@ test("check-docs fails when a step reference moves out of its path section", asy
   const doc = await readFile("docs/guide-skeleton.md", "utf8");
   const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
   const moved = join(dir, "moved.md");
-  let edited = doc.replace("3. Unchanged cards answer 304 to a matching ETag (harness step: cache-behavior).\n", "");
+  // Derive the line carrying the step reference instead of hardcoding prose,
+  // so a guide rewording cannot turn this regression into a no-op replace.
+  const lines = doc.split("\n");
+  const refIndex = lines.findIndex((line) => line.includes("harness step: cache-behavior"));
+  assert.notEqual(refIndex, -1, "guide must reference harness step cache-behavior");
+  const [refLine] = lines.splice(refIndex, 1);
+  const edited = lines.join("\n") + "\n## Appendix\n\nRetired step reference: " + refLine.trim() + "\n";
   assert.notEqual(edited, doc);
-  edited += "\n## Appendix\n\nRetired step reference: harness step: cache-behavior.\n";
   await writeFile(moved, edited, "utf8");
   const result = await checkDocs(moved);
   assert.ok(result.failures.some((failure) => failure.includes("hosted-card: section never mentions harness step cache-behavior")),

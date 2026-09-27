@@ -25,8 +25,10 @@ to it (harness step: checksums-published). In PowerShell, in your Downloads
 folder:
 
 ```powershell
-Get-FileHash .\nowplaying-v0.2.0-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\nowplaying-v<version>-windows-x64-setup.exe -Algorithm SHA256
 ```
+
+Substitute the version you actually downloaded.
 
 Expected output: a hash identical to the setup exe's line in `SHA256SUMS`.
 If it differs, delete the file and download again — do not install.
@@ -123,8 +125,12 @@ after 10 minutes without a fresh one, and replayed or tokenless uploads are
 rejected (harness step: stale-and-anonymous-rejected), so a card never shows
 stale media as current.
 
-**Disconnect.** Settings → hosted card → disconnect deletes the uploaded
-state immediately; the card stops serving media (harness step: disconnect-delete).
+**Disconnect.** Settings → hosted card → disconnect stops uploads and asks
+the service to delete the uploaded state; the card stops serving media
+(harness step: disconnect-delete). If the app is offline the deletion cannot
+be sent right away: the disconnect stays pending, no uploads resume, and the
+app retries until the service confirms. The saved sign-in is cleared only
+once the deletion succeeds.
 
 Self-hosted and Vercel deployment notes are in [deployment.md](deployment.md)
 and [hosted-card.md](hosted-card.md).
