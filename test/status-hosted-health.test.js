@@ -64,3 +64,19 @@ test("unknown hosted errors are never copied into diagnostics", async () => {
   assert.deepEqual(report.errors, ["hosted_upload_failed"]);
   assert.doesNotMatch(JSON.stringify(report), /private/);
 });
+
+
+test("provider authentication failure outranks hosted startup on every surface", async () => {
+  const status = createAppStatus({ config });
+  const provider = status.wrapProvider({ getPresence: async () => { throw Object.assign(new Error("private token"), { status: 401 }); } });
+  await assert.rejects(provider.getPresence());
+  for (const state of ["idle", "starting"]) {
+    status.setHosted(() => ({ enabled: true, state }));
+    const { get, tray, report } = await view(status);
+    assert.equal(tray.status, "degraded");
+    assert.equal(tray.action, "test_provider_connection");
+    assert.match(tray.text, /sign-in rejected/);
+    assert.equal(get("summary").textContent, "Something needs attention - see below.");
+    assert.equal(report.health, "degraded");
+  }
+});

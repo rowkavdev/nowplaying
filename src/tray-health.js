@@ -24,9 +24,8 @@ export function createTrayHealth({ running = true, provider = "starting", card =
 
 function overallStatus({ running, provider, card, discord, hosted, stale }) {
   if (!running || provider === "stopped") return "stopped";
-  if ([card, discord, hosted].includes("failed")) return "degraded";
+  if (provider !== "connected" && provider !== "starting" || stale || [card, discord, hosted].includes("failed")) return "degraded";
   if (provider === "starting" || [card, discord, hosted].includes("starting")) return "starting";
-  if (provider !== "connected" || stale) return "degraded";
   return "healthy";
 }
 
