@@ -9,7 +9,7 @@
 //
 // check-docs fails when the skeleton's claimed per-path status or step list no
 // longer matches a fresh run. Test: test/guide-paths.test.js.
-import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { createServer as createIpcServer } from "node:net";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -17,8 +17,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createPlexProvider } from "../src/providers/plex.js";
 import { OP, createDiscordIpcClient, decodeFrames, encodeFrame } from "../src/discord-ipc.js";
-import { renderCard } from "../src/card.js";
-import { EXAMPLES } from "./render-card-examples.js";
+import { createHandlers } from "../hosted/lib/app.js";
+import { createMemoryRedis } from "../hosted/lib/redis.js";
+import { createService } from "../hosted/lib/service.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_DOC = join(ROOT, "docs/guide-skeleton.md");
@@ -196,33 +197,96 @@ async function discordRichPresence() {
 }
 
 // --- Hosted SVG card render -------------------------------------------------
+// The documented hosted-card flow over real HTTP against the actual service
+// (in-memory Redis, same handlers Vercel/self-hosted run): register, push a
+// privacy-filtered presence, serve the card, cache, reject bad writes, delete.
+const HOSTED_FIXTURES = [
+  { state: "playing", kind: "track", title: "Holocene", subtitle: "Bon Iver" },
+  { state: "paused", kind: "track", title: "Holocene", subtitle: "Bon Iver" },
+  { state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost S4E5" },
+  { state: "playing", kind: "movie", title: "Spirited Away", subtitle: "2001" },
+];
+
+async function hostedService() {
+  const service = createService({ redis: createMemoryRedis() });
+  const handlers = createHandlers({ getService: () => service });
+  const routes = { "/api/register": handlers.register, "/api/ingest": handlers.ingest,
+    "/api/revoke": handlers.revoke, "/api/card": handlers.card, "/api/health": handlers.health };
+  const server = createHttpServer((req, res) => {
+    const path = new URL(req.url, "http://localhost").pathname;
+    const route = routes[path] ?? (path.startsWith("/card/") ? handlers.card : null);
+    if (!route) { res.statusCode = 404; return res.end(); }
+    return route(req, res);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { port: server.address().port, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+function hostedCall(port, method, path, { body, headers = {} } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ host: "127.0.0.1", port, method, path, headers }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() }));
+    });
+    req.once("error", reject);
+    req.end(body);
+  });
+}
+
 async function hostedCard() {
-  return execute("hosted-card", [
-    ["render-all-states", async () => {
-      for (const example of EXAMPLES) {
-        const svg = renderCard(example.presence, example.options);
-        expect(svg.includes("<svg"), `${example.file}: output is not an SVG`);
-        expect(svg.includes(example.presence.title), `${example.file}: rendered card must show the media title`);
-      }
-      return `${EXAMPLES.length} documented states render`;
-    }],
-    ["deterministic-output", async () => {
-      const { presence, options } = EXAMPLES[0];
-      expect(renderCard(presence, options) === renderCard(presence, options), "the same presence must render byte-identical SVG");
-    }],
-    ["gallery-in-sync", async () => {
-      for (const example of EXAMPLES) {
-        const committed = await readFile(join(ROOT, "docs/assets/cards", example.file), "utf8");
-        expect(committed === renderCard(example.presence, example.options),
-          `${example.file}: committed gallery SVG has drifted from the shipped renderer`);
-      }
-    }],
-    ["no-secrets-in-markup", async () => {
-      for (const example of EXAMPLES)
-        expect(!/token|password|secret/i.test(renderCard(example.presence, example.options)),
-          `${example.file}: card markup must never embed credentials`);
-    }],
-  ]);
+  const app = await hostedService();
+  const auth = (token) => ({ "content-type": "application/json", authorization: `Bearer ${token}` });
+  let registered;
+  try {
+    return await execute("hosted-card", [
+      ["register-and-ingest", async () => {
+        const registration = await hostedCall(app.port, "POST", "/api/register");
+        expect(registration.status === 201, `register must answer 201, got ${registration.status}`);
+        registered = JSON.parse(registration.body);
+        expect(typeof registered.cardId === "string" && typeof registered.token === "string",
+          "register must issue a card id and upload token");
+        const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), ...HOSTED_FIXTURES[0] });
+        const ingested = await hostedCall(app.port, "POST", "/api/ingest", { body: payload, headers: auth(registered.token) });
+        expect(ingested.status === 202, `ingest must answer 202, got ${ingested.status}: ${ingested.body}`);
+      }],
+      ["render-states-over-http", async () => {
+        let seq = 1;
+        for (const fixture of HOSTED_FIXTURES) {
+          const payload = JSON.stringify({ v: 1, seq: ++seq, observedAt: Date.now(), ...fixture });
+          await hostedCall(app.port, "POST", "/api/ingest", { body: payload, headers: auth(registered.token) });
+          const card = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg?theme=paper&width=320`);
+          expect(card.status === 200 && card.headers["content-type"]?.includes("image/svg+xml"),
+            `${fixture.kind}/${fixture.state}: card must be an SVG over HTTP, got ${card.status}`);
+          expect(card.body.includes(fixture.title), `${fixture.kind}/${fixture.state}: card must show "${fixture.title}"`);
+        }
+        return `${HOSTED_FIXTURES.length} documented states served`;
+      }],
+      ["cache-behavior", async () => {
+        const first = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg`);
+        expect(first.headers.etag, "card responses must carry an ETag");
+        const cached = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg`,
+          { headers: { "if-none-match": first.headers.etag } });
+        expect(cached.status === 304, `an unchanged card must answer 304 to a matching ETag, got ${cached.status}`);
+      }],
+      ["stale-and-anonymous-rejected", async () => {
+        const replayed = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), ...HOSTED_FIXTURES[0] });
+        const stale = await hostedCall(app.port, "POST", "/api/ingest", { body: replayed, headers: auth(registered.token) });
+        expect(stale.status === 409, `a replayed sequence must be rejected, got ${stale.status}`);
+        const anonymous = await hostedCall(app.port, "POST", "/api/ingest",
+          { body: replayed, headers: { "content-type": "application/json" } });
+        expect(anonymous.status === 401, `an upload without a token must be rejected, got ${anonymous.status}`);
+      }],
+      ["disconnect-delete", async () => {
+        const revoked = await hostedCall(app.port, "POST", "/api/revoke", { headers: auth(registered.token) });
+        expect(revoked.status === 200, `revoke must answer 200, got ${revoked.status}`);
+        const card = await hostedCall(app.port, "GET", `/card/${registered.cardId}.svg`);
+        expect(!card.body.includes("Holocene"), "after disconnect the card must no longer serve media");
+      }],
+    ]);
+  } finally {
+    await app.close();
+  }
 }
 
 export const PATHS = [

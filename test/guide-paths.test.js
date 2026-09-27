@@ -45,12 +45,12 @@ test("check-docs fails when a step reference moves out of its path section", asy
   const doc = await readFile("docs/guide-skeleton.md", "utf8");
   const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
   const moved = join(dir, "moved.md");
-  let edited = doc.replace("3. The committed gallery in `docs/assets/cards/` always matches the shipped renderer (harness step: gallery-in-sync).\n", "");
+  let edited = doc.replace("3. Unchanged cards answer 304 to a matching ETag (harness step: cache-behavior).\n", "");
   assert.notEqual(edited, doc);
-  edited += "\n## Appendix\n\nRetired step reference: harness step: gallery-in-sync.\n";
+  edited += "\n## Appendix\n\nRetired step reference: harness step: cache-behavior.\n";
   await writeFile(moved, edited, "utf8");
   const result = await checkDocs(moved);
-  assert.ok(result.failures.some((failure) => failure.includes("hosted-card: section never mentions harness step gallery-in-sync")),
+  assert.ok(result.failures.some((failure) => failure.includes("hosted-card: section never mentions harness step cache-behavior")),
     JSON.stringify(result.failures));
 });
 
@@ -76,14 +76,14 @@ test("check-docs fails when a path or harness step disappears from the doc", asy
   await writeFile(noPath, doc.replace("<!-- guide-path: hosted-card -->", ""), "utf8");
   assert.ok((await checkDocs(noPath)).failures.some((failure) => failure.includes("hosted-card: missing guide-path marker")));
   const noStep = join(dir, "no-step.md");
-  await writeFile(noStep, doc.replace("harness step: gallery-in-sync", "harness step: removed"), "utf8");
-  assert.ok((await checkDocs(noStep)).failures.some((failure) => failure.includes("hosted-card: section never mentions harness step gallery-in-sync")));
+  await writeFile(noStep, doc.replace("harness step: cache-behavior", "harness step: removed"), "utf8");
+  assert.ok((await checkDocs(noStep)).failures.some((failure) => failure.includes("hosted-card: section never mentions harness step cache-behavior")));
 });
 
 test("CLI emits machine-visible JSONL with the failing step named", async () => {
   const { stdout } = await promisify(execFile)(process.execPath, ["scripts/guide-paths.js", "run", "hosted-card"]);
   const lines = stdout.trim().split("\n").map((line) => JSON.parse(line));
   assert.equal(lines.at(-1).status, "pass");
-  assert.ok(lines.some((line) => line.step === "gallery-in-sync" && line.status === "pass"));
+  assert.ok(lines.some((line) => line.step === "cache-behavior" && line.status === "pass"));
   await assert.rejects(promisify(execFile)(process.execPath, ["scripts/guide-paths.js", "run", "bogus-path"]));
 });
