@@ -132,6 +132,7 @@ test("Cancel during finish validation prevents Plex and Jellyfin writes", async 
     const { flowId } = read(await post(handler, { action: "start", provider, baseUrl: "http://127.0.0.1:32400" }));
     const polling = post(handler, { action: "poll", flowId });
     await startedValidation;
+    assert.deepEqual(read(await post(handler, { action: "poll", flowId })), { error: "poll_in_progress" });
     assert.deepEqual(read(await post(handler, { action: "cancel", flowId })), { status: "cancelled" });
     release();
     assert.deepEqual(read(await polling), { error: "expired" });
