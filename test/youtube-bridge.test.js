@@ -77,6 +77,35 @@ test("the most recently started tab wins; paused shows when nothing plays", asyn
   assert.equal(p.title, "First");
 });
 
+test("newer playing tab wins after wall-clock rollback or frozen time", async () => {
+  for (const adjusted of [5_000, 10_000]) {
+    let clock = 10_000;
+    const b = createYouTubeBridge({ token, now: () => clock });
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Song A" }) });
+    clock = adjusted;
+    b.receive({ method: "POST", headers, body: video({ tabId: "b", title: "Song B" }) });
+    assert.equal((await b.provider.getPresence()).title, "Song B");
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Song A" }) });
+    assert.equal((await b.provider.getPresence()).title, "Song B", "heartbeat is not a new start");
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Song A", state: "paused" }) });
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Song A" }) });
+    assert.equal((await b.provider.getPresence()).title, "Song A", "resume is a new start");
+  }
+});
+
+test("paused fallback uses receive order despite backward or frozen wall time", async () => {
+  for (const adjusted of [5_000, 10_000]) {
+    let clock = 10_000;
+    const b = createYouTubeBridge({ token, now: () => clock });
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Paused A", state: "paused" }) });
+    clock = adjusted;
+    b.receive({ method: "POST", headers, body: video({ tabId: "b", title: "Paused B", state: "paused" }) });
+    assert.equal((await b.provider.getPresence()).title, "Paused B");
+    b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "Paused A", state: "paused" }) });
+    assert.equal((await b.provider.getPresence()).title, "Paused A");
+  }
+});
+
 test("live streams have no position or duration", () => {
   const e = parseYouTubeEvent(video({ live: true }));
   assert.equal(e.positionMs, null);

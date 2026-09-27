@@ -78,6 +78,7 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
   let token = checkToken(initialToken);
   if (!Number.isInteger(ttlMs) || ttlMs < 5_000) throw new RangeError("ttlMs must be at least 5000");
   const tabs = new Map();
+  let nextActivityOrder = 0;
 
   function prune() {
     for (const [id, tab] of tabs) if (now() - tab.at > ttlMs) tabs.delete(id);
@@ -97,16 +98,21 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
     const before = tabs.get(event.tabId);
     if (!before && tabs.size >= MAX_TABS) return { status: 429 };
     const startedPlaying = event.state === "playing" && (before?.event.state !== "playing" || before.event.videoId !== event.videoId);
-    tabs.set(event.tabId, { event, at: now(), playingSince: startedPlaying ? now() : (before?.playingSince ?? now()) });
+    tabs.set(event.tabId, {
+      event, at: now(),
+      // Receive order, not adjustable wall time, decides which tab wins.
+      activityOrder: ++nextActivityOrder,
+      playingOrder: startedPlaying ? nextActivityOrder : (before?.playingOrder ?? nextActivityOrder),
+    });
     return { status: 204 };
   }
 
   function current() {
     prune();
     const list = [...tabs.values()];
-    const playing = list.filter((tab) => tab.event.state === "playing").sort((a, b) => b.playingSince - a.playingSince);
+    const playing = list.filter((tab) => tab.event.state === "playing").sort((a, b) => b.playingOrder - a.playingOrder);
     if (playing.length) return playing[0].event;
-    const paused = list.sort((a, b) => b.at - a.at);
+    const paused = list.sort((a, b) => b.activityOrder - a.activityOrder);
     return paused[0]?.event ?? null;
   }
 
