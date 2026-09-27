@@ -33,7 +33,9 @@ export function createSetupSignInHandler({
     for (const [id, flow] of flows) if (flow.expiresAt <= time && !flow.committing) flows.delete(id);
   }
 
-  async function finish(result, serverUrl) {
+  async function finish(result, serverUrl, flowIsActive = () => true, beginCommit = () => {}) {
+    const expired = () => json(410, { error: "expired" });
+    if (!flowIsActive()) return expired();
     const ref = { provider: result.provider, identityId: result.identity.id };
     const identity = { id: result.identity.id, displayName: result.identity.displayName };
     const event = { provider: result.provider, identity, ...(serverUrl ? { serverUrl } : {}) };
@@ -42,12 +44,14 @@ export function createSetupSignInHandler({
       if (error instanceof SignInError && error.status === "too_many_servers") return json(409, { error: error.status });
       return json(500, { error: "draft_update_failed" });
     }
+    if (!flowIsActive()) return expired();
     // A repeat sign-in replaces the same OS credential. Keep the old value
     // until the draft/config write succeeds so a failed write can restore it.
     if (typeof credentialStore.read !== "function" || typeof credentialStore.remove !== "function") return json(500, { error: "credential_store_failed" });
     let previous;
     try { previous = await credentialStore.read(ref); }
     catch { return json(500, { error: "credential_store_failed" }); }
+    if (!flowIsActive()) return expired();
     async function restore() {
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
@@ -58,6 +62,13 @@ export function createSetupSignInHandler({
       try { await restore(); } catch { /* The response cannot promise recovery. */ }
       return json(500, { error: "credential_store_failed" });
     }
+    if (!flowIsActive()) {
+      try { await restore(); } catch { return json(500, { error: "credential_store_failed" }); }
+      return expired();
+    }
+    // Once config/draft commit begins, Cancel returns a conflict rather than
+    // claiming success for an operation it cannot safely roll back.
+    beginCommit();
     try { await onSignedIn(event); }
     catch {
       try { await restore(); }
@@ -94,8 +105,9 @@ export function createSetupSignInHandler({
     if (!onlyKeys(input, ["action", "flowId"]) || !text(input.flowId)) return json(400, { error: "invalid_request" });
     prune();
     const flow = flows.get(input.flowId);
+    if (flow?.committing) return json(409, { error: "poll_in_progress" });
     if (!flow || flow.expiresAt <= now()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
-    if (flow.polling || flow.committing) return json(409, { error: "poll_in_progress" });
+    if (flow.polling) return json(409, { error: "poll_in_progress" });
     flow.polling = true;
     let result;
     try {
@@ -115,10 +127,9 @@ export function createSetupSignInHandler({
       return json(410, { error: "expired" });
     }
     if (result.status !== "signed_in") return json(200, { status: "pending" });
-    // Commit is the linearization point: after this, cancellation must not
-    // report success while a credential/config write may be in progress.
-    flow.committing = true;
-    try { return await finish(result, flow.serverUrl); }
+    try { return await finish(result, flow.serverUrl,
+      () => flows.get(input.flowId) === flow && flow.expiresAt > now(),
+      () => { flow.committing = true; }); }
     finally { if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
   }
 
