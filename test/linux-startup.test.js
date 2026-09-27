@@ -132,3 +132,21 @@ test("X-GNOME-Autostart-enabled=false disables the entry: status reports broken"
   await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("X-GNOME-Autostart-enabled=true", "X-GNOME-Autostart-enabled=false"));
   assert.deepEqual(await startup.status(), { enabled: false, broken: true });
 });
+
+test("a literal % in Exec is doubled per the XDG spec, and status still matches (#672 review)", async () => {
+  const autostartDir = await dir();
+  const startup = createLinuxStartup({ autostartDir, execPath: "/usr/bin/node", args: ["/home/u/100% done/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const text = await readFile(startup.file, "utf8");
+  assert.match(text, /^Exec=\/usr\/bin\/node "\/home\/u\/100%% done\/nowplaying\.js" start$/m);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+test("a bare single % on disk (field-code-invalid) reads as broken", async () => {
+  const autostartDir = await dir();
+  const startup = createLinuxStartup({ autostartDir, execPath: "/usr/bin/node", args: ["/home/u/100%/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("100%%", "100%"));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+});

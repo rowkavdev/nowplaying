@@ -23,9 +23,12 @@ export function xdgAutostartDir({ env = process.env, home = env?.HOME } = {}) {
 // The desktop entry spec quotes arguments containing reserved characters
 // (space, tab, newline, double quote, single quote, backslash and the
 // ASCII punctuation it lists) in double quotes, with " ` $ \ escaped.
+// A literal % must be doubled to %%: single percent signs start field
+// codes (%f, %U, ...) that the launcher expands or rejects.
 function quoteExecArg(arg) {
-  if (!/[ \t"'\\|><~$&*?#()`]/.test(arg)) return arg;
-  return `"${arg.replace(/["`$\\]/g, "\\$&")}"`;
+  const escaped = arg.replaceAll("%", "%%");
+  if (!/[ \t"'\\|><~$&*?#()`]/.test(arg)) return escaped;
+  return `"${escaped.replace(/["`$\\]/g, "\\$&")}"`;
 }
 
 function checkExec(execPath, args) {
@@ -72,6 +75,8 @@ export function createLinuxStartup({
         return Object.freeze({ enabled: false, broken: false });
       throw error;
     }
+    // The file holds the escaped form (%% for a literal %), which is what
+    // execLine is built as, so the comparison is byte-for-byte.
     const current = text
       .split("\n")
       .find((line) => line.startsWith("Exec="))
