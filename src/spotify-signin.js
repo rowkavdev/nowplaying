@@ -35,11 +35,16 @@ export function signInToSpotify({ clientId, openUrl, fetchImpl = fetch, timeoutM
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let callbackClaimed = false;
     let timer = null;
     const server = createServer((request, response) => {
       const url = new URL(request.url, `http://${host}`);
       if (request.method !== "GET" || url.pathname !== CALLBACK_PATH) {
         response.writeHead(404, { "Content-Type": "text/plain" }).end("Not found");
+        return;
+      }
+      if (callbackClaimed || settled) {
+        response.writeHead(409, { "Content-Type": "text/html; charset=utf-8" }).end(page("Sign-in already in progress", "This sign-in link was already used. Go back to NowPlaying."));
         return;
       }
       let code;
@@ -51,10 +56,12 @@ export function signInToSpotify({ clientId, openUrl, fetchImpl = fetch, timeoutM
           response.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(page("Sign-in not recognised", "This page wasn't opened by NowPlaying. You can close it."));
           return;
         }
+        callbackClaimed = true;
         response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(page("Spotify not connected", "Spotify sign-in was cancelled. You can close this tab."));
         finish(error);
         return;
       }
+      callbackClaimed = true;
       const redirectUri = `http://${host}:${server.address().port}${CALLBACK_PATH}`;
       exchangeCode({ clientId, code, redirectUri, verifier, fetchImpl }).then(async (tokens) => {
         if (!tokens.refreshToken) throw Object.assign(new Error("Spotify returned no refresh token"), { code: "token_failed" });

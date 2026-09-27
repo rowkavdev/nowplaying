@@ -35,6 +35,34 @@ test("signs in through a one-off 127.0.0.1 listener (#135)", async () => {
   await assert.rejects(fetch(redirect), "listener is closed after sign-in");
 });
 
+test("a duplicate valid callback cannot consume the code twice or fail the first sign-in", async () => {
+  let authorize;
+  let releaseExchange, enteredExchange;
+  const exchangeGate = new Promise((resolve) => { releaseExchange = resolve; });
+  const exchangeStarted = new Promise((resolve) => { enteredExchange = resolve; });
+  let exchanges = 0;
+  const fetchImpl = async (url) => {
+    if (new URL(url).hostname === "api.spotify.com") return { ok: true, json: async () => ({ id: "rowan123", display_name: "Rowan" }) };
+    exchanges++;
+    enteredExchange();
+    if (exchanges > 1) return { ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) };
+    await exchangeGate;
+    return { ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r1", expires_in: 3600 }) };
+  };
+  const done = signInToSpotify({ clientId, fetchImpl, openUrl: async (url) => { authorize = new URL(url); } });
+  while (!authorize) await new Promise((resolve) => setTimeout(resolve, 5));
+  const callback = `${authorize.searchParams.get("redirect_uri")}?code=once&state=${authorize.searchParams.get("state")}`;
+  const first = fetch(callback);
+  await exchangeStarted;
+  const duplicate = await fetch(callback);
+  assert.equal(duplicate.status, 409);
+  assert.match(await duplicate.text(), /already in progress/);
+  assert.equal(exchanges, 1);
+  releaseExchange();
+  assert.match(await (await first).text(), /Spotify connected/);
+  assert.deepEqual(await done, { refreshToken: "r1", identity: { id: "rowan123", displayName: "Rowan" } });
+});
+
 test("cancelled consent and timeout end the sign-in", async () => {
   let authorize;
   const denied = signInToSpotify({ clientId, fetchImpl: tokenFetch().fetchImpl, openUrl: async (url) => { authorize = new URL(url); } });
