@@ -113,8 +113,9 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   // they are scrubbed even if they turn up inside an error string.
   function diagnostics() {
     const s = snapshot();
+    const problem = serverProblem(s.servers);
     const outputs = ["card", ...(s.discord.enabled ? ["discord"] : [])];
-    const health = s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready") ? "healthy" : s.server.state === "starting" ? "starting" : "degraded";
+    const health = s.server.state === "connected" && !problem && (!s.discord.enabled || s.discord.state === "ready") ? "healthy" : s.server.state === "starting" ? "starting" : "degraded";
     const sensitiveValues = [config.serverUrl, s.server.address, s.server.user, playing?.title, playing?.subtitle].filter((value) => typeof value === "string");
     return createDiagnosticRecord({
       version: s.version ?? undefined,
@@ -123,7 +124,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       enabledOutputs: outputs,
       provider: { type: config.provider, status: s.server.state },
       health,
-      errors: [failure, s.discord.error].filter((value) => typeof value === "string"),
+      errors: [failure, problem?.reason, s.discord.error].filter((value) => typeof value === "string"),
       sensitiveValues,
       build: build ?? undefined,
     });
@@ -135,13 +136,22 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     const s = snapshot();
     // Safe mode (#122): server checks, Discord and uploads are off on purpose.
     if (safeMode) return Object.freeze({ status: "degraded", action: "open_troubleshooting", text: "NowPlaying: safe mode - run setup again" });
-    const provider = s.server.state === "error" ? "unreachable" : s.server.state;
+    const problem = serverProblem(s.servers);
+    const provider = problem ? problem.reason === "unauthorized" ? "authentication_failed" : "unreachable" : s.server.state === "error" ? "unreachable" : s.server.state;
     const discordOutput = !s.discord.enabled ? "disabled" : DISCORD_OUTPUT[s.discord.state] ?? "starting";
     const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, lastSuccessfulPollAt: lastOkAt, now: now() });
-    return Object.freeze({ status: health.status, action: health.action, text: trayText(health, s) });
+    return Object.freeze({ status: health.status, action: health.action, text: trayText(health, { ...s, server: { ...s.server, state: provider } }) });
   }
 
   return Object.freeze({ wrapProvider, setDiscord, setHosted, setServers, refresh, snapshot, diagnostics, tray });
+}
+
+// A successful playback source does not make another signed-in server healthy.
+// Rows are already allow-listed by serverRows(), so no raw error enters outputs.
+function serverProblem(rows) {
+  return rows.find((row) => row.state === "error" && row.reason === "unauthorized")
+    ?? rows.find((row) => row.state === "error" || row.state === "unavailable")
+    ?? null;
 }
 
 const DISCORD_OUTPUT = Object.freeze({ ready: "healthy", disconnected: "disabled", off: "disabled", no_app_id: "disabled", degraded: "failed", failed: "failed", closed: "failed" });
