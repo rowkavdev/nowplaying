@@ -1,0 +1,53 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
+import { PATHS, checkDocs, runPath } from "../scripts/guide-paths.js";
+
+for (const { id } of PATHS) {
+  test(`guide path ${id} passes against the current tree`, async () => {
+    const result = await runPath(id);
+    assert.equal(result.status, "pass");
+    for (const step of result.steps) assert.equal(step.status, "pass", JSON.stringify(step));
+  });
+}
+
+test("a broken precondition fails the step that broke and skips the rest", async () => {
+  // The windows-install path reads real shipped files; simulate drift by
+  // pointing checkDocs at a doc whose claims disagree with a fresh run.
+  const doc = await readFile("docs/guide-skeleton.md", "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
+  const drifted = join(dir, "drifted.md");
+  await writeFile(drifted, doc.replace("Harness status: **pass**", "Harness status: **fail**"), "utf8");
+  const result = await checkDocs(drifted);
+  assert.equal(result.status, "fail");
+  assert.ok(result.failures.some((failure) => failure.includes("doc claims fail")));
+});
+
+test("check-docs passes against the committed skeleton", async () => {
+  const result = await checkDocs();
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.status, "pass");
+});
+
+test("check-docs fails when a path or harness step disappears from the doc", async () => {
+  const doc = await readFile("docs/guide-skeleton.md", "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
+  const noPath = join(dir, "no-path.md");
+  await writeFile(noPath, doc.replace("<!-- guide-path: hosted-card -->", ""), "utf8");
+  assert.ok((await checkDocs(noPath)).failures.some((failure) => failure.includes("hosted-card: missing guide-path marker")));
+  const noStep = join(dir, "no-step.md");
+  await writeFile(noStep, doc.replace("harness step: gallery-in-sync", "harness step: removed"), "utf8");
+  assert.ok((await checkDocs(noStep)).failures.some((failure) => failure.includes("hosted-card: doc never mentions harness step gallery-in-sync")));
+});
+
+test("CLI emits machine-visible JSONL with the failing step named", async () => {
+  const { stdout } = await promisify(execFile)(process.execPath, ["scripts/guide-paths.js", "run", "hosted-card"]);
+  const lines = stdout.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(lines.at(-1).status, "pass");
+  assert.ok(lines.some((line) => line.step === "gallery-in-sync" && line.status === "pass"));
+  await assert.rejects(promisify(execFile)(process.execPath, ["scripts/guide-paths.js", "run", "bogus-path"]));
+});
