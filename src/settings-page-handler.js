@@ -273,15 +273,22 @@ const autostartWrap = document.getElementById("drpp-autostart-wrap");
 const autostartDivider = document.getElementById("drpp-autostart-divider");
 const autostartBox = document.getElementById("drpp-autostart");
 const autostartResult = document.getElementById("drpp-autostart-result");
+// Both startup controls - this switch and the Windows section below - render
+// from the same returned startup state, so a save in either place leaves the
+// other in sync, including the shortcut-repair note.
+function applyStartupState(startup) {
+  if (!startup || !startup.available) { autostartWrap.hidden = autostartDivider.hidden = true; return; }
+  autostartWrap.hidden = autostartDivider.hidden = false;
+  autostartBox.checked = startup.startWithWindows === true;
+  autostartResult.textContent = startup.shortcutBroken ? "Startup shortcut needs repair - use the Windows section below." : "";
+  const sectionBox = document.getElementById("startup-enabled");
+  if (sectionBox) sectionBox.checked = startup.startWithWindows === true;
+}
 async function loadAutostart() {
   try {
     const res = await fetch("/api/settings", { cache: "no-store", headers: { Accept: "application/json" } });
     if (!res.ok) return;
-    const startup = (await res.json()).startup;
-    if (!startup || !startup.available) return;
-    autostartBox.checked = startup.startWithWindows === true;
-    autostartWrap.hidden = autostartDivider.hidden = false;
-    autostartResult.textContent = startup.shortcutBroken ? "Startup shortcut needs repair - use the Windows section below." : "";
+    applyStartupState((await res.json()).startup);
   } catch {}
 }
 autostartBox.addEventListener("change", async () => {
@@ -291,10 +298,7 @@ autostartBox.addEventListener("change", async () => {
   try {
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: wanted } }) });
     if (!res.ok) throw new Error();
-    const startup = (await res.json()).startup;
-    autostartBox.checked = !startup || startup.startWithWindows === true;
-    const sectionBox = document.getElementById("startup-enabled");
-    if (sectionBox) sectionBox.checked = autostartBox.checked;
+    applyStartupState((await res.json()).startup);
   } catch {
     autostartBox.checked = !wanted;
     autostartResult.textContent = "Couldn't save. Nothing was changed.";
@@ -600,7 +604,9 @@ startup.form.addEventListener("submit", async (event) => {
   try {
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ startup: { startWithWindows: startup.enabled.checked } }) });
     if (!res.ok) throw new Error(String(res.status));
-    showStartup((await res.json()).startup);
+    const updated = (await res.json()).startup;
+    showStartup(updated);
+    applyStartupState(updated);
     startupSay("Saved.", "ok");
   } catch {
     startupSay("Couldn't save. Nothing was changed.", "bad");
