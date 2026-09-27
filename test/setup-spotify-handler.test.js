@@ -202,3 +202,22 @@ test("Spotify expiry during an in-flight draft write waits for the commit outcom
   });
   assert.equal(saved.length, 1);
 });
+
+test("disconnect invalidates a Spotify start awaiting its consent URL", async () => {
+  let openConsent;
+  let resolveSignIn;
+  let readCount = 0;
+  const handle = createSetupSpotifyHandler({ credentialStore: {
+    read: async () => { readCount++; return null; }, save: async () => {}, remove: async () => {},
+  }, signIn: ({ openUrl }) => new Promise((resolve) => {
+    resolveSignIn = resolve;
+    openConsent = () => openUrl("https://accounts.spotify.com/authorize");
+  }) });
+  const starting = handle(post({ action: "start", clientId: CLIENT_ID }));
+  await handle.cancelPending();
+  openConsent();
+  assert.equal((await starting).status, 410);
+  resolveSignIn(tokens);
+  await settled();
+  assert.equal(readCount, 0);
+});

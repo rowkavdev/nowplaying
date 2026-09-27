@@ -19,6 +19,8 @@ export function createSetupSpotifyHandler({
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof signIn !== "function") throw new TypeError("signIn must be a function");
   const flows = new Map();
+  const completing = new Set();
+  let generation = 0;
 
   function prune() {
     const time = now();
@@ -26,8 +28,9 @@ export function createSetupSpotifyHandler({
   }
 
   async function complete(flow, tokens) {
+    const active = () => flow.generation === generation;
     // A late OAuth completion must not revive a flow already reported expired.
-    if (flow.expiresAt <= now()) return;
+    if (!active() || flow.expiresAt <= now()) return;
     const identity = tokens?.identity;
     if (typeof tokens?.refreshToken !== "string" || !tokens.refreshToken || typeof identity?.id !== "string" || !identity.id) {
       flow.result = { status: "failed", error: "spotify_failed" };
@@ -45,7 +48,7 @@ export function createSetupSpotifyHandler({
     try { previous = await credentialStore.read(ref); }
     catch { flow.result = { status: "failed", error: "credential_store_failed" }; return; }
     // Reading a keychain may itself outlast the flow. Check again before writes.
-    if (flow.expiresAt <= now()) return;
+    if (!active() || flow.expiresAt <= now()) return;
     async function restore() {
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
@@ -58,7 +61,7 @@ export function createSetupSpotifyHandler({
       return;
     }
     // The credential save can also cross expiry. Undo it before the draft write.
-    if (flow.expiresAt <= now()) {
+    if (!active() || flow.expiresAt <= now()) {
       try { await restore(); }
       catch { flow.result = { status: "failed", error: "credential_store_failed" }; }
       return;
@@ -82,7 +85,7 @@ export function createSetupSpotifyHandler({
     if (!CLIENT_ID.test(clientId)) return json(400, { error: "bad_client_id" });
     prune();
     if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
-    const flow = { clientId, expiresAt: now() + flowTtlMs, result: { status: "pending" } };
+    const flow = { clientId, generation, expiresAt: now() + flowTtlMs, result: { status: "pending" } };
     let giveUrl;
     const authUrl = new Promise((resolve) => { giveUrl = resolve; });
     let running;
@@ -91,11 +94,19 @@ export function createSetupSpotifyHandler({
     } catch {
       return json(502, { error: "spotify_failed" });
     }
-    running.then((tokens) => complete(flow, tokens), (error) => {
+    running.then((tokens) => {
+      const work = complete(flow, tokens);
+      completing.add(work);
+      void work.then(() => completing.delete(work), () => {
+        completing.delete(work);
+        flow.result = { status: "failed", error: "spotify_failed" };
+      });
+    }, (error) => {
       flow.result = { status: "failed", error: ERRORS[error?.code] ?? "spotify_failed" };
       giveUrl(null);
     });
     const url = await authUrl;
+    if (flow.generation !== generation) return json(410, { error: "expired" });
     if (typeof url !== "string" || !url.startsWith(AUTH_ORIGIN)) return json(502, { error: flow.result.error ?? "spotify_failed" });
     const flowId = newFlowId();
     flows.set(flowId, flow);
@@ -112,7 +123,15 @@ export function createSetupSpotifyHandler({
     return json(400, { error: flow.result.error });
   }
 
-  return async function handle(request = {}) {
+  async function cancelPending() {
+    // Invalidate starts that have not returned yet, then let any credential or
+    // draft write already in flight settle before disconnect removes them.
+    generation++;
+    flows.clear();
+    await Promise.allSettled([...completing]);
+  }
+
+  async function handle(request = {}) {
     const url = new URL(request.url || "/", "http://localhost");
     if (url.pathname !== PATH) return null;
     if (url.search) return json(400, { error: "invalid_request" });
@@ -123,7 +142,9 @@ export function createSetupSpotifyHandler({
     if (input.action === "start") return start(input);
     if (input.action === "poll") return poll(input);
     return json(400, { error: "invalid_request" });
-  };
+  }
+  handle.cancelPending = cancelPending;
+  return handle;
 }
 
 function onlyKeys(input, keys) { return Object.keys(input).every((key) => keys.includes(key)); }
