@@ -5,8 +5,11 @@ const VISIBILITY = new Set(["artwork", "mediaType", "progress", "state", "subtit
 
 export function parseCardQuery(searchParams) {
   for (const key of searchParams.keys()) {
-    if (!["theme", "width", "show"].includes(key) || searchParams.getAll(key).length !== 1) throw new TypeError("invalid card query");
+    if (!["theme", "width", "show", "t"].includes(key) || searchParams.getAll(key).length !== 1) throw new TypeError("invalid card query");
   }
+  // The status page refreshes its image with a timestamp. Bound and ignore it:
+  // it is not a rendering option and must not split the last-good cache.
+  if (searchParams.has("t") && !/^\d{13}$/.test(searchParams.get("t"))) throw new TypeError("invalid card query");
   const options = {};
   if (searchParams.has("theme")) {
     const theme = searchParams.get("theme");
