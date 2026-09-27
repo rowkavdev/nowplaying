@@ -137,3 +137,32 @@ test("a dropped argument in the plist reports broken, not enabled", async () => 
   await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("\t\t<string>start</string>\n", ""));
   assert.deepEqual(await startup.status(), { enabled: false, broken: true });
 });
+
+test("RunAtLoad flipped to false reports broken, not enabled (#672 review)", async () => {
+  const launchAgents = await dir();
+  const startup = createMacosStartup({ launchAgentsDir: launchAgents, programPath: "/usr/bin/node", programArguments: ["/good/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("\t<true/>", "\t<false/>"));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+  await startup.setEnabled(true);
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+test("a missing RunAtLoad key reports broken, not enabled", async () => {
+  const launchAgents = await dir();
+  const startup = createMacosStartup({ launchAgentsDir: launchAgents, programPath: "/usr/bin/node", programArguments: ["/good/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("\t<key>RunAtLoad</key>\n\t<true/>\n", ""));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+});
+
+test("an edited Label reports broken, not enabled", async () => {
+  const launchAgents = await dir();
+  const startup = createMacosStartup({ launchAgentsDir: launchAgents, programPath: "/usr/bin/node", programArguments: ["/good/nowplaying.js", "start"] });
+  await startup.setEnabled(true);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(startup.file, (await readFile(startup.file, "utf8")).replace("dev.rowkav.nowplaying", "dev.rowkav.other"));
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+});

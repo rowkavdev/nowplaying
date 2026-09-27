@@ -83,7 +83,14 @@ export function createMacosStartup({
     const array = text.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/);
     const parts = array ? [...array[1].matchAll(/<string>([^<]*)<\/string>/g)].map((m) => xmlUnescape(m[1])) : [];
     const expected = [programPath, ...programArguments];
-    const matches = parts.length === expected.length && parts.every((part, i) => part === expected[i]);
+    const commandMatches = parts.length === expected.length && parts.every((part, i) => part === expected[i]);
+    // The identity and the launch trigger matter too: a wrong Label means
+    // launchd never ties the file to this app, and without RunAtLoad the
+    // agent cannot start at login even though the file matches.
+    const labelMatch = text.match(/<key>Label<\/key>\s*<string>([^<]*)<\/string>/);
+    const labelMatches = labelMatch !== null && xmlUnescape(labelMatch[1]) === label;
+    const launchesAtLogin = /<key>RunAtLoad<\/key>\s*<true\/>/.test(text);
+    const matches = commandMatches && labelMatches && launchesAtLogin;
     return Object.freeze({ enabled: matches, broken: !matches });
   }
   return Object.freeze({
