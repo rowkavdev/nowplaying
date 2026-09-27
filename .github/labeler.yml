@@ -140,9 +140,13 @@ area:tray:
           - "scripts/windows-tray.ps1"
           - "src/tray-*.js"
           - "src/windows-startup.js"
+          - "src/linux-startup.js"
+          - "src/macos-startup.js"
           - "test/tray-*.js"
           - "test/windows-tray*.js"
           - "test/windows-startup*.js"
+          - "test/linux-startup*.js"
+          - "test/macos-startup*.js"
 area:updater:
   - changed-files:
       - any-glob-to-any-file:
