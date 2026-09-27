@@ -54,6 +54,7 @@ export function createHostedUploader({
   let serverClockOffset = 0;
   let lastSent = null; // { key, at }
   let pending = null;
+  let pushGeneration = 0;
   let retryAt = 0; // process elapsed time, unaffected by clock corrections
   let failures = 0;
   let status = { state: "idle", lastError: null, lastSuccessAt: null };
@@ -125,19 +126,23 @@ export function createHostedUploader({
     return false;
   }
 
-  async function send(presence) {
+  async function send(presence, isCurrent) {
     const at = now();
     // `settings` can be a function so privacy and card changes apply without a restart.
     const probe = projectHostedState(presence, typeof settings === "function" ? settings() : settings, { seq: 0, now: at + serverClockOffset });
     const key = changeKey(probe);
     if (!due(key, at, probe.positionMs)) return { sent: false, reason: "unchanged" };
     const device = await ensureRegistered();
+    if (!isCurrent()) return { sent: false, reason: "superseded" };
     let payload = { ...probe, seq: nextSeq() };
     let correctedClock = false;
     let correctedSeq = false;
     while (true) {
+      if (!isCurrent()) return { sent: false, reason: "superseded" };
       try { await request("/api/ingest", { token: device.token, body: payload }); break; }
       catch (error) {
+        // Never promote a rejected old payload above a newer local push.
+        if (!isCurrent()) return { sent: false, reason: "superseded" };
         if (error.code === "clock_skew" && !correctedClock) {
           if (!Number.isSafeInteger(error.serverTime)) throw new HostedUploadError("clock_recovery_unavailable", error.status);
           serverClockOffset = error.serverTime - now();
@@ -153,6 +158,7 @@ export function createHostedUploader({
         } else throw error;
       }
     }
+    if (!isCurrent()) return { sent: false, reason: "superseded" };
     lastSent = { key, at, positionMs: probe.positionMs ?? null, playing: probe.state === "playing" };
     return { sent: true };
   }
@@ -160,16 +166,19 @@ export function createHostedUploader({
   async function push(presence) {
     if (status.state === "unauthorized") return { sent: false, reason: "unauthorized" };
     if (status.state === "disconnect_pending") return { sent: false, reason: "disconnect_pending" };
+    const generation = ++pushGeneration;
     pending = presence; // only the newest state is kept
     if (elapsedNow() < retryAt) return { sent: false, reason: "backoff" };
     const current = pending;
     try {
-      const result = await send(current);
-      if (pending === current) pending = null;
+      const result = await send(current, () => generation === pushGeneration);
+      if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
+      pending = null;
       failures = 0; retryAt = 0;
       status = { state: "connected", lastError: null, lastSuccessAt: result.sent ? now() : status.lastSuccessAt };
       return result;
     } catch (error) {
+      if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
       const code = error instanceof HostedUploadError ? error.code : "upload_failed";
       if (error?.status === 401) {
         // Signed in again elsewhere (setup's GitHub sign-in replaces the key):
@@ -194,6 +203,7 @@ export function createHostedUploader({
   }
 
   async function disconnect() {
+    ++pushGeneration;
     const stored = await credentials.load();
     pending = null; lastSent = null;
     if (validRegistration(stored)) {
