@@ -53,7 +53,7 @@ async function page(startup) {
       querySelectorAll: () => [],
       createElement: (tag) => ({ tag, className: "", textContent: "", children: [], append(...c) { this.children.push(...c); }, setAttribute() {}, addEventListener() {} }),
     },
-    fetch,
+    fetch, localStorage: { getItem: () => null, setItem() {} },
     MutationObserver: class { observe() {} },
     setInterval: () => 1,
     clearInterval: () => {},

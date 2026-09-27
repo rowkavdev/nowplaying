@@ -239,6 +239,20 @@ const count = document.getElementById("drpp-log-count");
 const error = document.getElementById("drpp-log-error");
 const autoScroll = document.getElementById("drpp-auto-scroll");
 const wrap = document.getElementById("drpp-wrap");
+// DRPP stores these display preferences locally. They do not change the app's
+// settings or send any log data outside this page.
+function storedLogPreference(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === "true";
+  } catch { return fallback; }
+}
+function saveLogPreference(key, value) {
+  try { localStorage.setItem(key, String(value)); } catch {}
+}
+autoScroll.checked = storedLogPreference("logs-auto-scroll", true);
+wrap.checked = storedLogPreference("logs-wrap-text", false);
+lines.classList.toggle("wrap", wrap.checked);
 let entries = [];
 function renderLogs() {
   let match;
@@ -277,8 +291,8 @@ async function refreshLogs() {
   }
 }
 search.addEventListener("input", renderLogs);
-wrap.addEventListener("change", () => lines.classList.toggle("wrap", wrap.checked));
-autoScroll.addEventListener("change", renderLogs);
+wrap.addEventListener("change", () => { lines.classList.toggle("wrap", wrap.checked); saveLogPreference("logs-wrap-text", wrap.checked); });
+autoScroll.addEventListener("change", () => { saveLogPreference("logs-auto-scroll", autoScroll.checked); renderLogs(); });
 // DRPP AutostartSwitch: lives in the Configuration toolbar and writes the
 // same startup setting as the Windows section. Hidden until the app reports
 // that startup control is available on this install.

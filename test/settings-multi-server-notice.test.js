@@ -25,6 +25,7 @@ async function notice(snapshot) {
   };
   runInNewContext(script, {
     document: { getElementById: node, querySelectorAll: () => [], createElement: () => ({ className: "", textContent: "", append() {}, addEventListener() {}, setAttribute() {} }) },
+    localStorage: { getItem: () => null, setItem() {} },
     fetch: async (url) => ({ ok: true, json: async () => url === "/api/status" ? snapshot : url === "/api/settings" ? { discord: { enabled: false, timestamps: "none", artworkLookup: "off" } } : url === "/api/logs" ? { events: [] } : { servers: [], firstRun: false } }),
     MutationObserver: class { observe() {} }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {},
     location: { port: "", protocol: "http:", assign() {} }, navigator: { clipboard: { writeText: async () => {} } }, URL, URLSearchParams, console,
