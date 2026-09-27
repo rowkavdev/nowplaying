@@ -10,10 +10,13 @@ import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"></head>
-<body><main>
-<nav><a href="/">Status</a> <span aria-current="page">Settings</span> <a href="/logs">Logs</a></nav>
-<h1>Settings</h1>
+<title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
+<body class="drpp-shell"><header class="drpp-header">
+  <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
+  <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" disabled title="Info panel not ported yet">Info (coming soon)</button></div>
+</header><div class="drpp-columns"><main class="drpp-config">
+<div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider"></span><span>Launch on startup: see Windows below</span></div>
+<div class="drpp-config-scroll">
 ${serverPanel()}
 ${servicePanel()}
 <form id="discord-form">
@@ -142,7 +145,10 @@ ${servicePanel()}
 <p><button type="button" id="hosted-devices-everywhere">Sign out everywhere</button> <span id="hosted-devices-result" role="status" aria-live="polite"></span></p>
 </section>
 <!-- /Hosted card devices -->
-</main><script src="/settings.js"></script></body></html>
+</div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
+<div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
+<p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" class="drpp-log-lines" role="log" aria-live="off"></div>
+</aside></div><script src="/settings.js"></script></body></html>
 `;
 
 const CSS = `${SERVER_CSS}
@@ -158,6 +164,75 @@ code.secret{letter-spacing:.05em}
 dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}button[disabled]{opacity:.6;cursor:default}
 @media (max-width:520px){.row label[for]{flex-basis:100%;min-width:0}}
 @media (prefers-color-scheme:dark){select,input[type=number]{background:#2c2c31;border-color:#555}.row label[for],.hint,legend,output,.unit,.preview-label{color:#aaa}input[type=range]{accent-color:#7ab8ff}.preview{border-color:#555}}
+`;
+
+// DRPP v3.4.0 layout port: full-height header, 50/50 editor/log panels,
+// separated accordions and a log toolbar. Keep all settings writes on the
+// existing NowPlaying forms; no Plex-only controls are presented as working.
+const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
+.drpp-shell *{box-sizing:border-box}.drpp-shell .drpp-header{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px;border-bottom:1px solid #373a40}
+.drpp-heading,.drpp-actions,.drpp-panel-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.drpp-shell h1{font-size:20px;line-height:1.3;margin:0;color:#f1f3f5}.drpp-shell h2{font-size:18px;line-height:1.3;margin:0;color:#f1f3f5}
+.drpp-divider{height:26px;width:1px;background:#373a40;flex:none}.drpp-actions a{padding:8px 12px;border:1px solid #373a40;border-radius:4px;text-decoration:none;color:inherit}.drpp-actions a:hover{background:#2e2e2e}
+.drpp-shell button,.drpp-shell select,.drpp-shell input[type=number],.drpp-shell input[type=search]{font:inherit;background:#2e2e2e;color:#c1c2c5;border:1px solid #373a40;border-radius:4px;padding:7px 12px}
+.drpp-shell button:not(:disabled){cursor:pointer}.drpp-shell button:disabled{opacity:.55}.drpp-shell button[type=submit]{background:#1971c2;color:white;border-color:#1971c2}
+.drpp-columns{display:flex;height:calc(100vh - 79px);min-height:0}.drpp-config,.drpp-logs{width:50%;min-width:0;display:flex;flex-direction:column}
+.drpp-config{max-width:none;padding:0;margin:0;border-right:1px solid #373a40}.drpp-panel-heading{padding:16px;min-height:69px;border-bottom:1px solid #373a40;flex:none}
+.drpp-config-scroll,.drpp-log-lines{overflow:auto;min-height:0;flex:1}.drpp-config-scroll{padding:16px}.drpp-port-note{color:#909296;margin:0 0 16px}
+.drpp-config section{background:#2e2e2e;border:1px solid #373a40;border-radius:4px;margin:0 0 16px;padding:16px}.drpp-config section h2{margin:0 0 8px}.drpp-config section[hidden],.drpp-config form[hidden]{display:none}
+.drpp-config .hint,.drpp-config legend,.drpp-config .row label[for],.drpp-config dt,.drpp-config output{color:#909296}.drpp-config a{color:#74c0fc}.drpp-config .preview{border-color:#373a40}
+.drpp-logs .drpp-panel-heading{gap:12px}.drpp-panel-heading label{white-space:nowrap}.drpp-panel-heading input[type=search]{flex:1;min-width:125px}.drpp-panel-heading small{color:#909296;white-space:nowrap}
+.drpp-indicator{width:9px;height:9px;background:#868e96;border-radius:50%;flex:none}.drpp-indicator.connected{background:#7ab8ff}.drpp-indicator.disconnected{background:#ffa552}
+.drpp-log-lines{font:13px/1.6 ui-monospace,Consolas,monospace}.drpp-log-line{padding:1px 8px;border-left:4px solid #7ab8ff;background:rgba(79,70,229,.05);white-space:pre;word-break:break-all}.drpp-log-line.warn{border-color:#f59e0b}.drpp-log-line.error{border-color:#ffa552}.drpp-log-line .timestamp{color:#6b7280}.drpp-log-line .level{color:#7ab8ff}.drpp-log-line.warn .level{color:#f59e0b}.drpp-log-line.error .level{color:#ffa552}.drpp-log-line .source{color:#60a5fa}
+.drpp-log-lines.wrap .drpp-log-line{white-space:pre-wrap}.drpp-logs #drpp-log-error{padding:8px 16px;color:#ffa552}
+@media(max-width:900px){.drpp-columns{height:auto;flex-direction:column}.drpp-config,.drpp-logs{width:100%;border-right:0}.drpp-config-scroll{max-height:65vh}.drpp-log-lines{min-height:250px;max-height:45vh}.drpp-header{flex-wrap:wrap}}
+`;
+
+const DRPP_SHELL_SCRIPT = `"use strict";
+// A bounded poll of the existing safe JSON log API; DRPP uses SSE, which
+// NowPlaying does not expose. No network request leaves loopback.
+const lines = document.getElementById("drpp-log-lines");
+const indicator = document.getElementById("drpp-log-indicator");
+const search = document.getElementById("drpp-search");
+const count = document.getElementById("drpp-log-count");
+const error = document.getElementById("drpp-log-error");
+const autoScroll = document.getElementById("drpp-auto-scroll");
+const wrap = document.getElementById("drpp-wrap");
+let entries = [];
+function renderLogs() {
+  let match;
+  try { match = search.value ? new RegExp(search.value) : null; error.hidden = true; }
+  catch { error.textContent = "Invalid search expression"; error.hidden = false; return; }
+  const shown = entries.filter((e) => !match || match.test([e.time,e.level,e.component,e.status,e.code].join(" ")));
+  count.textContent = shown.length + (shown.length === 1 ? " entry" : " entries") + (shown.length !== entries.length ? " (" + entries.length + " total)" : "");
+  lines.replaceChildren(...shown.map((e) => {
+    const line = document.createElement("div"); line.className = "drpp-log-line " + (e.level === "warn" || e.level === "error" ? e.level : "");
+    for (const [cls, text] of [["timestamp", e.time], ["level", "[" + e.level.toUpperCase() + "]"], ["source", "[" + e.component + "]"]]) {
+      const span = document.createElement("span"); span.className = cls; span.textContent = text || ""; line.append(span, " ");
+    }
+    line.append(e.status + (e.code ? " (" + e.code + ")" : "")); return line;
+  }));
+  if (autoScroll.checked) lines.scrollTop = lines.scrollHeight;
+}
+async function refreshLogs() {
+  try {
+    const res = await fetch("/api/logs", { cache: "no-store", headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error();
+    const data = await res.json(); entries = Array.isArray(data.events) ? data.events.slice(-1000) : [];
+    indicator.className = "drpp-indicator connected"; indicator.setAttribute("aria-label", "Log connection active"); renderLogs();
+  } catch {
+    indicator.className = "drpp-indicator disconnected"; indicator.setAttribute("aria-label", "Log connection unavailable");
+    error.textContent = "Can't reach the log. The app may have stopped."; error.hidden = false;
+  }
+}
+search.addEventListener("input", renderLogs);
+wrap.addEventListener("change", () => lines.classList.toggle("wrap", wrap.checked));
+autoScroll.addEventListener("change", renderLogs);
+async function refreshVersion() {
+  try { const res = await fetch("/api/status", { cache: "no-store" }); if (res.ok) document.getElementById("drpp-version").textContent = "Version: v" + (await res.json()).version; }
+  catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
+}
+refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000);
 `;
 
 const SCRIPT = `"use strict";
@@ -564,7 +639,8 @@ export function createSettingsPageHandler({ settings, fallback } = {}) {
     "/settings": { body: PAGE, type: "text/html; charset=utf-8", page: true },
     "/servers.js": { body: SERVER_SCRIPT, type: "text/javascript; charset=utf-8" },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
-    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, type: "text/javascript; charset=utf-8" },
+    "/drpp-shell.css": { body: DRPP_SHELL_CSS, type: "text/css; charset=utf-8" },
+    "/settings.js": { body: `${SCRIPT}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${DRPP_SHELL_SCRIPT}`, type: "text/javascript; charset=utf-8" },
   };
   const read = async () => {
     const value = await settings.read();
