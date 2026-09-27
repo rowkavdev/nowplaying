@@ -27,6 +27,42 @@ test("a broken precondition fails the step that broke and skips the rest", async
   assert.ok(result.failures.some((failure) => failure.includes("doc claims fail")));
 });
 
+test("check-docs fails when a section loses its own status line", async () => {
+  const doc = await readFile("docs/guide-skeleton.md", "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
+  const broken = join(dir, "no-status.md");
+  const without = doc.replace(
+    /Harness status: \*\*pass\*\* — verified by `node scripts\/guide-paths\.js run windows-install`\./,
+    "",
+  );
+  assert.notEqual(without, doc);
+  await writeFile(broken, without, "utf8");
+  const result = await checkDocs(broken);
+  assert.ok(result.failures.some((failure) => failure.includes("windows-install: missing harness status line")));
+});
+
+test("check-docs fails when a step reference moves out of its path section", async () => {
+  const doc = await readFile("docs/guide-skeleton.md", "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
+  const moved = join(dir, "moved.md");
+  let edited = doc.replace("3. The committed gallery in `docs/assets/cards/` always matches the shipped renderer (harness step: gallery-in-sync).\n", "");
+  assert.notEqual(edited, doc);
+  edited += "\n## Appendix\n\nRetired step reference: harness step: gallery-in-sync.\n";
+  await writeFile(moved, edited, "utf8");
+  const result = await checkDocs(moved);
+  assert.ok(result.failures.some((failure) => failure.includes("hosted-card: section never mentions harness step gallery-in-sync")),
+    JSON.stringify(result.failures));
+});
+
+test("check-docs fails on a marker for a path the harness does not know", async () => {
+  const doc = await readFile("docs/guide-skeleton.md", "utf8");
+  const dir = await mkdtemp(join(tmpdir(), "np-guide-doc-"));
+  const extra = join(dir, "extra.md");
+  await writeFile(extra, doc + "\n## Bogus\n<!-- guide-path: bogus-path -->\nHarness status: **pass**\n", "utf8");
+  const result = await checkDocs(extra);
+  assert.ok(result.failures.some((failure) => failure.includes("bogus-path: guide-path marker for an unknown path")));
+});
+
 test("check-docs passes against the committed skeleton", async () => {
   const result = await checkDocs();
   assert.deepEqual(result.failures, []);
@@ -41,7 +77,7 @@ test("check-docs fails when a path or harness step disappears from the doc", asy
   assert.ok((await checkDocs(noPath)).failures.some((failure) => failure.includes("hosted-card: missing guide-path marker")));
   const noStep = join(dir, "no-step.md");
   await writeFile(noStep, doc.replace("harness step: gallery-in-sync", "harness step: removed"), "utf8");
-  assert.ok((await checkDocs(noStep)).failures.some((failure) => failure.includes("hosted-card: doc never mentions harness step gallery-in-sync")));
+  assert.ok((await checkDocs(noStep)).failures.some((failure) => failure.includes("hosted-card: section never mentions harness step gallery-in-sync")));
 });
 
 test("CLI emits machine-visible JSONL with the failing step named", async () => {
