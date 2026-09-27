@@ -4,13 +4,14 @@
 // app and probes its WebUI, then silent-uninstalls and proves removal.
 // Emits the same machine-visible JSONL step shape as scripts/guide-paths.js
 // (path "windows-install") and exits non-zero on the first broken step.
-// Whatever happens, the finally pass stops the app process tree, runs the
-// uninstaller and removes the sign-in shortcut, so a failed run never leaves
-// machine state behind. win32-only: the guide-drift workflow runs it on
-// windows-latest. Guard test: test/guide-paths-installer-e2e.test.js.
+// The sign-in shortcut lives in the user's real Startup folder (fixed Inno
+// AppId), so its pre-test state is captured up front and restored in the
+// finally pass - a failed run never erases a pre-existing autostart setting.
+// win32-only: the guide-drift workflow runs it on windows-latest.
+// Guard test: test/guide-paths-installer-e2e.test.js.
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -76,6 +77,8 @@ const root = await mkdtemp(join(tmpdir(), "np-installer-e2e-"));
 const installDir = join(root, "install");
 const appData = join(root, "appdata");
 const startupShortcut = join(homedir(), "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "nowplaying.lnk");
+// Preflight provenance: null = no shortcut before this run, Buffer = its bytes.
+const shortcutBefore = await readFile(startupShortcut).catch(() => null);
 let child = null;
 
 // nowplaying.exe is a launcher: the bundled runtime/node.exe is a descendant
@@ -86,14 +89,16 @@ async function stopApp() {
   if (pid) await run("taskkill", ["/pid", String(pid), "/T", "/F"]).catch(() => {});
 }
 
-async function uninstall() {
+// Strict for the step (a failing uninstaller fails the run), best-effort for
+// the finally restore.
+async function uninstall({ strict = false } = {}) {
   await stopApp();
-  if (await exists(join(installDir, "unins000.exe"))) {
-    await run(join(installDir, "unins000.exe"), ["/VERYSILENT", "/NORESTART"]).catch(() => {});
-    const deadline = Date.now() + 60000;
-    while ((await exists(join(installDir, "nowplaying.exe"))) && Date.now() < deadline)
-      await new Promise((done) => setTimeout(done, 1000));
-  }
+  if (!(await exists(join(installDir, "unins000.exe")))) return;
+  const removal = run(join(installDir, "unins000.exe"), ["/VERYSILENT", "/NORESTART"]);
+  if (strict) await removal; else await removal.catch(() => {});
+  const deadline = Date.now() + 60000;
+  while ((await exists(installDir)) && Date.now() < deadline)
+    await new Promise((done) => setTimeout(done, 1000));
 }
 
 try {
@@ -105,7 +110,10 @@ try {
       expect(await exists(join(installDir, file)), `installed copy is missing ${file}`);
   }))
   if (await step("startup-shortcut", async () => {
-    expect(await exists(startupShortcut), "the startup task must create the sign-in shortcut");
+    const current = await readFile(startupShortcut).catch(() => null);
+    expect(current !== null, "the startup task must create the sign-in shortcut");
+    if (shortcutBefore !== null)
+      expect(!current.equals(shortcutBefore), "the shortcut must be this run's install, not a pre-existing one");
   }))
   if (await step("first-launch", async () => {
     const port = await ephemeralPort();
@@ -117,15 +125,18 @@ try {
     await getOk(`http://127.0.0.1:${port}/settings`);
   }))
   await step("silent-uninstall", async () => {
-    await uninstall();
-    expect(!(await exists(join(installDir, "nowplaying.exe"))), "uninstall must remove the installed app");
-    expect(!(await exists(startupShortcut)), "uninstall must remove the sign-in shortcut");
+    await uninstall({ strict: true });
+    expect(!(await exists(installDir)), "uninstall must remove the whole install directory");
+    if (shortcutBefore === null)
+      expect(!(await exists(startupShortcut)), "uninstall must remove the sign-in shortcut it created");
   });
 } finally {
-  // Best-effort restore, even when a step failed: stop the tree, uninstall,
-  // drop any leftover shortcut, then the temp root.
+  // Restore, never just delete: stop the tree, best-effort uninstall, then put
+  // the shortcut back to its pre-run state (absent stays absent, pre-existing
+  // bytes come back), then the temp root.
   await uninstall();
-  await rm(startupShortcut, { force: true }).catch(() => {});
+  if (shortcutBefore === null) await rm(startupShortcut, { force: true }).catch(() => {});
+  else await writeFile(startupShortcut, shortcutBefore).catch(() => {});
   await rm(root, { recursive: true, force: true });
 }
 
