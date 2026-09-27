@@ -318,11 +318,14 @@ async function refreshVersion() {
     document.getElementById("drpp-version").textContent = "Version: v" + status.version;
     const notice = document.getElementById("drpp-setup");
     const state = status.server?.state;
-    notice.hidden = state === "connected";
+    const rows = Array.isArray(status.servers) ? status.servers : [];
+    const failedServer = rows.some((row) => row.state === "error" || row.state === "unavailable");
+    const checking = !failedServer && state === "starting";
+    notice.hidden = state === "connected" && !failedServer;
     if (!notice.hidden) {
       const unconfigured = !status.server?.type || state === "safe_mode";
-      document.getElementById("drpp-setup-title").textContent = unconfigured ? "Setup Incomplete" : "Server Needs Attention";
-      document.getElementById("drpp-setup-message").textContent = unconfigured ? "Add a media server to finish setting up." : "Check the media server connection below.";
+      document.getElementById("drpp-setup-title").textContent = unconfigured ? "Setup Incomplete" : checking ? "Checking Servers" : "Server Needs Attention";
+      document.getElementById("drpp-setup-message").textContent = unconfigured ? "Add a media server to finish setting up." : checking ? "Checking the media server connection..." : "Check the media server connection below.";
       document.getElementById("drpp-setup-action").textContent = unconfigured ? "Add Server" : "Check Server";
     }
   } catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
