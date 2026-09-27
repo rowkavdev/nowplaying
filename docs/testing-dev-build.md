@@ -74,6 +74,27 @@ Write down the build number and version from the release title, for example `dev
 - [ ] Uninstall from Settings > Apps.
 - [ ] The Startup shortcut is gone, even if you turned Start with Windows on in Settings rather than in the installer. nowplaying doesn't start at the next sign-in.
 
+## 8. macOS (dev ZIP)
+
+Every dev build also ships `nowplaying-dev-macos-arm64.zip` (Apple Silicon). The app is unsigned and unpackaged - it runs from wherever you put the folder.
+
+- [ ] Download `nowplaying-dev-macos-arm64.zip` and `SHA256SUMS`. Run `shasum -a 256 -c SHA256SUMS --ignore-missing`; the ZIP line says OK.
+- [ ] Unzip and move the `nowplaying` folder somewhere yours, for example `~/Applications`.
+- [ ] The download is unsigned, so the first run is blocked: `xattr -d com.apple.quarantine nowplaying-dev-macos-arm64.zip` before unzipping, or on the folder after.
+- [ ] In a terminal run `./nowplaying start`. With no saved config it prints a Settings link (`http://127.0.0.1:47832/settings`); open it. Sections 3-5 above apply in the browser (skip tray-only items; there is no macOS tray yet).
+- [ ] Settings > "Launch app on system startup" on: `~/Library/LaunchAgents/dev.rowkav.nowplaying.plist` exists. Log out and back in; nowplaying starts on its own. Turn it off and log in again; it doesn't.
+- [ ] Stop nowplaying (Ctrl+C if started from a terminal). To remove it, delete the folder and the LaunchAgents plist.
+
+## 9. Linux (dev tarball)
+
+Every dev build also ships `nowplaying-dev-linux-x64.tar.gz`. It is a portable bundle - no package, no root.
+
+- [ ] Download `nowplaying-dev-linux-x64.tar.gz` and `SHA256SUMS`. Run `sha256sum -c SHA256SUMS --ignore-missing`; the tarball line says OK.
+- [ ] Extract: `tar -xzf nowplaying-dev-linux-x64.tar.gz`. Move the `nowplaying` folder anywhere.
+- [ ] Run `./nowplaying start`. With no saved config it prints a Settings link; open it. Sections 3-5 above apply in the browser (skip tray-only items).
+- [ ] Settings > "Launch app on system startup" on: `~/.config/autostart/nowplaying.desktop` exists and `desktop-file-validate` (from desktop-file-utils) passes it. Log out and back in; nowplaying starts on its own. Turn it off and log in again; it doesn't.
+- [ ] Stop nowplaying. To remove it, delete the folder and the autostart entry.
+
 ## Reporting a problem
 
 Open an issue with the build number, your Windows version, the step that failed and what you saw. Leave out server addresses, usernames and tokens.
