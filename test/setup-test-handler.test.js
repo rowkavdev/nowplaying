@@ -104,7 +104,7 @@ test("startSetupApp serves the connection test when a credential store is suppli
 test("rate-limits tests so the endpoint can't hammer the media server", async () => {
   let clock = 0;
   const provider = providerThat(async () => ({ state: "idle" }));
-  const handler = createSetupTestHandler({ store: store({ provider: "jellyfin", account: ACCOUNT }), credentialStore: creds(), createProvider: provider.create, now: () => clock });
+  const handler = createSetupTestHandler({ store: store({ provider: "jellyfin", account: ACCOUNT }), credentialStore: creds(), createProvider: provider.create, elapsedNow: () => clock });
   for (let i = 0; i < 10; i += 1) assert.equal((await post(handler)).status, 200);
   const limited = await post(handler);
   assert.equal(limited.status, 429);
@@ -125,4 +125,14 @@ test("runs one test at a time", async () => {
   release();
   assert.equal((await first).status, 200);
   assert.equal((await post(handler)).status, 200);
+});
+
+test("rate window follows the elapsed clock across a wall-clock correction (#739)", async () => {
+  let wall = 1_800_000_000_000, elapsed = 1_800_000_000_000;
+  const provider = providerThat(async () => ({ state: "idle" }));
+  const handler = createSetupTestHandler({ store: store({ provider: "jellyfin", account: ACCOUNT }), credentialStore: creds(), createProvider: provider.create, elapsedNow: () => elapsed });
+  for (let i = 0; i < 10; i += 1) assert.equal((await post(handler)).status, 200);
+  wall -= 3_600_000; elapsed += 120_000; // wall clock jumps back an hour; two elapsed minutes pass
+  assert.equal((await post(handler)).status, 200);
+  assert.equal(provider.seen.length, 11);
 });
