@@ -8,16 +8,19 @@ const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", 
 
 // Tracks what the local status page shows. It only keeps the latest poll
 // outcome and the current track; never secrets, tokens or raw error text.
-export function createAppStatus({ config, version = null, now = () => Date.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null, build = null, safeMode = false } = {}) {
+export function createAppStatus({ config, version = null, now = () => Date.now(), elapsedNow = () => performance.now(), refreshAfterMs = 15_000, platform = process.platform, packageType = null, build = null, safeMode = false } = {}) {
   if (!config || typeof config.provider !== "string") throw new TypeError("config: expected an app config");
   if (typeof now !== "function") throw new TypeError("now: expected a function");
+  if (typeof elapsedNow !== "function") throw new TypeError("elapsedNow: expected a function");
   const startedAt = now();
+  const startedElapsed = elapsedNow();
   let provider = null;
   let discord = () => ({ enabled: false, state: "off" });
   let hosted = () => ({ enabled: false, state: "off" });
   // Per-server rows when several servers are signed in (#252).
   let servers = () => [];
   let lastPollAt = null;
+  let lastPollElapsed = null;
   let lastOkAt = null;
   let failure = null;
   let playing = null;
@@ -29,12 +32,14 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     return promise.then((presence) => {
       if (poll !== latestPoll) return presence;
       lastPollAt = lastOkAt = now();
+      lastPollElapsed = elapsedNow();
       failure = null;
       playing = presence && presence.state !== "idle" ? { state: presence.state, title: text(presence.title), subtitle: text(presence.subtitle) } : null;
       return presence;
     }, (error) => {
       if (poll === latestPoll) {
         lastPollAt = now();
+        lastPollElapsed = elapsedNow();
         failure = classifyFailure(error);
       }
       throw error;
@@ -79,7 +84,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   // Polls the server once when nothing else has recently (for example when
   // the card isn't embedded anywhere and Discord is off).
   async function refresh() {
-    if (safeMode || !provider || (lastPollAt !== null && now() - lastPollAt < refreshAfterMs)) return;
+    if (safeMode || !provider || (lastPollElapsed !== null && elapsedNow() - lastPollElapsed < refreshAfterMs)) return;
     inflight ??= record(Promise.resolve().then(() => provider.getPresence())).catch(() => {}).finally(() => { inflight = null; });
     await inflight;
   }
@@ -92,7 +97,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     return Object.freeze({
       version: typeof version === "string" ? version : null,
       build: buildLabel(build),
-      uptimeMs: Math.max(0, now() - startedAt),
+      uptimeMs: Math.max(0, elapsedNow() - startedElapsed),
       server: Object.freeze({
         type: PROVIDER_LABELS[config.provider] ?? config.provider,
         address: serverOrigin(config.serverUrl),
