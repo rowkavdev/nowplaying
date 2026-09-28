@@ -73,15 +73,16 @@ export function parseYouTubeEvent(body) {
   });
 }
 
-export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now = Date.now } = {}) {
+export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now = Date.now, elapsedNow = () => performance.now() } = {}) {
   const checkToken = (value) => { if (typeof value !== "string" || value.length < 32) throw new TypeError("token must be at least 32 characters"); return value; };
   let token = checkToken(initialToken);
   if (!Number.isInteger(ttlMs) || ttlMs < 5_000) throw new RangeError("ttlMs must be at least 5000");
+  if (typeof elapsedNow !== "function") throw new TypeError("elapsedNow must be a function");
   const tabs = new Map();
   let nextActivityOrder = 0;
 
   function prune() {
-    for (const [id, tab] of tabs) if (now() - tab.at > ttlMs) tabs.delete(id);
+    for (const [id, tab] of tabs) if (elapsedNow() - tab.at > ttlMs) tabs.delete(id);
   }
 
   // Request shape is plain data so the HTTP server can hand it over:
@@ -99,7 +100,7 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
     if (!before && tabs.size >= MAX_TABS) return { status: 429 };
     const startedPlaying = event.state === "playing" && (before?.event.state !== "playing" || before.event.videoId !== event.videoId);
     tabs.set(event.tabId, {
-      event, at: now(),
+      event, at: elapsedNow(),
       // Receive order, not adjustable wall time, decides which tab wins.
       activityOrder: ++nextActivityOrder,
       playingOrder: startedPlaying ? nextActivityOrder : (before?.playingOrder ?? nextActivityOrder),
