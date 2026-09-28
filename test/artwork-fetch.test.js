@@ -106,26 +106,29 @@ function redirect(location, status = 302) {
   return { ok: false, status, statusText: "Found", headers: { get(name) { return name === "location" ? location : null; } } };
 }
 
-test("follows same-host redirects, including a port change and http to https", async () => {
+test("follows same-origin artwork redirects with credentials and a shared signal", async () => {
   const seen = [];
-  const hops = { "http://media.example.test:8096/image": redirect("https://media.example.test/image", 301), "https://media.example.test/image": redirect("/jellyfin/image", 307) };
+  const hops = { "https://media.example.test/image": redirect("/jellyfin/image", 307) };
   const artwork = await fetchArtwork(
-    { url: "http://media.example.test:8096/image", headers: { "X-Emby-Token": "secret" } },
-    { fetchImpl: async (url, options) => { seen.push([url, options.headers["X-Emby-Token"], options.redirect]); return hops[url] ?? response(); } },
+    { url: "https://media.example.test/image", headers: { "X-Emby-Token": "secret" } },
+    { fetchImpl: async (url, options) => { seen.push([url, options]); return hops[url] ?? response(); } },
   );
   assert.equal(artwork.contentType, "image/png");
-  assert.deepEqual(seen, [
-    ["http://media.example.test:8096/image", "secret", "manual"],
+  assert.deepEqual(seen.map(([url, options]) => [url, options.headers["X-Emby-Token"], options.redirect]), [
     ["https://media.example.test/image", "secret", "manual"],
     ["https://media.example.test/jellyfin/image", "secret", "manual"],
   ]);
+  assert.equal(seen[0][1].signal, seen[1][1].signal);
 });
 
-test("refuses redirects to another host, https to http, a missing location or a loop", async () => {
+test("refuses redirects outside the original origin, missing locations and loops", async () => {
   for (const [start, location, pattern] of [
-    ["https://media.example.test/image", "https://other.example.test/image", /different host/],
-    ["https://media.example.test/image", "https://media.example.test.evil.test/image", /different host/],
-    ["https://media.example.test/image", "http://media.example.test/image", /different host/],
+    ["https://media.example.test/image", "https://other.example.test/image", /outside its origin/],
+    ["https://media.example.test/image", "https://media.example.test.evil.test/image", /outside its origin/],
+    ["https://media.example.test/image", "http://media.example.test/image", /outside its origin/],
+    ["https://media.example.test:8096/image", "https://media.example.test/image", /outside its origin/],
+    ["https://media.example.test/image", "https://media.example.test:8443/image", /outside its origin/],
+    ["https://media.example.test/image", "https://user:pass@media.example.test/image", /outside its origin/],
     ["https://media.example.test/image", null, /without a location/],
   ]) {
     const urls = [];
@@ -138,4 +141,22 @@ test("refuses redirects to another host, https to http, a missing location or a 
     /too many times/,
   );
   assert.equal(calls, 4);
+});
+
+test("a separate local listener never receives redirected artwork credentials (#719)", async () => {
+  const { createServer } = await import("node:http");
+  const listen = (server) => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
+  const captured = [];
+  const destination = createServer((request, reply) => { captured.push(request.headers); reply.writeHead(404); reply.end(); });
+  const destinationPort = await listen(destination);
+  const source = createServer((_request, reply) => {
+    reply.writeHead(302, { location: `http://127.0.0.1:${destinationPort}/capture` }); reply.end();
+  });
+  const sourcePort = await listen(source);
+  try {
+    await assert.rejects(fetchArtwork({ url: `http://127.0.0.1:${sourcePort}/cover`, headers: { "X-Emby-Token": "fixture-art-secret" } }), /outside its origin/);
+    assert.deepEqual(captured, [], "the other service never sees the token");
+  } finally {
+    await Promise.all([source, destination].map((server) => new Promise((resolve) => server.close(resolve))));
+  }
 });

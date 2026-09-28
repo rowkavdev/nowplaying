@@ -42,21 +42,19 @@ export async function fetchArtwork(request, {
 
 const MAX_REDIRECTS = 3;
 
-// Follow a redirect by hand only when it stays on the same host (a port change
-// or http -> https is fine, e.g. a reverse proxy upgrading to TLS). Anything
-// else is refused so the provider token header never goes to another host.
+// Keep every authenticated redirect on the original origin. A different port
+// on the same host is still a different service and must not receive a token.
 async function fetchSameHost(fetchImpl, request, signal) {
-  let url = request.url;
+  const original = new URL(request.url);
+  let url = original.toString();
   for (let hops = 0; ; hops += 1) {
     const response = await fetchImpl(url, { headers: request.headers, signal, redirect: "manual" });
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     if (hops >= MAX_REDIRECTS) throw new Error("Artwork request redirected too many times");
     const location = response.headers?.get?.("location");
     if (!location) throw new Error(`Artwork request failed: ${response.status} redirect without a location`);
-    const from = new URL(url);
-    const to = new URL(location, from);
-    const protocolOk = to.protocol === from.protocol || (from.protocol === "http:" && to.protocol === "https:");
-    if (to.hostname !== from.hostname || !protocolOk) throw new Error("Artwork request redirected to a different host");
+    const to = new URL(location, url);
+    if (to.origin !== original.origin || to.username || to.password) throw new Error("Artwork request redirected outside its origin");
     url = to.toString();
   }
 }
