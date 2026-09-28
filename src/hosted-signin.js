@@ -16,7 +16,7 @@ const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
 const TIMEOUT_MS = 10_000;
 
-export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = process.env.NOWPLAYING_GITHUB_CLIENT_ID || GITHUB_CLIENT_ID, fetchImpl = fetch, now = () => Date.now(), deviceName = hostname() } = {}) {
+export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = process.env.NOWPLAYING_GITHUB_CLIENT_ID || GITHUB_CLIENT_ID, fetchImpl = fetch, now = () => performance.now(), deviceName = hostname() } = {}) {
   if (typeof credentials?.load !== "function" || typeof credentials?.save !== "function") throw new TypeError("credentials are required");
   const origin = normalizeHostedUrl(baseUrl);
   let flow = null; // { deviceCode, expiresAt, intervalMs, nextPollAt }
