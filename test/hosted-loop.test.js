@@ -177,6 +177,23 @@ test("a playing session frozen at one position is uploaded as idle after the Dis
   assert.equal(env.pushed.at(-1).state, "playing");
 });
 
+test("a distinct same-title media item resets the hosted stuck timer (#705)", async () => {
+  const env = staleSetup({ presence: createPresence({ ...playingAt(0), artwork: { provider: "jellyfin", type: "primary", itemId: "track-one", imageTag: "cover-v1" } }) });
+  await env.loop.tick();
+  env.advance(299_000);
+  env.set(createPresence({ ...playingAt(0), artwork: { provider: "jellyfin", type: "primary", itemId: "track-one", imageTag: "cover-v2" } }));
+  assert.notEqual((await env.loop.tick()).cleared, "stuck", "an image revision is not a new item");
+  env.advance(1_000);
+  env.set(createPresence({ ...playingAt(0), artwork: { provider: "jellyfin", type: "primary", itemId: "track-two", imageTag: "cover-v2" } }));
+  assert.notEqual((await env.loop.tick()).cleared, "stuck", "a new item is not stale at the old deadline");
+  assert.equal(env.pushed.at(-1).artwork.itemId, "track-two");
+  env.advance(299_999);
+  assert.notEqual((await env.loop.tick()).cleared, "stuck");
+  env.advance(1);
+  assert.equal((await env.loop.tick()).cleared, "stuck", "a genuinely frozen new item still clears");
+  assert.equal(env.pushed.at(-1).state, "idle");
+});
+
 test("frozen playback clears after five elapsed minutes despite a wall-clock rollback", async () => {
   const env = staleSetup({ presence: playingAt(42_000) });
   await env.loop.tick();
