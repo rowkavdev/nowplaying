@@ -18,21 +18,21 @@ test("connects lazily, publishes, clears and closes", async () => {
 
 test("backs off after connection failure and retries later", async () => {
   let time=1000, attempts=0; const t=transport({connect:async()=>{attempts+=1;if(attempts===1)throw new Error("offline");}});
-  const client=createDiscordClient({transport:t,retryDelayMs:500,minUpdateIntervalMs:0,random:()=>0,now:()=>time});
+  const client=createDiscordClient({transport:t,retryDelayMs:500,minUpdateIntervalMs:0,random:()=>0,now:()=>time,elapsedNow:()=>time});
   assert.equal(await client.publish({}),false); assert.equal(await client.publish({}),false); assert.equal(attempts,1);
   time=1500; assert.equal(await client.publish({}),true); assert.equal(attempts,2);
 });
 
 test("disconnects and backs off when publishing fails", async () => {
   let time=0; const t=transport({setActivity:async()=>{throw new Error("socket closed");}});
-  const client=createDiscordClient({transport:t,retryDelayMs:100,minUpdateIntervalMs:0,random:()=>0,now:()=>time});
+  const client=createDiscordClient({transport:t,retryDelayMs:100,minUpdateIntervalMs:0,random:()=>0,now:()=>time,elapsedNow:()=>time});
   assert.equal(await client.publish({}),false); assert.equal(client.connected,false);
   time=99; assert.equal(await client.publish({}),false); time=100; assert.equal(await client.publish(null),true);
 });
 
 
 test("deduplicates identical activities and throttles changed updates", async () => {
-  let time=0; const t=transport(); const client=createDiscordClient({transport:t,minUpdateIntervalMs:5000,now:()=>time});
+  let time=0; const t=transport(); const client=createDiscordClient({transport:t,minUpdateIntervalMs:5000,now:()=>time,elapsedNow:()=>time});
   assert.equal(await client.publish({details:"One",state:"Playing"}),true);
   assert.equal(await client.publish({state:"Playing",details:"One"}),true);
   assert.equal(await client.publish({details:"Two"}),false);
@@ -52,7 +52,7 @@ test("republishes an unchanged activity when the transport reports it lost Disco
 
 test("backs off exponentially up to the cap and resets once Discord answers", async () => {
   let time = 0, up = false; const t = transport({ connect: async () => { if (!up) throw new Error("offline at C:\\Users\\rowan"); } });
-  const client = createDiscordClient({ transport: t, retryDelayMs: 100, maxRetryDelayMs: 400, minUpdateIntervalMs: 0, random: () => 0, now: () => time });
+  const client = createDiscordClient({ transport: t, retryDelayMs: 100, maxRetryDelayMs: 400, minUpdateIntervalMs: 0, random: () => 0, now: () => time, elapsedNow: () => time, elapsedNow: () => time });
   assert.deepEqual(client.status(), { state: "disconnected", lastPublishedAt: null, lastError: null, nextRetryInMs: 0 });
   await client.publish({}); assert.equal(client.status().nextRetryInMs, 100);
   time = 100; await client.publish({}); assert.equal(client.status().nextRetryInMs, 200);
@@ -73,7 +73,7 @@ test("failed publish invalidates dedupe so an unchanged prior activity reconnect
     if (fail) throw new Error("Discord RPC failed");
   } });
   const client = createDiscordClient({ transport: t, retryDelayMs: 100, minUpdateIntervalMs: 0,
-    jitter: 0, now: () => time });
+    jitter: 0, now: () => time, elapsedNow: () => time, elapsedNow: () => time });
   const first = { details: "A" };
   assert.equal(await client.publish(first), true);
   fail = true;
@@ -96,12 +96,12 @@ test("reconnect delays are jittered down, never above the cap", async () => {
   const offline = () => transport({ connect: async () => { throw new Error("offline"); } });
   const delays = [];
   for (const share of [0, 0.5, 1]) {
-    const client = createDiscordClient({ transport: offline(), retryDelayMs: 1000, maxRetryDelayMs: 1000, minUpdateIntervalMs: 0, random: () => share, now: () => time });
+    const client = createDiscordClient({ transport: offline(), retryDelayMs: 1000, maxRetryDelayMs: 1000, minUpdateIntervalMs: 0, random: () => share, now: () => time, elapsedNow: () => time, elapsedNow: () => time });
     await client.publish({});
     delays.push(client.status().nextRetryInMs);
   }
   assert.deepEqual(delays, [1000, 900, 800]);
-  const odd = createDiscordClient({ transport: offline(), retryDelayMs: 1000, minUpdateIntervalMs: 0, random: () => 7, now: () => time });
+  const odd = createDiscordClient({ transport: offline(), retryDelayMs: 1000, minUpdateIntervalMs: 0, random: () => 7, now: () => time, elapsedNow: () => time, elapsedNow: () => time });
   await odd.publish({});
   assert.equal(odd.status().nextRetryInMs, 800);
 });
@@ -116,7 +116,7 @@ test("a throttled clear retries at the limiter boundary and does not leave old a
   let time = 0;
   const queued = [];
   const t = transport();
-  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time,
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time, elapsedNow: () => time,
     setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
     clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
   assert.equal(await client.publish({ details: "Secret song" }), true);
@@ -135,7 +135,7 @@ test("a newer activity cancels a queued clear, and close cancels it too (#713)",
   let time = 0;
   const queued = [];
   const t = transport();
-  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time,
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time, elapsedNow: () => time,
     setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
     clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
   await client.publish({ details: "Old" });
@@ -161,7 +161,7 @@ test("a queued clear retries after a transport failure without reporting success
     if (failClear) throw new Error("offline");
   } });
   const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, retryDelayMs: 100,
-    jitter: 0, now: () => time, setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
+    jitter: 0, now: () => time, elapsedNow: () => time, setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
     clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
   await client.publish({ details: "Secret" });
   time = 1_000;
@@ -177,4 +177,22 @@ test("a queued clear retries after a transport failure without reporting success
   assert.equal(client.status().state, "ready");
   assert.deepEqual(t.calls, ["connect", ["set", { details: "Secret" }], "clear", "connect", "clear"]);
   assert.equal(queued.length, 0);
+});
+
+test("throttle and reconnect follow the elapsed clock, not wall-clock jumps (#731)", async () => {
+  let wall = 1_000_000, elapsed = 1_000_000;
+  const t = transport();
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, retryDelayMs: 5_000, random: () => 0, now: () => wall, elapsedNow: () => elapsed });
+  assert.equal(await client.publish({ details: "track A" }), true);
+  elapsed += 20_000; wall -= 3_600_000; // 20s pass while the wall clock jumps back an hour
+  assert.equal(await client.publish({ details: "track B" }), true);
+  assert.deepEqual(t.calls, ["connect", ["set", { details: "track A" }], ["set", { details: "track B" }]]);
+
+  let wall2 = 1_000_000, elapsed2 = 1_000_000, attempts = 0;
+  const down = transport({ connect: async () => { attempts += 1; if (attempts === 1) throw new Error("offline"); } });
+  const client2 = createDiscordClient({ transport: down, retryDelayMs: 5_000, minUpdateIntervalMs: 0, random: () => 0, now: () => wall2, elapsedNow: () => elapsed2 });
+  assert.equal(await client2.publish({ details: "x" }), false);
+  elapsed2 += 60_000; wall2 -= 3_600_000; // 60s pass while the wall clock jumps back an hour
+  assert.equal(await client2.publish({ details: "y" }), true);
+  assert.equal(attempts, 2);
 });
