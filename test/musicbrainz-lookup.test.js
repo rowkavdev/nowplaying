@@ -51,7 +51,7 @@ test("escapes query syntax and sends only title and artist", async () => {
 test("spaces every request at least one second apart", async () => {
   let clock = 0; const waits = [];
   const net = fakeNetwork({ recordings: [{ score: 100, releases: [{ id: RELEASE }] }], covers: { [RELEASE]: 200 } });
-  const lookup = createMusicBrainzLookup({ fetchImpl: net.fetchImpl, now: () => clock, sleep: async (ms) => { waits.push(ms); clock += ms; } });
+  const lookup = createMusicBrainzLookup({ fetchImpl: net.fetchImpl, elapsedNow: () => clock, sleep: async (ms) => { waits.push(ms); clock += ms; } });
   await Promise.all([lookup({ title: "a", artist: "x" }), lookup({ title: "b", artist: "x" })]);
   assert.equal(net.calls.length, 4);
   assert.deepEqual(waits, [1100, 1100, 1100]);
@@ -87,4 +87,16 @@ test("a MusicBrainz reply that stalls mid-body fails at the deadline instead of 
   });
   const lookup = createMusicBrainzLookup({ fetchImpl, timeoutMs: 30, minIntervalMs: 0 });
   await assert.rejects(lookup({ title: "Song", artist: "Band" }), /aborted/);
+});
+
+test("request spacing follows the elapsed clock across a wall-clock correction (#734)", async () => {
+  let wall = 1_800_000_000_000, elapsed = 1_800_000_000_000;
+  const waits = [];
+  const net = fakeNetwork({ recordings: [] });
+  const lookup = createMusicBrainzLookup({ fetchImpl: net.fetchImpl, elapsedNow: () => elapsed, sleep: async (ms) => { waits.push(ms); elapsed += ms; } });
+  await lookup({ title: "One", artist: "A" });
+  wall -= 3_600_000; elapsed += 2_000; // wall clock jumps back an hour; two elapsed seconds pass
+  await lookup({ title: "Two", artist: "B" });
+  assert.equal(waits.length, 0); // 2000ms > 1100ms interval: no wait at all
+  assert.equal(net.calls.length, 2);
 });
