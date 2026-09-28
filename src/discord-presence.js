@@ -13,7 +13,7 @@ const ACTIVE = new Set(["playing", "paused"]);
 
 export function createDiscordPresenceLoop({
   getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
-  intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, now = Date.now,
+  intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, now = () => performance.now(),
   setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
