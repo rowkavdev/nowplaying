@@ -56,3 +56,37 @@ test("validates options and key material", () => {
     /width: must be between 1 and 1024/,
   );
 });
+
+test("positive and missing artwork expire by elapsed time after a backward wall-clock correction (#721)", () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  const cache = createArtworkCache({ ttlMs: 3_600_000, negativeTtlMs: 60_000, now: () => elapsed });
+  cache.set("cover", "old-cover");
+  cache.set("missing", null);
+  wall -= 3_600_000; // The PC clock changes; elapsed process time does not.
+  elapsed += 120_000;
+  assert.equal(cache.get("missing"), undefined, "retry a recovered image after the negative TTL");
+  assert.equal(cache.get("cover"), "old-cover", "positive cover remains within its TTL");
+  elapsed += 3_480_000;
+  assert.equal(cache.get("cover"), undefined, "refresh an old cover after its positive TTL");
+  assert.equal(wall, 1_799_996_400_000, "wall time is still behind the original cache insertion");
+});
+
+test("default cache clock is monotonic when the system wall clock jumps backward (#721)", () => {
+  const originalNow = Date.now;
+  let wall = 1_800_000_000_000;
+  Date.now = () => wall;
+  try {
+    const cache = createArtworkCache({ ttlMs: 1, negativeTtlMs: 1 });
+    cache.set("cover", "old");
+    cache.set("missing", null);
+    wall -= 3_600_000;
+    // Elapsed time still moves forward even though Date.now went backward.
+    const until = performance.now() + 5;
+    while (performance.now() < until) { /* small deterministic expiry window */ }
+    assert.equal(cache.get("cover"), undefined);
+    assert.equal(cache.get("missing"), undefined);
+  } finally {
+    Date.now = originalNow;
+  }
+});

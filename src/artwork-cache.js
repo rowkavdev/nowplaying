@@ -1,5 +1,5 @@
 
-export function createArtworkCache({ maxEntries = 128, ttlMs = 3_600_000, negativeTtlMs = 60_000, now = Date.now } = {}) {
+export function createArtworkCache({ maxEntries = 128, ttlMs = 3_600_000, negativeTtlMs = 60_000, now = () => performance.now() } = {}) {
   for (const [name, value] of Object.entries({ maxEntries, ttlMs, negativeTtlMs })) {
     if (!Number.isInteger(value) || value < 1) throw new TypeError(`${name}: expected a positive integer`);
   }

@@ -55,3 +55,22 @@ test("rejects malformed sanitizer output before caching", async () => {
   const service=createArtworkService({cache:createArtworkCache(),fetchImpl:async()=>response(200),sanitizer:async()=>({contentType:"image/svg+xml",bytes:png,width:1,height:1})});
   await assert.rejects(()=>service.resolve(artwork,config),/validated raster output/);
 });
+
+test("retries a recovered 404 cover after negative TTL despite a backward PC clock (#721)", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  let available = false;
+  let calls = 0;
+  const service = createArtworkService({
+    cache: createArtworkCache({ negativeTtlMs: 60_000, now: () => elapsed }),
+    fetchImpl: async () => { calls += 1; return response(available ? 200 : 404); },
+  });
+  assert.equal(await service.resolve(artwork, config), null);
+  assert.equal(calls, 1);
+  available = true;
+  wall -= 3_600_000;
+  elapsed += 120_000;
+  assert.match(await service.resolve(artwork, config), /^data:image\/png;base64,/);
+  assert.equal(calls, 2, "image is fetched again after the negative TTL");
+  assert.equal(wall, 1_799_996_400_000);
+});
