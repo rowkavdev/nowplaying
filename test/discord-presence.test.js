@@ -295,3 +295,64 @@ test("stop drains an in-flight tick and drops a queued tick before clearing", as
     ["Old song", "CLEAR", "CLOSE"]);
   assert.equal((await l.tick()).action, "stopped", "later manual ticks cannot publish to a closed client");
 });
+
+test("frozen Discord playback clears after elapsed timeout despite a backward PC clock (#727)", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  const client = fakeClient();
+  let positionMs = 42_000;
+  const l = createDiscordPresenceLoop({ client, getPresence: async () => ({ ...playing, positionMs }), now: () => elapsed, stuckAfterMs: 300_000 });
+  assert.equal((await l.tick()).action, "publish");
+  wall -= 60 * 60_000;
+  elapsed += 299_000;
+  assert.equal((await l.tick()).action, "publish");
+  elapsed += 1_000;
+  assert.equal((await l.tick()).action, "clear");
+  assert.equal(client.calls.at(-1), null);
+  positionMs += 1_000;
+  assert.equal((await l.tick()).action, "publish", "moving playback resumes promptly");
+  assert.ok(wall < 1_800_000_000_000);
+});
+
+test("Discord idle grace clears after elapsed time despite a backward PC clock (#727)", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  let presence = playing;
+  const client = fakeClient();
+  const l = createDiscordPresenceLoop({ client, idleBehavior: "grace", getPresence: async () => presence, now: () => elapsed, graceMs: 120_000 });
+  assert.equal((await l.tick()).action, "publish");
+  presence = idle;
+  elapsed += 1_000;
+  assert.equal((await l.tick()).action, "grace");
+  wall -= 60 * 60_000;
+  elapsed += 119_000;
+  assert.equal((await l.tick()).action, "grace");
+  elapsed += 1_000;
+  assert.equal((await l.tick()).action, "clear");
+  assert.equal(client.calls.at(-1), null);
+  assert.ok(wall < 1_800_000_000_000);
+});
+
+test("default Discord timers do not depend on a backward Date.now correction (#727)", async () => {
+  const originalNow = Date.now;
+  let wall = 1_800_000_000_000;
+  Date.now = () => wall;
+  try {
+    const stuckClient = fakeClient();
+    const graceClient = fakeClient();
+    const stuck = createDiscordPresenceLoop({ client: stuckClient, getPresence: async () => ({ ...playing, positionMs: 42_000 }), stuckAfterMs: 1_000 });
+    let presence = playing;
+    const grace = createDiscordPresenceLoop({ client: graceClient, getPresence: async () => presence, idleBehavior: "grace", graceMs: 1_000 });
+    await stuck.tick(); await grace.tick();
+    presence = idle;
+    await grace.tick();
+    wall -= 60 * 60_000;
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+    assert.equal((await stuck.tick()).action, "clear");
+    assert.equal((await grace.tick()).action, "clear");
+    assert.equal(stuckClient.calls.at(-1), null);
+    assert.equal(graceClient.calls.at(-1), null);
+  } finally {
+    Date.now = originalNow;
+  }
+});
