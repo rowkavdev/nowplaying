@@ -117,7 +117,7 @@ jobs:
         run: sha256sum "nowplaying-${GITHUB_REF_NAME}-windows-x64-setup.exe" "nowplaying-${GITHUB_REF_NAME}-windows-x64.zip" >> SHA256SUMS && cat SHA256SUMS
       - name: Attest public-repository build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             nowplaying-${{ github.ref_name }}.tar.gz

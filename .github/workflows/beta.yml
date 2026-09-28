@@ -48,7 +48,7 @@ jobs:
           }
       - name: Attest development build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             dist/windows/*.exe
@@ -83,7 +83,7 @@ jobs:
         run: ./scripts/build-posix.sh macos
       - name: Attest development build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: dist/macos/*.zip
       - name: Upload macOS artifacts
@@ -114,7 +114,7 @@ jobs:
         run: ./scripts/build-posix.sh linux
       - name: Attest development build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: dist/linux/*.tar.gz
       - name: Upload Linux artifacts
