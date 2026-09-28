@@ -91,8 +91,26 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailur
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const declared = Number(response.headers?.get?.("content-length"));
     if (Number.isFinite(declared) && declared > MAX_BODY) { failed("oversize"); return null; }
-    const text = await response.text();
-    if (text.length > MAX_BODY) { failed("oversize"); return null; }
+    // Bound the actual bytes as they arrive, even when the peer omits
+    // Content-Length: cancel the stream at the cap instead of buffering it
+    // all first (#745).
+    const reader = response.body?.getReader?.();
+    let text;
+    if (reader) {
+      const chunks = [];
+      let bytes = 0;
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > MAX_BODY) { await reader.cancel().catch(() => {}); failed("oversize"); return null; }
+        chunks.push(part.value);
+      }
+      text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
+    } else {
+      text = await response.text();
+      if (Buffer.byteLength(text) > MAX_BODY) { failed("oversize"); return null; }
+    }
     const found = probe.classify({ status: response.status, text });
     if (!found) { failed(response.status === 200 ? "unrecognized_response" : "http_status"); return null; }
     const id = cleanId(found.id);
