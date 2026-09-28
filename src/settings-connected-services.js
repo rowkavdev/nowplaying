@@ -10,7 +10,7 @@ import { DEFAULT_HOSTED_URL, normalizeHostedUrl } from "./hosted-uploader.js";
 const SAFE = new Set(["same-origin", "none"]);
 const ROUTE = "/api/settings/services";
 
-export function createSettingsConnectedServices({ file, credentialStore, hostedCredentials, onConfigured = async () => {}, settingsStore, spotifySignIn, hostedSignIn, fetchImpl = fetch, now = () => Date.now() } = {}) {
+export function createSettingsConnectedServices({ file, credentialStore, hostedCredentials, onConfigured = async () => {}, settingsStore, spotifySignIn, hostedSignIn, fetchImpl = fetch, elapsedNow = () => performance.now() } = {}) {
   if (!file || typeof credentialStore?.save !== "function") throw new TypeError("Spotify credential store required");
   const store = settingsStore ?? createAppSettingsStore({ file });
   let pendingSpotify = null;
@@ -66,9 +66,9 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     if (path.startsWith("/api/setup/hosted/")) {
       if (path === "/api/setup/hosted/signin") {
         let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
-        if (input.action === "start" && hostedSigningIn && now() < hostedSignInExpiresAt) return json(409, { error: "signin_in_progress" });
+        if (input.action === "start" && hostedSigningIn && elapsedNow() < hostedSignInExpiresAt) return json(409, { error: "signin_in_progress" });
         // An abandoned device flow must not block retries after its code expires.
-        if (input.action === "start") { hostedSigningIn = true; hostedSignInExpiresAt = now() + 900_000; }
+        if (input.action === "start") { hostedSigningIn = true; hostedSignInExpiresAt = elapsedNow() + 900_000; }
       }
       const result = await hosted(request);
       if (path === "/api/setup/hosted/signin" && result?.status === 200) {
@@ -80,7 +80,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           catch { return json(500, { error: "hosted_save_failed" }); }
         } else if (value.status === "started") {
           const seconds = Number(value.expiresIn);
-          hostedSignInExpiresAt = now() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);
+          hostedSignInExpiresAt = elapsedNow() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);
           // URL is validated by the existing hosted handler; retain it only
           // once start succeeded. It never contains a credential.
           let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
