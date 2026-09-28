@@ -14,7 +14,10 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
   const checksumUrl = trustedAssetUrl(update.checksumUrl, "checksumUrl");
   const headers = { Accept: "application/octet-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   const signal = timeoutSignal(timeoutMs);
-  const options = { headers, redirect: "error", ...(signal ? { signal } : {}) };
+  // GitHub's API always 302s asset requests to its signed CDN, so the two
+  // asset fetches must follow; the SHA256SUMS check below is the integrity
+  // anchor, and the final URL is pinned to GitHub's asset CDN origins.
+  const options = { headers, redirect: "follow", ...(signal ? { signal } : {}) };
   const [assetResponse, checksumResponse] = await Promise.all([
     fetchImpl(assetUrl, options),
     fetchImpl(checksumUrl, options),
@@ -53,9 +56,21 @@ function trustedAssetUrl(value, name) {
   return url.toString();
 }
 
+// After following, the bytes may come from the requested API URL itself or
+// from GitHub's release-asset CDN, nowhere else. Adapters that don't report a
+// final URL can't be checked; the checksum below still gates what installs.
+const ASSET_CDN_ORIGINS = new Set([
+  "https://objects.githubusercontent.com",
+  "https://release-assets.githubusercontent.com",
+]);
+
 function assertFinalUrl(response, requested) {
   if (!response.url) return;
-  if (new URL(response.url).toString() !== requested) throw new Error("update download redirect was rejected");
+  let url;
+  try { url = new URL(response.url); } catch { throw new Error("update download redirect was rejected"); }
+  if (url.toString() === requested) return;
+  if (ASSET_CDN_ORIGINS.has(url.origin) && !url.username && !url.password) return;
+  throw new Error("update download redirect was rejected");
 }
 
 function parseChecksum(text, filename) {
