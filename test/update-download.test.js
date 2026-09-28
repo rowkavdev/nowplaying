@@ -10,7 +10,7 @@ const checksumUrl = "https://api.github.com/repos/rowkav09/nowplaying/releases/a
 const update = { available: true, version: "0.2.0", assetUrl, checksumUrl };
 function fetchPair(manifest = `${digest}  nowplaying-v0.2.0.tar.gz\n`) {
   return async (url, options) => {
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "follow");
     return url === assetUrl
       ? { ok: true, url: assetUrl, arrayBuffer: async () => bytes.buffer }
       : { ok: true, url: checksumUrl, text: async () => manifest };
@@ -39,11 +39,13 @@ test("rejects asset and checksum URLs outside the GitHub API origin", async () =
   }
 });
 
-test("rejects followed redirects even if fetch returns success", async () => {
-  const fetchImpl = async (url) => url === assetUrl
-    ? { ok: true, url: "https://objects.githubusercontent.com/redirected", arrayBuffer: async () => bytes.buffer }
-    : { ok: true, url: checksumUrl, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
-  await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl }), /redirect was rejected/);
+test("rejects redirects that land off GitHub's asset CDN", async () => {
+  for (const finalUrl of ["https://attacker.example/redirected", "https://release-assets.githubusercontent.com.evil.example/x", "not a url"]) {
+    const fetchImpl = async (url) => url === assetUrl
+      ? { ok: true, url: finalUrl, arrayBuffer: async () => bytes.buffer }
+      : { ok: true, url: checksumUrl, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
+    await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl }), /redirect was rejected/);
+  }
 });
 
 test("rejects an oversized archive before hashing it", async () => {
@@ -76,4 +78,20 @@ test("refuses an asset name the release workflow never publishes", async () => {
   for (const assetName of ["nowplaying-v0.3.0-windows-x64.zip", "../nowplaying-v0.2.0.tar.gz", "evil.exe"]) {
     await assert.rejects(downloadVerifiedUpdate({ update: { ...update, assetName }, fetchImpl: fetchPair() }), /unexpected release asset/);
   }
+});
+
+test("follows GitHub's signed-CDN redirect for the asset and checksum (#749)", async () => {
+  // Models undici against the real API: the api.github.com asset URL 302s to
+  // release-assets.githubusercontent.com, fetch follows, and response.url is
+  // the final CDN URL.
+  const cdn = "https://release-assets.githubusercontent.com/github-production-release-asset/1/abc?X-Amz-Signature=signed";
+  const fetchImpl = async (url, options) => {
+    assert.equal(options.redirect, "follow");
+    return url === assetUrl
+      ? { ok: true, url: cdn, arrayBuffer: async () => bytes.buffer }
+      : { ok: true, url: cdn, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
+  };
+  const result = await downloadVerifiedUpdate({ update, token: "secret", fetchImpl });
+  assert.equal(result.sha256, digest);
+  assert.deepEqual(result.bytes, bytes);
 });
