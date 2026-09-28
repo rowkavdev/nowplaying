@@ -90,3 +90,28 @@ test("token source caches, refreshes before expiry, saves rotated refresh tokens
   assert.equal(stored, "r2");
   assert.equal(calls[1].body.get("refresh_token"), "r1");
 });
+
+test("token source does not write back a rotated token removed mid-refresh (#725)", async () => {
+  let stored = "r1";
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const fetchImpl = async () => {
+    await gate;
+    return new Response(JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_in: 3600 }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  const saves = [];
+  const source = createSpotifyTokenSource({
+    clientId,
+    readRefreshToken: async () => stored,
+    saveRefreshToken: async (v) => { saves.push(v); stored = v; },
+    fetchImpl,
+    now: () => 0,
+  });
+  const pendingToken = source.getAccessToken();
+  // Disconnect lands mid-flight: the credential is removed before Spotify replies.
+  stored = null;
+  release();
+  assert.equal(await pendingToken, "a2");
+  assert.deepEqual(saves, []);
+  assert.equal(stored, null);
+});
