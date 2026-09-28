@@ -122,8 +122,12 @@ export function createSpotifyTokenSource({ clientId, readRefreshToken, saveRefre
   let cached = null;
   let pending = null;
   async function refresh() {
-    const result = await refreshAccessToken({ clientId, refreshToken: await readRefreshToken(), fetchImpl });
-    if (result.refreshToken) await saveRefreshToken(result.refreshToken);
+    const usedToken = await readRefreshToken();
+    const result = await refreshAccessToken({ clientId, refreshToken: usedToken, fetchImpl });
+    // Re-check liveness before writing: the stored credential may have been
+    // removed (disconnect) or rotated (another instance) while the network
+    // call was in flight. Saving then would resurrect or clobber it (#725).
+    if (result.refreshToken && (await readRefreshToken()) === usedToken) await saveRefreshToken(result.refreshToken);
     cached = { token: result.accessToken, expiresAt: now() + result.expiresInMs - 60_000 };
     return cached.token;
   }
