@@ -9,7 +9,7 @@ const video = (extra = {}) => ({ tabId: "tab1", videoId: "dQw4w9WgXcQ", title: "
 
 function bridge() {
   let t = 1_000;
-  const b = createYouTubeBridge({ token, now: () => t });
+  const b = createYouTubeBridge({ token, now: () => t, elapsedNow: () => t });
   return { b, tick: (ms) => { t += ms; } };
 }
 
@@ -57,6 +57,23 @@ test("ads, Shorts and stop clear the tab; silence goes idle after the TTL", asyn
   tick(29_999);
   assert.equal((await b.provider.getPresence()).state, "playing");
   tick(2);
+  assert.equal((await b.provider.getPresence()).state, "idle");
+});
+
+test("silent playback expires by elapsed time after a wall-clock rollback or freeze (#717)", async () => {
+  let wall = 100_000;
+  let elapsed = 0;
+  const b = createYouTubeBridge({ token, ttlMs: 30_000, now: () => wall, elapsedNow: () => elapsed });
+  b.receive({ method: "POST", headers, body: video({ title: "Old video" }) });
+  wall = 50_000; // NTP or a manual correction moves the PC clock backward.
+  elapsed = 29_999;
+  assert.equal((await b.provider.getPresence()).title, "Old video");
+  elapsed = 30_001;
+  assert.equal((await b.provider.getPresence()).state, "idle");
+  assert.equal(b.tabCount(), 0);
+  b.receive({ method: "POST", headers, body: video({ title: "New video" }) });
+  wall = 50_000; // A frozen wall clock also cannot extend a silent tab.
+  elapsed = 60_002;
   assert.equal((await b.provider.getPresence()).state, "idle");
 });
 
