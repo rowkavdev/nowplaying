@@ -65,3 +65,47 @@ test("Plex owner lookup has a deadline too, so a stuck /accounts can't hang pres
   assert.ok(seen.some(([url]) => url.endsWith("/accounts")));
   assert.ok(seen.every(([, signal]) => signal instanceof AbortSignal));
 });
+
+test("Jellyfin and Plex credentials never follow a cross-port redirect (#715)", async () => {
+  const { createServer } = await import("node:http");
+  const listen = (server) => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
+  const captured = [];
+  const destination = createServer((request, response) => {
+    captured.push(request.headers);
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end("[]");
+  });
+  const destinationPort = await listen(destination);
+  const source = createServer((_request, response) => {
+    response.writeHead(302, { location: `http://127.0.0.1:${destinationPort}/captured` });
+    response.end();
+  });
+  const sourcePort = await listen(source);
+  try {
+    const baseUrl = `http://127.0.0.1:${sourcePort}`;
+    await assert.rejects(createJellyfinProvider({ baseUrl, apiKey: "jf-secret" }).getPresence(), /outside its origin/);
+    await assert.rejects(createPlexProvider({ baseUrl, token: "plex-secret" }).getPresence(), /outside its origin/);
+    assert.deepEqual(captured, [], "the separate listener never sees either token");
+  } finally {
+    await Promise.all([source, destination].map((server) => new Promise((resolve) => server.close(resolve))));
+  }
+});
+
+test("relative same-origin provider redirects keep credentials and a shared deadline (#715)", async () => {
+  const seen = [];
+  const redirected = await fetchWithTimeout(async (url, init) => {
+    seen.push({ url, init });
+    if (seen.length === 1) return { status: 302, headers: { get: (name) => name === "location" ? "/new-sessions" : null } };
+    return { status: 200, ok: true };
+  }, "https://media.example.test/Sessions", { headers: { "X-Emby-Token": "secret" } });
+  assert.equal(redirected.ok, true);
+  assert.deepEqual(seen.map(({ url }) => url), ["https://media.example.test/Sessions", "https://media.example.test/new-sessions"]);
+  assert.ok(seen.every(({ init }) => init.redirect === "manual" && init.headers["X-Emby-Token"] === "secret" && init.signal === seen[0].init.signal));
+});
+
+test("provider redirects with embedded credentials and redirect loops are rejected (#715)", async () => {
+  await assert.rejects(fetchWithTimeout(async () => ({ status: 302, headers: { get: () => "https://user:pass@media.example.test/new" } }), "https://media.example.test/Sessions"), /outside its origin/);
+  let requests = 0;
+  await assert.rejects(fetchWithTimeout(async () => { requests++; return { status: 302, headers: { get: () => "/loop" } }; }, "https://media.example.test/Sessions"), /redirected too many times/);
+  assert.equal(requests, 4);
+});
