@@ -7,7 +7,9 @@ import { classifyPlex, discoverLocalServers } from "../src/setup-discovery.js";
 import { discoverSettingsServers } from "../src/settings-discovery.js";
 
 const gdm = (fields = {}) => Buffer.from(`HTTP/1.0 200 OK\r\nContent-Type: plex/media-server\r\nName: Living room Plex\r\nPort: 32400\r\nResource-Identifier: machine-1\r\nVersion: 1.41.0\r\n${Object.entries(fields).map(([key, value]) => `${key}: ${value}\r\n`).join("")}\r\n`);
-const reply = (text) => ({ status: 200, headers: { get: () => null }, text: async () => text });
+// Models a real server's bounded /identity reply: a declared Content-Length and
+// no streaming body, so the fallback adapter path sees a trusted size.
+const reply = (text) => ({ status: 200, headers: { get: (name) => name === "content-length" ? String(Buffer.byteLength(text)) : null }, text: async () => text });
 
 test("GDM accepts server announcements from local sender only, never client or unsafe fields", () => {
   assert.deepEqual(parsePlexGdmReply(gdm(), "192.168.1.5"), { provider: "plex", baseUrl: "http://192.168.1.5:32400", version: "1.41.0", id: "machine-1", name: "Living room Plex" });

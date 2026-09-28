@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { classifyJellyfinOrEmby, classifyPlex, classifySubsonic, createSetupDiscoveryHandler, discoverLocalServers, gatewayCandidates, mergeServers } from "../src/setup-discovery.js";
 
-const reply = (status, text) => ({ status, headers: { get: () => null }, text: async () => text });
+// Models a real server's bounded JSON/XML reply: a declared Content-Length and
+// no streaming body, so the fallback adapter path sees a trusted size.
+const reply = (status, text) => ({ status, headers: { get: (name) => name === "content-length" ? String(Buffer.byteLength(text)) : null }, text: async () => text });
 
 test("recognises each server from its public, unauthenticated response", () => {
   assert.deepEqual(classifySubsonic({ status: 200, text: JSON.stringify({ "subsonic-response": { status: "failed", type: "navidrome", serverVersion: "0.53.3" } }) }), { provider: "navidrome", version: "0.53.3" });
@@ -135,4 +137,18 @@ test("probe stops reading at the byte cap instead of buffering the whole body (#
   assert.equal(failures[0]?.reason, "oversize");
   assert.equal(cancelled, true);
   assert.ok(chunksRead <= 3, `stream should stop at the cap, read ${chunksRead} chunks`);
+});
+
+test("non-streaming fallback refuses to buffer a body with no declared size (#747)", async () => {
+  let textCalled = false;
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: () => null }, // no Content-Length, no streaming body
+    text: async () => { textCalled = true; return "x".repeat(1024 * 1024); },
+  });
+  const failures = [];
+  const servers = await discoverLocalServers({ fetchImpl, discoverLan: async () => [], networkHosts: [], probes: [{ port: 32400, path: "/", classify: () => ({ provider: "plex" }) }], onProbeFailure: (f) => failures.push(f) });
+  assert.deepEqual(servers, []);
+  assert.equal(failures[0]?.reason, "oversize");
+  assert.equal(textCalled, false, "text() must not be called without a trusted size");
 });
