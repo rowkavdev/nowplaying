@@ -213,7 +213,7 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
-  const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now } : {}) });
+  const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now, elapsedNow: now } : {}) });
   // Hidden titles or album art: never look covers up by title.
   const policy = privacyPolicyFromConfig(config);
   const artwork = createArtwork(policy.redactTitles || policy.hideArtwork ? { ...config.discord, artworkLookup: "off" } : config.discord);
