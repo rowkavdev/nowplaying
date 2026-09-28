@@ -156,3 +156,49 @@ test("setup signin route: start then poll, needs a credential store", async () =
   assert.equal((await call({ action: "zap" })).status, 400);
   assert.equal((await call({ action: "start", token: "x" })).status, 400);
 });
+
+test("hosted device flow polls and expires by elapsed time after a wall-clock rollback (#729)", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    return { status: 200, ok: true, json: async () => url.endsWith("/device/code")
+      ? { device_code: "fixture", user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 }
+      : { error: "authorization_pending" } };
+  };
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl, now: () => elapsed });
+  assert.equal((await signIn.start()).status, "started");
+  wall -= 60 * 60_000;
+  elapsed += 10_000;
+  assert.equal((await signIn.poll()).status, "pending");
+  assert.equal(calls.filter((url) => url.endsWith("/access_token")).length, 1, "GitHub is polled after its five-second interval");
+  elapsed += 900_000;
+  assert.equal((await signIn.poll()).status, "expired");
+  assert.equal(calls.filter((url) => url.endsWith("/access_token")).length, 1, "expired code is not polled again");
+  assert.equal(wall, 1_799_996_400_000);
+});
+
+test("default hosted device flow clock is independent of Date.now (#729)", async () => {
+  const originalWall = Date.now;
+  const originalElapsed = performance.now;
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  Date.now = () => wall;
+  performance.now = () => elapsed;
+  try {
+    const gh = github({ tokenReplies: [{ error: "authorization_pending" }] });
+    const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials: createHostedCredentials({ adapter: memAdapter() }), clientId: "id", fetchImpl: gh.fetchImpl });
+    assert.equal((await signIn.start()).status, "started");
+    wall -= 60 * 60_000;
+    elapsed += 10_000;
+    assert.equal((await signIn.poll()).status, "pending");
+    assert.equal(gh.calls.filter((call) => call.url.endsWith("/access_token")).length, 1);
+    elapsed += 900_000;
+    assert.equal((await signIn.poll()).status, "expired");
+  } finally {
+    Date.now = originalWall;
+    performance.now = originalElapsed;
+  }
+});
