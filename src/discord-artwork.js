@@ -83,7 +83,7 @@ export function createDiscordArtworkResolver({
   ttlMs = 6 * 60 * 60_000,
   negativeTtlMs = 10 * 60_000,
   maxEntries = 500,
-  now = () => Date.now(),
+  now = () => performance.now(),
 } = {}) {
   validateOptions({ publicProxyBase, metadataLookup, fallbackAsset, ttlMs, negativeTtlMs, maxEntries });
   if (metadataLookup && typeof lookup !== "function") throw new TypeError("discord artwork: lookup is required when metadataLookup is enabled");

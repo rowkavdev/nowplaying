@@ -131,3 +131,50 @@ test("clear() forgets cached covers and misses so the next update looks again", 
   assert.equal((await resolver.resolve(track)).cached, false);
   assert.equal(calls, 2);
 });
+
+test("Discord artwork misses and hits expire by elapsed time after a backward PC clock change (#723)", async () => {
+  let wall = 1_800_000_000_000;
+  let elapsed = 0;
+  let cover = null;
+  let calls = 0;
+  const resolver = createDiscordArtworkResolver({
+    metadataLookup: true, lookup: async () => { calls += 1; return cover; },
+    negativeTtlMs: 10 * 60_000, ttlMs: 6 * 60 * 60_000, now: () => elapsed,
+  });
+  const track = { kind: "track", title: "Fixture Track", artist: "Fixture Artist" };
+  assert.equal((await resolver.resolve(track)).image, FALLBACK_ARTWORK_URL);
+  cover = "https://images.example.com/recovered.jpg";
+  wall -= 60 * 60_000;
+  elapsed += 20 * 60_000;
+  const recovered = await resolver.resolve(track);
+  assert.deepEqual([recovered.image, recovered.strategy, recovered.cached, calls], [cover, "lookup", false, 2]);
+  cover = "https://images.example.com/new.jpg";
+  wall -= 24 * 60 * 60_000;
+  elapsed += 7 * 60 * 60_000;
+  const refreshed = await resolver.resolve(track);
+  assert.deepEqual([refreshed.image, refreshed.strategy, refreshed.cached, calls], [cover, "lookup", false, 3]);
+  assert.ok(wall < 1_800_000_000_000);
+});
+
+test("default Discord artwork clock survives a backward Date.now correction (#723)", async () => {
+  const originalNow = Date.now;
+  let wall = 1_800_000_000_000;
+  Date.now = () => wall;
+  try {
+    let missingCover = null;
+    let positiveCover = "https://images.example.com/old.jpg";
+    const missing = createDiscordArtworkResolver({ metadataLookup: true, lookup: async () => missingCover, negativeTtlMs: 1_000, ttlMs: 1_000 });
+    const positive = createDiscordArtworkResolver({ metadataLookup: true, lookup: async () => positiveCover, negativeTtlMs: 1_000, ttlMs: 1_000 });
+    const track = { kind: "track", title: "Fixture Track" };
+    assert.equal((await missing.resolve(track)).image, FALLBACK_ARTWORK_URL);
+    assert.equal((await positive.resolve(track)).image, positiveCover);
+    wall -= 60 * 60_000;
+    missingCover = "https://images.example.com/recovered.jpg";
+    positiveCover = "https://images.example.com/new.jpg";
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+    assert.equal((await missing.resolve(track)).image, missingCover);
+    assert.equal((await positive.resolve(track)).image, positiveCover);
+  } finally {
+    Date.now = originalNow;
+  }
+});
