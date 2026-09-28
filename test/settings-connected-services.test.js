@@ -69,7 +69,7 @@ test("hosted device sign-in retains selected URL and enables upload", async () =
 
 test("abandoned hosted sign-in expires and allows a new start without restarting", async () => {
   const file = await configFile(); let clock = 1000, starts = 0;
-  const svc = createSettingsConnectedServices({ file, now: () => clock, credentialStore: { save: async () => {} }, hostedCredentials: { load: async () => null, save: async () => {} },
+  const svc = createSettingsConnectedServices({ file, elapsedNow: () => clock, credentialStore: { save: async () => {} }, hostedCredentials: { load: async () => null, save: async () => {} },
     hostedSignIn: () => ({ start: async () => { starts++; return { status: "started", expiresIn: 120, interval: 5 }; }, poll: async () => ({ status: "pending" }) }),
   });
   const start = () => svc.handler(post("/api/setup/hosted/signin", { action: "start", url: "https://cards.example" }));
@@ -170,4 +170,20 @@ test("Spotify Disconnect waits for a draft write already in flight", async () =>
   await pending;
   assert.equal(JSON.parse(await readFile(file, "utf8")).spotify, undefined);
   assert.deepEqual(writes.map(([action]) => action), ["save", "remove"]);
+});
+
+test("abandoned hosted sign-in can restart after its real lifetime across a wall-clock correction (#741)", async () => {
+  const file = await configFile();
+  let wall = 1_800_000_000_000, elapsed = 1_800_000_000_000, starts = 0;
+  const svc = createSettingsConnectedServices({
+    file, elapsedNow: () => elapsed,
+    credentialStore: { save: async () => {} },
+    hostedCredentials: { load: async () => null },
+    hostedSignIn: () => ({ start: async () => { starts += 1; return { status: "started", expiresIn: 120, interval: 5 }; }, poll: async () => ({ status: "pending" }) }),
+  });
+  const startReq = { method: "POST", url: "/api/setup/hosted/signin", headers: {}, body: JSON.stringify({ action: "start", url: "https://cards.example" }) };
+  assert.equal((await svc.handler(startReq)).status, 200);
+  wall -= 3_600_000; elapsed += 180_000; // wall clock jumps back an hour; three elapsed minutes pass (> 120s code lifetime)
+  assert.equal((await svc.handler(startReq)).status, 200);
+  assert.equal(starts, 2);
 });
