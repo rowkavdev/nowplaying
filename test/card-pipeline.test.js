@@ -54,3 +54,33 @@ test("privacy hides the local progress track and timer without changing the save
   assert.doesNotMatch(hidden, /1:00 \/ 2:00/);
   assert.match(await createCardPipeline(options)(), /width="196" height="4"/, "switching privacy off restores the saved appearance");
 });
+
+test("hidden card artwork never fetches; explicit visibility overrides compact (#709)", async () => {
+  const presence = createPresence({ state: "playing", kind: "track", title: "Song",
+    artwork: { provider: "jellyfin", itemId: "track-one", imageTag: "cover", type: "primary" } });
+  let requests = 0;
+  const artworkService = { resolve: async () => { requests++; return "data:image/png;base64,eA=="; } };
+  const provider = { getPresence: async () => presence };
+  const compact = createCardPipeline({ provider, artworkService, defaults: () => ({ theme: "compact" }) });
+  assert.doesNotMatch(await compact(), /<image/);
+  assert.equal(requests, 0, "the compact default must not wait for a hidden cover");
+  assert.match(await compact({ show: { artwork: true } }), /<image/);
+  assert.equal(requests, 1, "an explicit query override fetches the cover");
+  assert.match(await compact({ theme: "paper" }), /<image/);
+  assert.equal(requests, 2, "a query theme override uses that theme's visibility");
+  const hidden = createCardPipeline({ provider, artworkService, defaults: () => ({ show: { artwork: false } }) });
+  assert.doesNotMatch(await hidden(), /<image/);
+  assert.equal(requests, 2, "an explicit hidden setting never fetches");
+  assert.match(await hidden({ show: { artwork: true } }), /<image/);
+  assert.equal(requests, 3, "query visibility can override a saved hidden setting");
+});
+
+test("a slow hidden cover cannot delay a compact card (#709)", async () => {
+  const provider = { getPresence: async () => createPresence({ state: "playing", kind: "track", title: "Song",
+    artwork: { provider: "jellyfin", itemId: "track-one", type: "primary" } }) };
+  const compact = createCardPipeline({ provider, artworkService: { resolve: async () => new Promise(() => {}) },
+    defaults: () => ({ theme: "compact" }) });
+  const svg = await Promise.race([compact(), new Promise((_, reject) => setTimeout(() => reject(new Error("hidden artwork delayed the card")), 100))]);
+  assert.match(svg, /Song/);
+  assert.doesNotMatch(svg, /<image/);
+});
