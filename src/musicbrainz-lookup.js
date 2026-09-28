@@ -12,7 +12,7 @@ export function luceneTerm(value) {
   return `"${String(value).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200).replace(/[\\"]/g, "\\$&")}"`;
 }
 
-export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgent = MUSICBRAINZ_USER_AGENT, minIntervalMs = 1100, minScore = 90, timeoutMs = 5000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now } = {}) {
+export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgent = MUSICBRAINZ_USER_AGENT, minIntervalMs = 1100, minScore = 90, timeoutMs = 5000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), elapsedNow = () => performance.now() } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
   if (typeof userAgent !== "string" || !/\(.+\)/.test(userAgent)) throw new TypeError("userAgent must include contact details in parentheses");
   let queue = Promise.resolve();
@@ -22,9 +22,9 @@ export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgen
   // serial queue spaced by minIntervalMs.
   function limited(url, init) {
     const run = queue.then(async () => {
-      const wait = lastRequestAt + minIntervalMs - now();
+      const wait = lastRequestAt + minIntervalMs - elapsedNow();
       if (wait > 0) await sleep(wait);
-      lastRequestAt = now();
+      lastRequestAt = elapsedNow();
       // The deadline covers reading the body too: clearing it once headers
       // arrive let a reply that stalls mid-body hang the lookup, and with it
       // Discord artwork for that track. Aborting a finished request is a no-op.
