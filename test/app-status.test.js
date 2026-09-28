@@ -9,7 +9,7 @@ const config = { provider: "jellyfin", serverUrl: "http://user:pw@192.168.1.5:80
 
 test("status starts as checking and records a good poll", async () => {
   let t = 1000;
-  const status = createAppStatus({ config, version: "0.1.1-dev", now: () => t });
+  const status = createAppStatus({ config, version: "0.1.1-dev", now: () => t, elapsedNow: () => t });
   assert.equal(status.snapshot().server.state, "starting");
   const provider = status.wrapProvider({ getPresence: async () => ({ state: "playing", title: "Song", subtitle: "Artist" }) });
   t = 5000;
@@ -54,7 +54,7 @@ test("idle presence shows nothing playing", async () => {
 
 test("refresh polls only when nothing polled recently, and coalesces", async () => {
   let t = 0; let calls = 0;
-  const status = createAppStatus({ config, now: () => t, refreshAfterMs: 15000 });
+  const status = createAppStatus({ config, now: () => t, elapsedNow: () => t, refreshAfterMs: 15000 });
   status.wrapProvider({ getPresence: async () => { calls += 1; return { state: "idle" }; } });
   await Promise.all([status.refresh(), status.refresh()]);
   assert.equal(calls, 1);
@@ -336,4 +336,16 @@ test("the status page previews the exact diagnostics report before copying (#141
   const script = (await handle({ method: "GET", url: "/status.js" })).body;
   assert.match(script, /diagnostics-details"\)\.addEventListener\("toggle"/);
   assert.doesNotThrow(() => new Function(script));
+});
+
+test("status refresh interval follows the elapsed clock across a wall-clock correction (#736)", async () => {
+  let wall = 1_800_000_000_000, elapsed = 1_800_000_000_000, count = 0;
+  const provider = { getPresence: async () => { count += 1; return { state: "playing", title: `Title-${count}` }; } };
+  const status = createAppStatus({ config, now: () => wall, elapsedNow: () => elapsed, refreshAfterMs: 15000 });
+  status.wrapProvider(provider);
+  await status.refresh();
+  wall -= 3_600_000; elapsed += 60_000; // wall clock jumps back an hour; 60 elapsed seconds pass
+  await status.refresh();
+  assert.equal(count, 2);
+  assert.equal(status.snapshot().playing.title, "Title-2");
 });
