@@ -15,7 +15,7 @@ const PATH = "/api/setup/test";
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
 
-export function createSetupTestHandler({ store, credentialStore, fetchImpl = fetch, createProvider = createProviderFromConfig, now = Date.now } = {}) {
+export function createSetupTestHandler({ store, credentialStore, fetchImpl = fetch, createProvider = createProviderFromConfig, elapsedNow = () => performance.now() } = {}) {
   let running = false;
   let recent = [];
   if (typeof store?.load !== "function") throw new TypeError("store.load is required");
@@ -48,7 +48,7 @@ export function createSetupTestHandler({ store, credentialStore, fetchImpl = fet
     if (url.pathname !== PATH) return null;
     if ((request.method || "GET") !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "POST" });
     if (url.search) return json(400, { error: "invalid_request" });
-    const time = now();
+    const time = elapsedNow();
     recent = recent.filter((at) => time - at < RATE_WINDOW_MS);
     if (running || recent.length >= RATE_LIMIT) return json(429, { ok: false, status: "too_many_tests" }, { "Retry-After": "10" });
     recent.push(time);
