@@ -189,6 +189,29 @@ test("a playing session whose position stops moving is cleared after stuckAfterM
   assert.equal((await l.tick()).action, "publish");
 });
 
+test("a distinct same-title media item resets the frozen-position timer (#705)", async () => {
+  let time = 0;
+  let itemId = "track-one";
+  let imageTag = "cover-v1";
+  const client = fakeClient();
+  const loop = createDiscordPresenceLoop({ client, now: () => time, stuckAfterMs: 300_000,
+    getPresence: async () => ({ ...playing, title: "Intro", subtitle: "Artist", positionMs: 0,
+      artwork: { provider: "jellyfin", type: "primary", itemId, imageTag } }) });
+  assert.equal((await loop.tick()).action, "publish");
+  time = 299_000;
+  imageTag = "cover-v2";
+  assert.equal((await loop.tick()).action, "publish", "an image revision is not a new item");
+  time = 300_000;
+  itemId = "track-two";
+  assert.equal((await loop.tick()).action, "publish", "a new item is not stale at the old deadline");
+  assert.notEqual(client.calls.at(-1), null);
+  time = 599_999;
+  assert.equal((await loop.tick()).action, "publish");
+  time = 600_000;
+  assert.equal((await loop.tick()).action, "clear", "a genuinely frozen new item still clears");
+  assert.equal(client.calls.at(-1), null);
+});
+
 test("paused sessions and sessions without a position are never stuck", async () => {
   let time = Date.parse("2026-09-23T12:00:00.000Z");
   for (const extra of [{ state: "paused" }, { positionMs: undefined }]) {

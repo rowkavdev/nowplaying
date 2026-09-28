@@ -1,4 +1,5 @@
 import { createPresence } from "./presence.js";
+import { presenceItemKey } from "./presence-identity.js";
 
 // Polls the local provider and hands each state to the hosted uploader, which
 // decides whether anything needs sending. Runs beside the Discord loop and is
@@ -33,7 +34,7 @@ export function createHostedLoop({
 
   function isStuck(presence) {
     if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; clearedForStuck = false; return false; }
-    const key = JSON.stringify([presence.kind, presence.title, presence.subtitle, presence.series, presence.season, presence.episode]);
+    const key = JSON.stringify([presenceItemKey(presence), presence.series, presence.season, presence.episode]);
     if (!stuck || stuck.key !== key || stuck.positionMs !== presence.positionMs) {
       stuck = { key, positionMs: presence.positionMs, since: elapsedNow() };
       clearedForStuck = false;
