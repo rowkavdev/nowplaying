@@ -89,7 +89,8 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailur
   const timer = setTimeout(abort, timeoutMs);
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
-    const declared = Number(response.headers?.get?.("content-length"));
+    const declaredHeader = response.headers?.get?.("content-length");
+    const declared = typeof declaredHeader === "string" && declaredHeader.trim() !== "" ? Number(declaredHeader) : NaN;
     if (Number.isFinite(declared) && declared > MAX_BODY) { failed("oversize"); return null; }
     // Bound the actual bytes as they arrive, even when the peer omits
     // Content-Length: cancel the stream at the cap instead of buffering it
@@ -108,6 +109,11 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailur
       }
       text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
     } else {
+      // No stream to cap: only buffer when the peer declared a size at or
+      // under the cap. text() cannot be interrupted, so calling it on a
+      // response with no trusted size would buffer unboundedly (#747). A
+      // peer lying about its declared size is still caught after the fact.
+      if (!Number.isFinite(declared)) { failed("oversize"); return null; }
       text = await response.text();
       if (Buffer.byteLength(text) > MAX_BODY) { failed("oversize"); return null; }
     }
