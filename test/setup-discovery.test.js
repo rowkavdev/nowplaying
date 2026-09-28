@@ -114,3 +114,25 @@ test("keeps at most N probes in flight", async () => {
   await discoverLocalServers({ fetchImpl, discoverLan: async () => [], networkHosts: ["10.0.0.1", "10.0.1.1", "10.0.2.1"], concurrency: 2 });
   assert.equal(peak, 2);
 });
+
+test("probe stops reading at the byte cap instead of buffering the whole body (#745)", async () => {
+  let chunksRead = 0, cancelled = false;
+  const chunk = new Uint8Array(64 * 1024);
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: () => null }, // no Content-Length
+    body: {
+      getReader: () => ({
+        read: async () => { chunksRead += 1; return chunksRead > 16 ? { done: true } : { done: false, value: chunk }; },
+        cancel: async () => { cancelled = true; },
+      }),
+    },
+    text: async () => { throw new Error("text() must not be used for a streaming body"); },
+  });
+  const failures = [];
+  const servers = await discoverLocalServers({ fetchImpl, discoverLan: async () => [], networkHosts: [], probes: [{ port: 32400, path: "/", classify: () => ({ provider: "plex" }) }], onProbeFailure: (f) => failures.push(f) });
+  assert.deepEqual(servers, []);
+  assert.equal(failures[0]?.reason, "oversize");
+  assert.equal(cancelled, true);
+  assert.ok(chunksRead <= 3, `stream should stop at the cap, read ${chunksRead} chunks`);
+});
