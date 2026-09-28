@@ -111,3 +111,70 @@ test("rejects bad jitter settings", () => {
   assert.throws(() => createDiscordClient({ transport: transport(), jitter: -0.1 }), RangeError);
   assert.throws(() => createDiscordClient({ transport: transport(), random: 1 }), TypeError);
 });
+
+test("a throttled clear retries at the limiter boundary and does not leave old activity (#713)", async () => {
+  let time = 0;
+  const queued = [];
+  const t = transport();
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time,
+    setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
+    clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
+  assert.equal(await client.publish({ details: "Secret song" }), true);
+  time = 1_000;
+  assert.equal(await client.publish(null), false);
+  assert.deepEqual(t.calls, ["connect", ["set", { details: "Secret song" }]]);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].ms, 14_000);
+  time = 15_000;
+  await queued.shift().run();
+  assert.deepEqual(t.calls, ["connect", ["set", { details: "Secret song" }], "clear"]);
+  assert.equal(queued.length, 0);
+});
+
+test("a newer activity cancels a queued clear, and close cancels it too (#713)", async () => {
+  let time = 0;
+  const queued = [];
+  const t = transport();
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, now: () => time,
+    setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
+    clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
+  await client.publish({ details: "Old" });
+  time = 1_000;
+  await client.publish(null);
+  assert.equal(queued.length, 1);
+  await client.publish({ details: "New" });
+  assert.equal(queued.length, 0);
+  time = 15_000;
+  await client.publish({ details: "New" });
+  await client.publish(null);
+  assert.equal(queued.length, 1);
+  await client.close();
+  assert.equal(queued.length, 0);
+  assert.equal(t.calls.includes("clear"), false);
+});
+
+test("a queued clear retries after a transport failure without reporting success (#713)", async () => {
+  let time = 0, failClear = true;
+  const queued = [];
+  const t = transport({ clearActivity: async () => {
+    t.calls.push("clear");
+    if (failClear) throw new Error("offline");
+  } });
+  const client = createDiscordClient({ transport: t, minUpdateIntervalMs: 15_000, retryDelayMs: 100,
+    jitter: 0, now: () => time, setTimer: (run, ms) => { const task = { run, ms }; queued.push(task); return task; },
+    clearTimer: (task) => { const index = queued.indexOf(task); if (index >= 0) queued.splice(index, 1); } });
+  await client.publish({ details: "Secret" });
+  time = 1_000;
+  assert.equal(await client.publish(null), false);
+  time = 15_000;
+  await queued.shift().run();
+  assert.equal(client.status().state, "degraded");
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].ms, 100);
+  time = 15_100;
+  failClear = false;
+  await queued.shift().run();
+  assert.equal(client.status().state, "ready");
+  assert.deepEqual(t.calls, ["connect", ["set", { details: "Secret" }], "clear", "connect", "clear"]);
+  assert.equal(queued.length, 0);
+});

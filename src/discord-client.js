@@ -4,7 +4,7 @@ import { reconnectDelay } from "./discord-convergence.js";
 // maxRetryDelayMs, and resets once Discord answers. Each delay is shortened by
 // a random share of up to `jitter` (#153), so several copies started together
 // (after a reboot or a Discord update) don't all retry at the same moment.
-export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryDelayMs = 60_000, minUpdateIntervalMs = 15_000, jitter = 0.2, random = Math.random, now = Date.now } = {}) {
+export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryDelayMs = 60_000, minUpdateIntervalMs = 15_000, jitter = 0.2, random = Math.random, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
   if (!transport || typeof transport.connect !== "function" || typeof transport.setActivity !== "function" || typeof transport.clearActivity !== "function") throw new TypeError("transport: expected connect, setActivity and clearActivity functions");
   if (!Number.isInteger(retryDelayMs) || retryDelayMs < 100 || retryDelayMs > 300_000) throw new RangeError("retryDelayMs: must be between 100 and 300000");
   if (!Number.isInteger(minUpdateIntervalMs) || minUpdateIntervalMs < 0 || minUpdateIntervalMs > 300_000) throw new RangeError("minUpdateIntervalMs: must be between 0 and 300000");
@@ -14,6 +14,25 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryD
   if (typeof now !== "function") throw new TypeError("now: expected a function");
   let connected = false, closed = false, retryAt = 0, lastPublishAt = -Infinity, lastKey;
   let failures = 0, lastPublishedAt = null, lastError = null;
+  let clearPending = false, clearTimeoutId = null;
+
+  function cancelClear() {
+    clearPending = false;
+    if (clearTimeoutId !== null) clearTimer(clearTimeoutId);
+    clearTimeoutId = null;
+  }
+
+  function retryClear() {
+    if (!clearPending || closed || clearTimeoutId !== null) return;
+    const due = Math.max(lastPublishAt + minUpdateIntervalMs, connected ? -Infinity : retryAt);
+    clearTimeoutId = setTimer(async () => {
+      clearTimeoutId = null;
+      if (!clearPending || closed) return;
+      await publish(null);
+      if (clearPending) retryClear();
+    }, Math.max(1, due - now()));
+    clearTimeoutId?.unref?.();
+  }
 
   function failed(code) {
     connected = false;
@@ -32,22 +51,27 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryD
     // same activity is sent again once it's back.
     if (connected && transport.connected === false) { connected = false; lastKey = undefined; }
     const key = stableKey(activity);
-    if (key === lastKey) return true;
-    if (now() - lastPublishAt < minUpdateIntervalMs) return false;
+    if (activity !== null) cancelClear();
+    if (key === lastKey) { if (activity === null) cancelClear(); return true; }
+    if (now() - lastPublishAt < minUpdateIntervalMs) {
+      if (activity === null) { clearPending = true; retryClear(); }
+      return false;
+    }
     if (!connected) {
-      if (now() < retryAt) return false;
+      if (now() < retryAt) { if (activity === null && clearPending) retryClear(); return false; }
       try { await transport.connect(); connected = true; }
-      catch { return failed("DISCORD_NOT_RUNNING"); }
+      catch { const result = failed("DISCORD_NOT_RUNNING"); if (activity === null && clearPending) retryClear(); return result; }
     }
     try {
       if (activity === null) await transport.clearActivity(); else await transport.setActivity(activity);
       lastKey = key; lastPublishAt = now(); failures = 0; lastError = null;
+      if (activity === null) cancelClear();
       lastPublishedAt = new Date(now()).toISOString();
       return true;
-    } catch { return failed("DISCORD_PUBLISH_FAILED"); }
+    } catch { const result = failed("DISCORD_PUBLISH_FAILED"); if (activity === null && clearPending) retryClear(); return result; }
   }
 
-  async function close() { closed = true; connected = false; lastKey = undefined; if (typeof transport.close === "function") await transport.close(); }
+  async function close() { cancelClear(); closed = true; connected = false; lastKey = undefined; if (typeof transport.close === "function") await transport.close(); }
   // Privacy-safe: a state word, a timestamp and a fixed error code. Never the
   // activity text or the underlying error message.
   function status() {
