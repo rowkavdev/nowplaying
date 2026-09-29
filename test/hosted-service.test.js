@@ -83,7 +83,7 @@ test("a delayed anonymous ingest cannot restore playback after revocation", asyn
   const barrier = new Promise((resolve) => { release = resolve; });
   let delayed = false;
   const controlled = { command: async (args) => {
-    if (args[0] === "EVAL" && !delayed) { delayed = true; entered(); await barrier; }
+    if (args[0] === "EVAL" && args[1].includes("local previous = tonumber(redis.call('GET', KEYS[1])") && !delayed) { delayed = true; entered(); await barrier; }
     return redis.command(args);
   } };
   const service = createService({ redis: controlled, now });

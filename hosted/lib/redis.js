@@ -40,6 +40,14 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
     async command([name, key, ...rest]) {
       switch (String(name).toUpperCase()) {
         case "EVAL": {
+          if (typeof key === "string" && key.includes("redis.call('TTL', KEYS[1]) == -1") && Number(rest[0]) === 1) {
+            const [bucket, ttl] = rest.slice(1);
+            if (!live(bucket)) data.set(bucket, { value: "0", expiresAt: now() + Number(ttl) * 1000 });
+            const entry = live(bucket);
+            if (entry.expiresAt === null) entry.expiresAt = now() + Number(ttl) * 1000;
+            entry.value = String(Number(entry.value) + 1);
+            return Number(entry.value);
+          }
           if (typeof key === "string" && key.includes("np-device-lifecycle-v1") && Number(rest[0]) === 1) {
             const [listKey, userId, action, authHash, targetId, nameValue, newId, newHash, stamp, previousHash, maxDevices] = rest.slice(1);
             const tok = (hash) => `np:tok:${hash}`;
