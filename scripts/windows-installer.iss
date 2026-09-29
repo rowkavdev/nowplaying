@@ -57,6 +57,23 @@ Filename: "{app}\nowplayingw.exe"; Parameters: "start"; WorkingDir: "{app}"; Des
 Filename: "{app}"; Description: "Open the install folder"; Flags: postinstall shellexec nowait skipifsilent unchecked
 
 [Code]
+{ Ask a running NowPlaying to quit before files are replaced (#780): the
+  installed CLI's `stop` command closes the tray app and its Node runtime.
+  Installs older than this command exit 2, and a refused request exits 4;
+  both fall through to the files-in-use page as before. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Cli: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  Cli := ExpandConstant('{app}\nowplaying.exe');
+  if FileExists(Cli) then
+    if Exec(Cli, 'stop', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      if (ResultCode = 0) or (ResultCode = 3) then
+        Sleep(1500);
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpFinished then
