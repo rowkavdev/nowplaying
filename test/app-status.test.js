@@ -263,7 +263,7 @@ test("status and diagnostics show validated build details (#119)", () => {
 test("tray line is short, private and follows the app's health (#121)", async () => {
   let t = 1_000_000;
   let discordState = { enabled: true, state: "ready" };
-  const status = createAppStatus({ config, now: () => t });
+  const status = createAppStatus({ config, now: () => t, elapsedNow: () => t });
   status.setDiscord(() => discordState);
   assert.deepEqual(status.tray(), { status: "starting", action: null, text: "NowPlaying: starting..." });
   let fail = false;

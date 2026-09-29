@@ -22,6 +22,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   let lastPollAt = null;
   let lastPollElapsed = null;
   let lastOkAt = null;
+  let lastOkElapsed = null;
   let failure = null;
   let playing = null;
   let inflight = null;
@@ -32,7 +33,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     return promise.then((presence) => {
       if (poll !== latestPoll) return presence;
       lastPollAt = lastOkAt = now();
-      lastPollElapsed = elapsedNow();
+      lastPollElapsed = lastOkElapsed = elapsedNow();
       failure = null;
       playing = presence && presence.state !== "idle" ? { state: presence.state, title: text(presence.title), subtitle: text(presence.subtitle) } : null;
       return presence;
@@ -149,7 +150,9 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     const problem = serverProblem(s.servers);
     const provider = problem ? problem.reason === "unauthorized" ? "authentication_failed" : "unreachable" : s.server.state === "error" ? "unreachable" : s.server.state;
     const discordOutput = !s.discord.enabled ? "disabled" : DISCORD_OUTPUT[s.discord.state] ?? "starting";
-    const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, hosted: hostedOutput(s.hosted), lastSuccessfulPollAt: lastOkAt, now: now() });
+    // Staleness is an interval gate, so it runs on the elapsed clock; the
+    // wall lastOkAt stays for the status payload's display timestamp.
+    const health = createTrayHealth({ provider, card: "healthy", discord: discordOutput, hosted: hostedOutput(s.hosted), lastSuccessfulPollAt: lastOkElapsed, now: elapsedNow() });
     return Object.freeze({ status: health.status, action: health.action, text: trayText(health, { ...s, server: { ...s.server, state: provider } }) });
   }
 
