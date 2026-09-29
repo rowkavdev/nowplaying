@@ -20,7 +20,7 @@ export const DEFAULT_SIGNIN = Object.freeze({
 });
 
 export function createSetupSignInHandler({
-  credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, now = Date.now, onSignedIn = async () => {},
+  credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, elapsedNow = () => performance.now(), onSignedIn = async () => {},
   flowTtlMs = 10 * 60_000, maxFlows = 4, newFlowId = () => randomBytes(18).toString("base64url"),
   requireServerUrl = false, beforeSignIn = async () => {}, beforeSignedIn = async () => {},
 } = {}) {
@@ -29,7 +29,7 @@ export function createSetupSignInHandler({
   const flows = new Map();
 
   function prune() {
-    const time = now();
+    const time = elapsedNow();
     for (const [id, flow] of flows) if (flow.expiresAt <= time && !flow.committing) flows.delete(id);
   }
 
@@ -90,14 +90,14 @@ export function createSetupSignInHandler({
       const serverUrl = input.baseUrl === undefined ? undefined : normalizeServerUrl(input.baseUrl);
       await beforeSignIn({ provider: "plex", serverUrl });
       const pin = await signIn.startPlexPin({ clientId: deviceId });
-      flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: now() + flowTtlMs });
+      flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: elapsedNow() + flowTtlMs });
       return json(200, { status: "pending", flowId, provider: "plex", authUrl: pin.authUrl });
     }
     if (!text(input.baseUrl)) return json(400, { error: "invalid_request" });
     const serverUrl = normalizeServerUrl(input.baseUrl);
     await beforeSignIn({ provider: "jellyfin", serverUrl });
     const qc = await signIn.startJellyfinQuickConnect({ baseUrl: input.baseUrl, deviceId, version });
-    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, secret: qc.secret, expiresAt: now() + flowTtlMs });
+    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, secret: qc.secret, expiresAt: elapsedNow() + flowTtlMs });
     return json(200, { status: "pending", flowId, provider: "jellyfin", code: qc.code });
   }
 
@@ -106,7 +106,7 @@ export function createSetupSignInHandler({
     prune();
     const flow = flows.get(input.flowId);
     if (flow?.committing) return json(409, { error: "poll_in_progress" });
-    if (!flow || flow.expiresAt <= now()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
+    if (!flow || flow.expiresAt <= elapsedNow()) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
     if (flow.polling) return json(409, { error: "poll_in_progress" });
     flow.polling = true;
     let result;
@@ -120,13 +120,13 @@ export function createSetupSignInHandler({
     }
     // A cancellation, expiry, or replacement while the provider request was
     // in flight must not write a credential or update the draft.
-    if (flows.get(input.flowId) !== flow || flow.expiresAt <= now()) {
+    if (flows.get(input.flowId) !== flow || flow.expiresAt <= elapsedNow()) {
       if (flows.get(input.flowId) === flow) flows.delete(input.flowId);
       return json(410, { error: "expired" });
     }
     if (result.status !== "signed_in") { flow.polling = false; return json(200, { status: "pending" }); }
     try { return await finish(result, flow.serverUrl,
-      () => flows.get(input.flowId) === flow && flow.expiresAt > now(),
+      () => flows.get(input.flowId) === flow && flow.expiresAt > elapsedNow(),
       () => { flow.committing = true; }); }
     finally { flow.polling = false; if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
   }
