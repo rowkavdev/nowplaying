@@ -92,6 +92,11 @@ if (command === "--version" || command === "version") {
     await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
     if (session.outcome === "quit") { await recovery?.cleanShutdown?.(); await logger.event("startup", "stopped"); process.exit(0); }
     if (session.outcome === "restart-failed") { console.error(session.error?.message ?? "NowPlaying couldn't restart."); process.exit(1); }
+  } else if (!legacyModule) {
+    // No tray (--no-tray, or not Windows): a stop request still quits (#782
+    // review). Same close path as SIGINT/SIGTERM; the process exits when the
+    // event loop drains.
+    void quitRequests.next().then(close);
   }
 } else if (command === "setup") {
   console.error("Setup is in the WebUI. Run `nowplaying.exe start` and open Settings.");

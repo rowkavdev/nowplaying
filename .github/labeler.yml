@@ -136,6 +136,7 @@ area:installer:
           - "assets/**"
           - "test/windows-installer*.js"
           - "test/windows-shutdown*.js"
+          - "test/windows-entry*.js"
           - "test/shutdown-route*.js"
           - "test/windows-setup*.js"
           - "test/windows-start-config*.js"
