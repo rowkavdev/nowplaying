@@ -1,6 +1,6 @@
 import { readBoundedBytes, timeoutSignal } from "./bounded-response.js";
 
-const MAX_RELEASES_BYTES = 4 * 1024 * 1024;
+export const MAX_RELEASES_BYTES = 4 * 1024 * 1024;
 const CHECK_TIMEOUT_MS = 30 * 1000;
 // Linear-time SemVer parsing: one unambiguous pattern for the shape, then a
 // per-identifier check. (The single-regex form backtracked exponentially on
