@@ -65,7 +65,8 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProb
   const timer = setTimeout(abort, timeoutMs);
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
-    const size = Number(response.headers?.get?.("content-length"));
+    const rawLength = response.headers?.get?.("content-length");
+    const size = typeof rawLength === "string" && rawLength.trim() !== "" ? Number(rawLength) : NaN;
     if (Number.isFinite(size) && size > MAX_REPLY) { failed("oversize"); return null; }
     // Bound the actual bytes too, even when the peer omits Content-Length.
     const reader = response.body?.getReader?.();
@@ -81,6 +82,12 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProb
       }
       text = Buffer.concat(chunks).toString("utf8");
     } else {
+      // Non-streaming adapters hand over the whole body before its size is
+      // known, so they are only read when the peer declared a sane length
+      // within the cap. Residual: a dishonest declared length can still make
+      // such an adapter buffer too much; only the streamed path above
+      // enforces the cap as bytes arrive.
+      if (!Number.isSafeInteger(size) || size < 0) { failed("oversize"); return null; }
       text = await response.text();
       if (Buffer.byteLength(text) > MAX_REPLY) { failed("oversize"); return null; }
     }
