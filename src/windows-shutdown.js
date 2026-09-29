@@ -1,16 +1,13 @@
-import { createHash } from "node:crypto";
 import { SHUTDOWN_PATH } from "./status-page-handler.js";
 
 // The installer and `nowplaying stop` ask a running NowPlaying to quit over
-// its loopback WebUI (#780). The token derives from the per-install device
-// ID, so only someone who can already read the user's private data directory
-// can ask the app to stop - the same privilege as quitting from the tray.
-export function shutdownToken(deviceId) {
-  if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) {
-    throw new TypeError("deviceId: expected the per-install device ID");
-  }
-  return createHash("sha256").update(`nowplaying-shutdown-v1:${deviceId}`).digest("hex");
-}
+// its loopback WebUI (#780). The bearer token is an independent per-install
+// random secret (the shutdown-token file next to config.json, written 0600
+// at first start), so asking the app to stop needs read access to the user's
+// private data directory - the same privilege as quitting from the tray. It
+// is never derived from the device ID: that value travels to media servers
+// as device identity and is not a secret.
+export const SHUTDOWN_SECRET_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
 // `stop` exit codes the installer reads: 0 stopped, 3 not running (both let
 // setup continue), 4 the running app did not accept the request (setup falls

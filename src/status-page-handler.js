@@ -132,7 +132,7 @@ const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 
 // Where the installer and `nowplaying stop` ask a running app to quit (#780).
 // The path skips the WebUI session check (it is in openWritePaths); the
-// bearer token derived from the per-install device ID authenticates instead.
+// per-install random shutdown secret authenticates instead.
 export const SHUTDOWN_PATH = "/api/shutdown";
 
 export function createStatusPageHandler({ status, fallback, shutdown = null } = {}) {
