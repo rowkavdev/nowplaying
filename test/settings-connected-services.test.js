@@ -85,7 +85,7 @@ test("abandoned hosted sign-in expires and allows a new start without restarting
 
 test("hosted preview/check are available on first run and reflect privacy", async () => {
   const file=await configFile(false);const seen=[];
-  const svc=createSettingsConnectedServices({file,credentialStore:{save:async()=>{}},hostedCredentials:{load:async()=>null,save:async()=>{}},fetchImpl:async(url,opts)=>{seen.push({url,opts});return{status:200,text:async()=>"ok"};}});
+  const svc=createSettingsConnectedServices({file,credentialStore:{save:async()=>{}},hostedCredentials:{load:async()=>null,save:async()=>{}},fetchImpl:async(url,opts)=>{seen.push({url,opts});return{status:200,headers:{get:(n)=>n==="content-length"?"2":null},text:async()=>"ok"};}});
   const preview=await svc.handler({url:"/api/setup/hosted/preview"});
   assert.equal(preview.status,200);
   assert.ok(JSON.parse(preview.body).sent.length);
