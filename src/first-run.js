@@ -30,11 +30,13 @@ export function parseStartArgs(args = []) {
 // timeoutMs). Resolves true once the page was opened, like runSetup above;
 // ensureConfigured then checks whether the config exists. The short grace
 // period lets the page show its "done" state before the setup server closes.
-export async function runBrowserSetup({ url, openUrl, configExists, timeoutMs = 30 * 60_000, pollMs = 1000, graceMs = 2000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now } = {}) {
+export async function runBrowserSetup({ url, openUrl, configExists, timeoutMs = 30 * 60_000, pollMs = 1000, graceMs = 2000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), elapsedNow = () => performance.now() } = {}) {
   if (typeof url !== "string" || typeof openUrl !== "function" || typeof configExists !== "function") throw new TypeError("url, openUrl and configExists are required");
   openUrl(url);
-  const deadline = now() + timeoutMs;
-  while (now() < deadline) {
+  // The wait is measured against elapsed process time: a backward PC clock
+  // change must not extend the first-run timeout (#755).
+  const deadline = elapsedNow() + timeoutMs;
+  while (elapsedNow() < deadline) {
     if (await configExists()) {
       await sleep(graceMs);
       return true;
