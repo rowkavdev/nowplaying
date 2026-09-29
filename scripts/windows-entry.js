@@ -11,7 +11,7 @@ import { createWindowsCredentialAdapter } from "../src/windows-credential-adapte
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { parseStartArgs } from "../src/first-run.js";
 import { createRestartRequests, runTraySession } from "../src/tray-session.js";
-import { requestLocalShutdown, shutdownToken, STOP_EXIT } from "../src/windows-shutdown.js";
+import { requestLocalShutdown, SHUTDOWN_SECRET_PATTERN, STOP_EXIT } from "../src/windows-shutdown.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
 
@@ -105,19 +105,16 @@ if (command === "--version" || command === "version") {
 
 // %LOCALAPPDATA% may be absent in a damaged profile or service context.
 async function stop() {
-  // Read-only: stop never creates the device ID file.
-  let deviceId;
+  // Read-only: stop never creates the shutdown secret. No secret file means
+  // this install never ran a version that can accept a stop, so there is
+  // nothing to ask: an older running version falls to the files-in-use page.
+  let token;
   try {
-    deviceId = (await readFile(resolve(dirname(windowsDataPaths().configFile), "device-id"), "utf8")).trim();
+    token = (await readFile(resolve(dirname(windowsDataPaths().configFile), "shutdown-token"), "utf8")).trim();
   } catch {
     return STOP_EXIT.notRunning;
   }
-  let token;
-  try {
-    token = shutdownToken(deviceId);
-  } catch {
-    return STOP_EXIT.unavailable;
-  }
+  if (!SHUTDOWN_SECRET_PATTERN.test(token)) return STOP_EXIT.unavailable;
   let port;
   try {
     port = resolveAppPort();
@@ -173,9 +170,12 @@ async function startFromWebConfig(configFile, { safeMode = false } = {}) {
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
   const deviceId = await loadOrCreateDeviceId(resolve(dirname(configFile), "device-id"));
-  // The quit request travels through the tray session so a stop closes the
-  // app exactly like a tray Quit, then ends the tray process.
-  const shutdown = { token: shutdownToken(deviceId), request: () => quitRequests.request() };
+  // The shutdown secret is its own per-install random value, never derived
+  // from the device ID (that travels to media servers). The quit request
+  // travels through the tray session so a stop closes the app exactly like
+  // a tray Quit, then ends the tray process.
+  const secret = await loadOrCreateDeviceId(resolve(dirname(configFile), "shutdown-token"));
+  const shutdown = { token: secret, request: () => quitRequests.request() };
   const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, deviceId, shutdown, onConfigured: () => {
     if (process.platform === "win32" && existsSync(resolve("nowplaying.exe")) && !process.argv.includes("--no-tray")) restartRequests.request();
     else void restartWithoutTray(configFile);

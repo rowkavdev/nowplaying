@@ -1,17 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requestLocalShutdown, shutdownToken, STOP_EXIT } from "../src/windows-shutdown.js";
-
-const deviceId = "abcd1234abcd1234";
-
-test("the shutdown token derives deterministically from the device ID (#780)", async () => {
-  const token = shutdownToken(deviceId);
-  assert.match(token, /^[0-9a-f]{64}$/);
-  assert.equal(token, shutdownToken(deviceId));
-  assert.notEqual(token, shutdownToken("efgh5678efgh5678"));
-  assert.throws(() => shutdownToken("short"), TypeError);
-  assert.throws(() => shutdownToken("../escape"), TypeError);
-});
+import { requestLocalShutdown, STOP_EXIT } from "../src/windows-shutdown.js";
 
 test("a refused connection means the app is not running", async () => {
   const outcome = await requestLocalShutdown({ port: 47832, token: "t", fetchImpl: async () => { throw new Error("fetch failed"); } });
