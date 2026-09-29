@@ -116,11 +116,28 @@ test("Spotify rollback failure does not claim the draft was the only failure", a
 
 test("an expired Spotify completion cannot save a token or update the draft", async () => {
   let time = 0;
-  const { handle, fake, saved, signedIn } = setup({ now: () => time, flowTtlMs: 1000 });
+  const { handle, fake, saved, signedIn } = setup({ elapsedNow: () => time, flowTtlMs: 1000 });
   await handle(post({ action: "start", clientId: CLIENT_ID }));
   time = 1000;
   assert.equal((await handle(post({ action: "poll", flowId: "flow-1" }))).status, 410);
   fake.calls[0].resolve(tokens);
+  await settled();
+  assert.deepEqual(saved, []);
+  assert.deepEqual(signedIn, []);
+});
+
+test("a flow past its elapsed TTL expires and frees the slot however the wall clock moves (#757)", async () => {
+  let time = 0;
+  const { handle, fake, saved, signedIn } = setup({ elapsedNow: () => time, flowTtlMs: 10_000, maxFlows: 1 });
+  await handle(post({ action: "start", clientId: CLIENT_ID }));
+  // Eleven elapsed seconds pass, past the ten-second TTL. With the wall clock
+  // a one-hour rollback kept the original flow pending, blocked this start
+  // with 429, and let the late completion save the token.
+  time = 11_000;
+  assert.equal((await handle(post({ action: "poll", flowId: "flow-1" }))).status, 410);
+  const replacement = await handle(post({ action: "start", clientId: CLIENT_ID }));
+  assert.equal(replacement.status, 200);
+  fake.calls[0].resolve({ accessToken: "at", refreshToken: "rt-secret", identity: { id: "rowan", displayName: "Rowan" } });
   await settled();
   assert.deepEqual(saved, []);
   assert.deepEqual(signedIn, []);
@@ -133,7 +150,7 @@ test("a Spotify flow expiring while the keychain read waits cannot save a token"
   const signedIn = [];
   const fake = fakeSignIn();
   const handle = createSetupSpotifyHandler({
-    now: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
+    elapsedNow: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
     credentialStore: {
       read: () => new Promise((resolve) => { finishRead = resolve; }),
       save: async (...args) => { saved.push(args); }, remove: async () => {},
@@ -159,7 +176,7 @@ test("Spotify expiry during credential save restores the prior token and skips t
   const signedIn = [];
   const fake = fakeSignIn();
   const handle = createSetupSpotifyHandler({
-    now: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
+    elapsedNow: () => time, flowTtlMs: 1000, newFlowId: () => "flow-1", signIn: fake.signIn,
     credentialStore: {
       read: async () => stored,
       save: async (_ref, secret) => {
@@ -186,7 +203,7 @@ test("Spotify expiry during an in-flight draft write waits for the commit outcom
   let time = 0;
   let finishDraft;
   const { handle, fake, saved } = setup({
-    now: () => time, flowTtlMs: 1000,
+    elapsedNow: () => time, flowTtlMs: 1000,
     onSignedIn: () => new Promise((resolve) => { finishDraft = resolve; }),
   });
   await handle(post({ action: "start", clientId: CLIENT_ID }));
