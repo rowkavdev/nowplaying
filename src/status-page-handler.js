@@ -2,6 +2,8 @@
 // The page is static; /status.js fetches /api/status (same origin only) and
 // fills it in every few seconds. Nothing here can change settings yet.
 
+import { timingSafeEqual } from "node:crypto";
+
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying status</title><link rel="stylesheet" href="/status.css"></head>
@@ -128,9 +130,15 @@ setInterval(load, 5000);
 
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
 
-export function createStatusPageHandler({ status, fallback } = {}) {
+// Where the installer and `nowplaying stop` ask a running app to quit (#780).
+// The path skips the WebUI session check (it is in openWritePaths); the
+// bearer token derived from the per-install device ID authenticates instead.
+export const SHUTDOWN_PATH = "/api/shutdown";
+
+export function createStatusPageHandler({ status, fallback, shutdown = null } = {}) {
   if (!status || typeof status.snapshot !== "function" || typeof status.refresh !== "function") throw new TypeError("status: expected an app status");
   if (typeof fallback !== "function") throw new TypeError("fallback: expected a handler");
+  if (shutdown !== null && (typeof shutdown?.token !== "string" || typeof shutdown?.request !== "function")) throw new TypeError("shutdown: expected { token, request }");
   const assets = {
     "/": { body: PAGE, type: "text/html; charset=utf-8", page: true },
     "/status": { body: PAGE, type: "text/html; charset=utf-8", page: true },
@@ -140,6 +148,17 @@ export function createStatusPageHandler({ status, fallback } = {}) {
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
+    if (url.pathname === SHUTDOWN_PATH) {
+      if (shutdown === null) return fallback(request);
+      if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
+      const presented = bearer(request?.headers);
+      if (presented === undefined || !tokensEqual(presented, shutdown.token)) return response(401, "Unauthorized");
+      // Answer first; the app quits once the reply is out.
+      setTimeout(() => {
+        void shutdown.request();
+      }, 25);
+      return response(202, "");
+    }
     const asset = assets[url.pathname];
     const api = url.pathname === "/api/status" || url.pathname === "/api/diagnostics" || url.pathname === "/api/tray";
     if (!asset && !api) return fallback(request);
@@ -162,6 +181,18 @@ export function createStatusPageHandler({ status, fallback } = {}) {
     }
     return response(200, method === "HEAD" ? "" : JSON.stringify(status.snapshot()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   };
+}
+
+function bearer(headers) {
+  const value = header(headers, "authorization");
+  if (typeof value !== "string" || !value.startsWith("Bearer ")) return undefined;
+  return value.slice("Bearer ".length).trim();
+}
+
+function tokensEqual(a, b) {
+  const left = Buffer.from(a, "utf8");
+  const right = Buffer.from(b, "utf8");
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 function header(headers, name) {

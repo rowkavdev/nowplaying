@@ -6,7 +6,7 @@ import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
 import { createAppStatus } from "./app-status.js";
-import { createStatusPageHandler } from "./status-page-handler.js";
+import { createStatusPageHandler, SHUTDOWN_PATH } from "./status-page-handler.js";
 import { createFirstRunSettingsHandler, createSettingsPageHandler } from "./settings-page-handler.js";
 import { createSettingsServers } from "./settings-servers.js";
 import { createSettingsConnectedServices } from "./settings-connected-services.js";
@@ -277,7 +277,7 @@ export function youtubeForDiscord(source) {
   });
 }
 
-export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, platform = process.platform, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, deviceId = null, onConfigured = async () => {}, discoverServers, signIn, spotifySignIn, hostedSignIn, createServer = createHttpServer } = {}) {
+export async function startAppFromConfig({ configFile, credentialStore, host = "127.0.0.1", port = DEFAULT_APP_PORT, platform = process.platform, fetchImpl = fetch, discord: discordOptions = {}, version = null, build = null, packageType = null, hostedCredentials, hosted: hostedOptions = {}, safeMode = false, logFile = null, startup = null, providerBackoff = {}, requestSetup = null, deviceId = null, shutdown = null, onConfigured = async () => {}, discoverServers, signIn, spotifySignIn, hostedSignIn, createServer = createHttpServer } = {}) {
   if (typeof credentialStore?.read !== "function") throw new TypeError("credentialStore.read is required");
   let config;
   try { config = await loadAppConfig(configFile); }
@@ -466,7 +466,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       } catch (error) { revokePending = true; throw error; }
     },
   });
-  const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard, cacheControl: "no-store" }) });
+  const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard, cacheControl: "no-store" }), ...(shutdown ? { shutdown } : {}) });
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
   const logsHandler = createLogsPageHandler({ readEvents: () => readLogTail(logFile), fallback: statusHandler });
   // Hosted card devices on the settings page (#140).
@@ -486,7 +486,10 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // or web page can't change settings.
   // The bridge checks its own pairing token and extension origin, so it
   // skips the session check the settings pages use.
-  const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: youtube ? [YOUTUBE_BRIDGE_PATH] : [] });
+  // The shutdown route authenticates with its own bearer token (#780), so
+  // it skips the WebUI session check the way the YouTube bridge does.
+  const writePaths = [...(youtube ? [YOUTUBE_BRIDGE_PATH] : []), ...(shutdown ? [SHUTDOWN_PATH] : [])];
+  const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: writePaths });
   let address;
   try {
     address = await server.listen();
