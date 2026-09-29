@@ -49,7 +49,7 @@ test("times out slow servers", async () => {
 
 test("serves discovery results with a short cache", async () => {
   let calls = 0; let clock = 0;
-  const handle = createSetupDiscoveryHandler({ discover: async () => { calls += 1; return [{ provider: "plex", baseUrl: "http://127.0.0.1:32400", version: null }]; }, now: () => clock });
+  const handle = createSetupDiscoveryHandler({ discover: async () => { calls += 1; return [{ provider: "plex", baseUrl: "http://127.0.0.1:32400", version: null }]; }, elapsedNow: () => clock });
   const first = await handle({ method: "GET", url: "/api/setup/discover" });
   assert.equal(JSON.parse(first.body).servers[0].provider, "plex");
   await handle({ method: "GET", url: "/api/setup/discover" });
@@ -151,4 +151,19 @@ test("non-streaming fallback refuses to buffer a body with no declared size (#74
   assert.deepEqual(servers, []);
   assert.equal(failures[0]?.reason, "oversize");
   assert.equal(textCalled, false, "text() must not be called without a trusted size");
+});
+
+test("discovery cache expires by elapsed time, surviving a backward clock change (#753)", async () => {
+  let elapsed = 1_800_000;
+  let calls = 0;
+  let name = "stale-server";
+  const handle = createSetupDiscoveryHandler({ discover: async () => { calls += 1; return [{ provider: "plex", baseUrl: "http://127.0.0.1:32400", name }]; }, cacheMs: 5000, elapsedNow: () => elapsed });
+  const get = () => handle({ method: "GET", url: "/api/setup/discover" }).then((r) => JSON.parse(r.body).servers[0].name);
+  assert.equal(await get(), "stale-server");
+  name = "fresh-server";
+  // Wall time rolling back an hour must not matter: six elapsed seconds later
+  // the five-second cache has expired and discovery runs again.
+  elapsed += 6000;
+  assert.equal(await get(), "fresh-server");
+  assert.equal(calls, 2);
 });
