@@ -165,6 +165,12 @@ jobs:
             sha256sum "$f"
           done > SHA256SUMS
           cat SHA256SUMS
+      - name: Name this development build
+        shell: bash
+        run: |
+          current=$(node -p "require('./package.json').version")
+          IFS=. read -r major minor patch <<<"$current"
+          echo "DEV_VERSION=${major}.${minor}.$((patch + 1))-dev+${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - name: Build cumulative development release notes
         shell: bash
         env:
