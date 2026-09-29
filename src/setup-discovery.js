@@ -156,13 +156,15 @@ function parseJson(text) { try { return JSON.parse(text); } catch { return null;
 export function cleanId(value) { return typeof value === "string" && /^[0-9A-Za-z-]{1,64}$/.test(value) ? value : null; }
 function cleanVersion(value) { return typeof value === "string" && /^[0-9A-Za-z.+_-]{1,40}$/.test(value) ? value : null; }
 
-export function createSetupDiscoveryHandler({ discover = discoverLocalServers, cacheMs = 5000, now = Date.now } = {}) {
+// The short cache expires by elapsed process time, so a backward PC clock
+// change cannot hold stale server choices on first run (#753).
+export function createSetupDiscoveryHandler({ discover = discoverLocalServers, cacheMs = 5000, elapsedNow = () => performance.now() } = {}) {
   let cached = null;
   return async function handle(request = {}) {
     const url = new URL(request.url || "/", "http://localhost");
     if (url.pathname !== "/api/setup/discover") return null;
     if ((request.method || "GET") !== "GET") return json(405, { error: "method_not_allowed" }, { Allow: "GET" });
-    if (!cached || now() - cached.at > cacheMs) cached = { at: now(), servers: await discover() };
+    if (!cached || elapsedNow() - cached.at > cacheMs) cached = { at: elapsedNow(), servers: await discover() };
     return json(200, { servers: cached.servers });
   };
 }
