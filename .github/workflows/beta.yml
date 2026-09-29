@@ -36,8 +36,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --omit=dev
+      - name: Name this development build
+        shell: bash
+        run: |
+          current=$(node -p "require('./package.json').version")
+          IFS=. read -r major minor patch <<<"$current"
+          echo "DEV_VERSION=${major}.${minor}.$((patch + 1))-dev+${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - name: Build installer and portable ZIP
         shell: pwsh
+        env:
+          # The installer title bar names the dev build, not package.json (#780).
+          NOWPLAYING_VERSION: ${{ env.DEV_VERSION }}
         run: ./scripts/build-windows.ps1
       - name: Give assets stable development names
         shell: pwsh
@@ -156,12 +165,6 @@ jobs:
             sha256sum "$f"
           done > SHA256SUMS
           cat SHA256SUMS
-      - name: Name this development build
-        shell: bash
-        run: |
-          current=$(node -p "require('./package.json').version")
-          IFS=. read -r major minor patch <<<"$current"
-          echo "DEV_VERSION=${major}.${minor}.$((patch + 1))-dev+${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
       - name: Build cumulative development release notes
         shell: bash
         env:
