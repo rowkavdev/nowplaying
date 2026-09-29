@@ -47,6 +47,12 @@ export function hostedUploadPreview(settings = {}) {
 
 // Self-hosted endpoint check: GET <url>/healthz, nothing else. Sends no
 // token, no card data and no provider details, and doesn't follow redirects.
+// The health body is two bytes, so anything beyond a tiny cap is not a valid
+// health response: stream with a running byte cap and cancel the excess
+// instead of buffering the whole body (#751). A non-streaming adapter only
+// buffers when the peer declared a size at or under the cap (see #747).
+const MAX_HEALTH_BYTES = 1024;
+
 export async function checkHostedEndpoint(url, { fetchImpl = fetch, timeoutMs = 5_000 } = {}) {
   let origin;
   try { origin = normalizeHostedUrl(url); } catch (error) { return { ok: false, reason: "invalid_url", message: error.message }; }
@@ -55,12 +61,49 @@ export async function checkHostedEndpoint(url, { fetchImpl = fetch, timeoutMs = 
   try {
     const res = await fetchImpl(`${origin}/healthz`, { method: "GET", headers: { accept: "text/plain" }, redirect: "error", signal: controller.signal });
     if (res.status !== 200) return { ok: false, reason: "bad_status", status: res.status };
-    const body = String(await res.text()).trim();
-    if (body !== "ok") return { ok: false, reason: "not_nowplaying" };
+    const body = await readHealthBody(res);
+    if (body === null || body.trim() !== "ok") return { ok: false, reason: "not_nowplaying" };
     return { ok: true, url: origin };
   } catch {
     return { ok: false, reason: controller.signal.aborted ? "timeout" : "unreachable" };
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Returns the health body text, or null when it is over the byte cap.
+async function readHealthBody(res) {
+  const declaredHeader = res.headers?.get?.("content-length");
+  const declared = typeof declaredHeader === "string" && declaredHeader.trim() !== "" ? Number(declaredHeader) : NaN;
+  if (Number.isFinite(declared) && declared > MAX_HEALTH_BYTES) return null;
+  const body = res.body;
+  if (body && typeof body.getReader === "function") {
+    const reader = body.getReader();
+    const chunks = [];
+    let total = 0;
+    let oversize = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value?.byteLength ?? 0;
+        if (total > MAX_HEALTH_BYTES) { oversize = true; break; }
+        chunks.push(value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    }
+    if (oversize) { await reader.cancel().catch(() => {}); return null; }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    return new TextDecoder().decode(bytes);
+  }
+  // No stream to cap: text() cannot be interrupted, so only buffer when the
+  // peer declared a size at or under the cap; otherwise refuse without
+  // calling text(). A peer lying about its declared size is caught after.
+  if (!Number.isFinite(declared) || typeof res.text !== "function") return null;
+  const text = String(await res.text());
+  return new TextEncoder().encode(text).byteLength > MAX_HEALTH_BYTES ? null : text;
 }
