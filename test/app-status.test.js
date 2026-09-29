@@ -287,6 +287,19 @@ test("tray line is short, private and follows the app's health (#121)", async ()
   }
 });
 
+test("tray staleness runs on the elapsed clock through a backward wall jump (#771)", async () => {
+  let wall = 1_000_000;
+  let elapsed = 1_000_000;
+  const status = createAppStatus({ config, now: () => wall, elapsedNow: () => elapsed });
+  const provider = status.wrapProvider({ getPresence: async () => ({ state: "playing", title: "A" }) });
+  await provider.getPresence();
+  assert.equal(status.tray().status, "healthy");
+  elapsed += 130_000;
+  wall += 130_000 - 3_600_000;
+  assert.deepEqual(status.tray(), { status: "degraded", action: "open_troubleshooting", text: "NowPlaying: no update from the server lately" });
+  assert.equal(status.snapshot().server.lastOkAt, new Date(1_000_000).toISOString());
+});
+
 test("tray endpoint serves the same line", async () => {
   const status = createAppStatus({ config });
   const handle = createStatusPageHandler({ status, fallback: async () => ({ status: 404, headers: {}, body: "" }) });
