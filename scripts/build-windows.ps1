@@ -1,6 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Version = (Get-Content (Join-Path $Root 'package.json') | ConvertFrom-Json).version
+# The installer's displayed version can differ from the package version: dev
+# builds set NOWPLAYING_VERSION (for example 0.2.1-dev+fd8b97b) so the title
+# bar names the build being installed (#780). The bundle, build-info.json and
+# portable ZIP keep the package version.
+$InstallerVersion = if ($env:NOWPLAYING_VERSION) { $env:NOWPLAYING_VERSION } else { $Version }
 $Bundle = Join-Path $Root "dist/windows/nowplaying-v$Version-windows-x64"
 
 
@@ -41,7 +46,7 @@ Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse
 
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $Iscc) { $Iscc = (Get-Command iscc -ErrorAction Stop).Source }
-& $Iscc ('/DAppVersion=' + $Version) ('/DBundleDir=' + $Bundle) (Join-Path $Root 'scripts/windows-installer.iss')
+& $Iscc ('/DAppVersion=' + $InstallerVersion) ('/DBundleDir=' + $Bundle) (Join-Path $Root 'scripts/windows-installer.iss')
 
 
 
