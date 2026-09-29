@@ -244,7 +244,7 @@ test("first-run page stops polling with recovery after a startup deadline", asyn
   runInNewContext(SERVER_SCRIPT, {
     document: { getElementById: node, createElement: () => ({ append() {}, addEventListener() {} }) },
     fetch: (path) => { requests.push(path); return Promise.resolve(json(path === "/api/settings/servers" ? { configured: true, servers: [] } : {}, path === "/api/settings/servers")); },
-    setTimeout: (fn) => { timers.push(fn); }, clearTimeout() {}, Date: { now: () => now }, URL, window: {},
+    setTimeout: (fn) => { timers.push(fn); }, clearTimeout() {}, Date: { now: () => now }, performance: { now: () => now }, URL, window: {},
   });
   await tick();
   assert.equal(timers.length, 2);
@@ -254,6 +254,31 @@ test("first-run page stops polling with recovery after a startup deadline", asyn
   assert.equal(node("activation-recovery").hidden, false);
   timers.shift()(); await tick();
   assert.deepEqual(requests, ["/api/settings/servers"]);
+});
+
+test("first-run activation deadline is not extended by a backward wall-clock change", async () => {
+  const elements = new Map(); const timers = []; const requests = [];
+  let wall = 1_800_000_000_000, elapsed = 0;
+  const node = (id) => {
+    if (!elements.has(id)) elements.set(id, { id, hidden: id === "activation-recovery", textContent: "", value: "", children: [],
+      addEventListener() {}, replaceChildren(...children) { this.children = children; } });
+    return elements.get(id);
+  };
+  runInNewContext(SERVER_SCRIPT, {
+    document: { getElementById: node, createElement: () => ({ append() {}, addEventListener() {} }) },
+    fetch: (path) => { requests.push(path); return Promise.resolve(json(path === "/api/settings/servers" ? { configured: true, servers: [] } : {}, path === "/api/settings/servers")); },
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); }, clearTimeout() {}, Date: { now: () => wall }, performance: { now: () => elapsed }, URL, window: {},
+  });
+  await tick();
+  assert.equal(timers.length, 2);
+  wall -= 3_600_000;
+  elapsed = 30_001;
+  // Simulate a throttled activation timeout while the shorter status poll fires.
+  assert.deepEqual(timers.map(({ ms }) => ms), [30_000, 1_200]);
+  timers.find(({ ms }) => ms === 1_200).fn(); await tick();
+  assert.match(node("first-run-state").textContent, /couldn't start/);
+  assert.equal(node("activation-recovery").hidden, false);
+  assert.deepEqual(requests, ["/api/settings/servers", "/api/status", "/api/settings/servers"]);
 });
 
 test("capacity and config-save errors are explained in the Settings sign-in panel", async () => {
