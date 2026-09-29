@@ -40,6 +40,54 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
     async command([name, key, ...rest]) {
       switch (String(name).toUpperCase()) {
         case "EVAL": {
+          if (typeof key === "string" && key.includes("np-device-lifecycle-v1") && Number(rest[0]) === 1) {
+            const [listKey, userId, action, authHash, targetId, nameValue, newId, newHash, stamp, previousHash, maxDevices] = rest.slice(1);
+            const tok = (hash) => `np:tok:${hash}`;
+            const drop = (device) => {
+              if (device.tokenHash) data.delete(tok(device.tokenHash));
+              for (const prefix of ["np:dstate:", "np:seq:", "np:dseen:"]) data.delete(`${prefix}${device.deviceId}`);
+            };
+            if (action !== "sign-in") {
+              const auth = live(tok(authHash))?.value;
+              if (!auth || String(JSON.parse(auth).userId) !== userId) return [-1, 0];
+            }
+            const devices = JSON.parse(live(listKey)?.value ?? "[]");
+            const save = () => {
+              if (devices.length) data.set(listKey, { value: JSON.stringify(devices), expiresAt: null });
+              else data.delete(listKey);
+            };
+            if (action === "sign-in") {
+              if (previousHash) {
+                const priorRaw = live(tok(previousHash))?.value;
+                if (!priorRaw) return [-2, 0];
+                const prior = JSON.parse(priorRaw);
+                if (String(prior.userId) !== userId) return [-3, 0];
+                const i = devices.findIndex((d) => d.deviceId === prior.deviceId && d.tokenHash === previousHash);
+                if (i < 0) return [-4, 0];
+                drop(devices[i]); devices.splice(i, 1);
+              }
+              while (devices.length >= Number(maxDevices)) {
+                const seen = devices.map((d) => Number(live(`np:dseen:${d.deviceId}`)?.value ?? d.createdAt ?? 0));
+                const i = seen.indexOf(Math.min(...seen));
+                drop(devices[i]); devices.splice(i, 1);
+              }
+              data.set(tok(newHash), { value: JSON.stringify({userId, deviceId: newId}), expiresAt: null });
+              devices.push({deviceId: newId, name: nameValue, createdAt: Number(stamp), tokenHash: newHash});
+              save(); return [1, devices.length];
+            }
+            if (action === "sign-out") {
+              const count = devices.length;
+              devices.forEach(drop); data.delete(listKey); return [1, count];
+            }
+            const index = devices.findIndex((d) => d.deviceId === targetId);
+            if (index < 0 && action === "revoke") {
+              data.delete(tok(authHash)); drop({deviceId: targetId}); return [1, 0];
+            }
+            if (index < 0) return [-5, 0];
+            if (action === "rename") devices[index].name = nameValue;
+            else { drop(devices[index]); devices.splice(index, 1); }
+            save(); return [1, 1];
+          }
           // Emulates the hosted ingest script as one synchronous Redis action.
           // No await may split its comparison from the card-state write.
           if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 4) throw new Error("unsupported script");

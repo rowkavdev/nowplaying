@@ -65,6 +65,72 @@ redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
 return {1, previous}
 `;
 
+// All device-list writes and associated token/state changes share this Redis atomic action.
+export const DEVICE_ATOMIC_SCRIPT = `
+-- np-device-lifecycle-v1
+local userId, action, authHash, targetId, name, newId, newHash, stamp, previousHash, maxDevices = unpack(ARGV)
+local listKey = KEYS[1]
+local function tok(hash) return 'np:tok:' .. hash end
+local function drop(d)
+  if d.tokenHash then redis.call('DEL', tok(d.tokenHash)) end
+  redis.call('DEL', 'np:dstate:' .. d.deviceId, 'np:seq:' .. d.deviceId, 'np:dseen:' .. d.deviceId)
+end
+local function authorized()
+  local raw = redis.call('GET', tok(authHash))
+  if not raw then return false end
+  local data = cjson.decode(raw)
+  return tostring(data.userId) == userId
+end
+if action ~= 'sign-in' and not authorized() then return {-1, 0} end
+local raw = redis.call('GET', listKey)
+local devices = raw and cjson.decode(raw) or {}
+local function save()
+  if #devices == 0 then redis.call('DEL', listKey)
+  else redis.call('SET', listKey, cjson.encode(devices)) end
+end
+if action == 'sign-in' then
+  if previousHash ~= '' then
+    local priorRaw = redis.call('GET', tok(previousHash))
+    if not priorRaw then return {-2, 0} end
+    local prior = cjson.decode(priorRaw)
+    if tostring(prior.userId) ~= userId then return {-3, 0} end
+    local index = nil
+    for i, d in ipairs(devices) do
+      if d.deviceId == prior.deviceId and d.tokenHash == previousHash then index = i; break end
+    end
+    if not index then return {-4, 0} end
+    drop(devices[index]); table.remove(devices, index)
+  end
+  while #devices >= tonumber(maxDevices) do
+    local oldest, oldestSeen = 1, nil
+    for i, d in ipairs(devices) do
+      local seen = tonumber(redis.call('GET', 'np:dseen:' .. d.deviceId)) or tonumber(d.createdAt) or 0
+      if not oldestSeen or seen < oldestSeen then oldest, oldestSeen = i, seen end
+    end
+    drop(devices[oldest]); table.remove(devices, oldest)
+  end
+  redis.call('SET', tok(newHash), cjson.encode({userId=userId, deviceId=newId}))
+  table.insert(devices, {deviceId=newId, name=name, createdAt=tonumber(stamp), tokenHash=newHash})
+  save(); return {1, #devices}
+elseif action == 'sign-out' then
+  for _, d in ipairs(devices) do drop(d) end
+  local count = #devices
+  redis.call('DEL', listKey)
+  return {1, count}
+end
+local index = nil
+for i, d in ipairs(devices) do if d.deviceId == targetId then index = i; break end end
+if action == 'revoke' and not index then
+  redis.call('DEL', tok(authHash))
+  redis.call('DEL', 'np:dstate:' .. targetId, 'np:seq:' .. targetId, 'np:dseen:' .. targetId)
+  return {1, 0}
+end
+if not index then return {-5, 0} end
+if action == 'rename' then devices[index].name = name
+else drop(devices[index]); table.remove(devices, index) end
+save(); return {1, 1}
+`;
+
 export class ServiceError extends Error {
   constructor(status, code, details = {}) { super(code); this.status = status; this.code = code; this.details = details; }
 }
@@ -220,10 +286,8 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   async function revoke({ token }) {
     const device = await authenticate(token);
     if (device.userId) {
-      const devices = await readDevices(device.userId);
-      const mine = devices.find((d) => d.deviceId === device.deviceId) ?? { deviceId: device.deviceId };
-      await dropDevice({ ...mine, tokenHash: hashToken(token) });
-      await writeDevices(device.userId, devices.filter((d) => d.deviceId !== device.deviceId));
+      const result = await deviceAction(device.userId, "revoke", hashToken(token), device.deviceId);
+      if (Number(result[0]) === -1) throw new ServiceError(401, "unauthorized");
       return { revoked: true };
     }
     // Invalidate first: no in-flight commit may follow the state deletion.
@@ -246,13 +310,8 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const raw = await cmd("GET", `np:udevs:${userId}`);
     try { const list = JSON.parse(raw ?? "[]"); return Array.isArray(list) ? list : []; } catch { return []; }
   };
-  const writeDevices = (userId, list) => (list.length ? cmd("SET", `np:udevs:${userId}`, JSON.stringify(list)) : cmd("DEL", `np:udevs:${userId}`));
-  async function dropDevice(device) {
-    if (device.tokenHash) await cmd("DEL", `np:tok:${device.tokenHash}`);
-    await cmd("DEL", `np:dstate:${device.deviceId}`);
-    await cmd("DEL", `np:seq:${device.deviceId}`);
-    await cmd("DEL", `np:dseen:${device.deviceId}`);
-  }
+  const deviceAction = (userId, action, authHash = "", targetId = "", name = "", newId = "", newHash = "", previousHash = "") =>
+    cmd("EVAL", DEVICE_ATOMIC_SCRIPT, 1, `np:udevs:${userId}`, String(userId), action, authHash, targetId, name, newId, newHash, String(now()), previousHash, String(MAX_DEVICES_PER_USER));
 
   async function signInWithGitHub({ githubToken, deviceName, legacyToken, previousToken, clientKey = "unknown" } = {}) {
     const bucket = `np:rl:signin:${hashToken(String(clientKey)).slice(0, 32)}`;
@@ -272,34 +331,15 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     await cmd("SET", `np:login:${login.toLowerCase()}`, userId);
     await cmd("SET", `np:user:${userId}`, JSON.stringify({ login, createdAt: user?.createdAt ?? now() }));
 
-    let devices = await readDevices(userId);
-    if (previousToken !== undefined) {
-      if (typeof previousToken !== "string" || previousToken.length < 20 || previousToken.length > 128) throw new ServiceError(400, "invalid_previous_token");
-      const previousHash = hashToken(previousToken);
-      const previousRaw = await cmd("GET", `np:tok:${previousHash}`);
-      if (!previousRaw) throw new ServiceError(409, "previous_device_missing");
-      const previous = JSON.parse(previousRaw);
-      if (previous.userId !== userId) throw new ServiceError(403, "previous_device_mismatch");
-      const prior = devices.find((d) => d.deviceId === previous.deviceId && d.tokenHash === previousHash);
-      if (!prior) throw new ServiceError(409, "previous_device_mismatch");
-      // Invalidate before deleting playback so a delayed ingest cannot restore it.
-      await dropDevice(prior);
-      devices = devices.filter((d) => d !== prior);
-      await writeDevices(userId, devices);
-    }
-    while (devices.length >= MAX_DEVICES_PER_USER) {
-      // Full: the device quiet for longest makes room.
-      const seen = await Promise.all(devices.map(async (d) => Number(await cmd("GET", `np:dseen:${d.deviceId}`) ?? d.createdAt ?? 0)));
-      const oldest = seen.indexOf(Math.min(...seen));
-      await dropDevice(devices[oldest]);
-      devices = devices.filter((_, i) => i !== oldest);
-    }
+    if (previousToken !== undefined && (typeof previousToken !== "string" || previousToken.length < 20 || previousToken.length > 128)) throw new ServiceError(400, "invalid_previous_token");
     const deviceId = randomId(16);
     const token = randomId(32);
-    const tokenHash = hashToken(token);
-    await cmd("SET", `np:tok:${tokenHash}`, JSON.stringify({ userId, deviceId }));
-    devices.push({ deviceId, name: cleanDeviceName(deviceName), createdAt: now(), tokenHash });
-    await writeDevices(userId, devices);
+    const result = await deviceAction(userId, "sign-in", "", "", cleanDeviceName(deviceName), deviceId, hashToken(token), previousToken ? hashToken(previousToken) : "");
+    if (Number(result[0]) < 0) {
+      const errors = { "-2": [409, "previous_device_missing"], "-3": [403, "previous_device_mismatch"], "-4": [409, "previous_device_mismatch"] };
+      const [status, code] = errors[String(result[0])];
+      throw new ServiceError(status, code);
+    }
 
     // A PC moving from its old per-PC card: that link keeps working and now
     // shows this user's card; the old key and state go.
@@ -334,30 +374,25 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
 
   async function renameDevice({ token, deviceId, name }) {
     const me = await authenticateUser(token);
-    const devices = await readDevices(me.userId);
-    const target = devices.find((d) => d.deviceId === (deviceId ?? me.deviceId));
-    if (!target) throw new ServiceError(404, "not_found");
-    target.name = cleanDeviceName(name);
-    await writeDevices(me.userId, devices);
+    const result = await deviceAction(me.userId, "rename", hashToken(token), deviceId ?? me.deviceId, cleanDeviceName(name));
+    if (Number(result[0]) === -1) throw new ServiceError(401, "unauthorized");
+    if (Number(result[0]) === -5) throw new ServiceError(404, "not_found");
     return { renamed: true };
   }
 
   async function removeDevice({ token, deviceId }) {
     const me = await authenticateUser(token);
-    const devices = await readDevices(me.userId);
-    const target = devices.find((d) => d.deviceId === deviceId);
-    if (!target) throw new ServiceError(404, "not_found");
-    await dropDevice(target);
-    await writeDevices(me.userId, devices.filter((d) => d !== target));
+    const result = await deviceAction(me.userId, "remove", hashToken(token), deviceId);
+    if (Number(result[0]) === -1) throw new ServiceError(401, "unauthorized");
+    if (Number(result[0]) === -5) throw new ServiceError(404, "not_found");
     return { removed: true };
   }
 
   async function signOutEverywhere({ token }) {
     const me = await authenticateUser(token);
-    const devices = await readDevices(me.userId);
-    for (const d of devices) await dropDevice(d);
-    await cmd("DEL", `np:udevs:${me.userId}`);
-    return { removed: devices.length };
+    const result = await deviceAction(me.userId, "sign-out", hashToken(token));
+    if (Number(result[0]) === -1) throw new ServiceError(401, "unauthorized");
+    return { removed: Number(result[1]) };
   }
 
   const IDLE = Object.freeze({ state: "idle", kind: "unknown", title: null, subtitle: null, positionMs: null, durationMs: null });
