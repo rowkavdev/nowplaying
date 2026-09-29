@@ -35,7 +35,7 @@ test("parses start arguments", () => {
 
 function clock() {
   let t = 0;
-  return { now: () => t, sleep: async (ms) => { t += ms; } };
+  return { elapsedNow: () => t, sleep: async (ms) => { t += ms; } };
 }
 
 test("first launch opens the setup page in the browser once and waits for Finish", async () => {
@@ -61,7 +61,20 @@ test("stops waiting after the timeout and reports setup as cancelled", async () 
   const c = clock();
   const outcome = await ensureConfigured({ configExists: () => false, runSetup: () => runBrowserSetup({ url: "http://127.0.0.1:5000/setup", openUrl: () => {}, configExists: () => false, timeoutMs: 10_000, pollMs: 1000, ...c }) });
   assert.equal(outcome, "setup-cancelled");
-  assert.equal(c.now(), 10_000);
+  assert.equal(c.elapsedNow(), 10_000);
+});
+
+test("the setup wait measures elapsed time, not the adjustable wall clock (#755)", async () => {
+  let elapsed = 0;
+  let checks = 0;
+  let sleeps = 0;
+  const sleep = async (ms) => { elapsed += ms; sleeps += 1; };
+  // Two seconds in, the PC clock rolls back an hour: with the wall clock the
+  // 30s timeout returned after 3,630s and 3,630 config checks.
+  await runBrowserSetup({ url: "http://127.0.0.1:5000/setup", openUrl: () => {}, configExists: () => { checks += 1; return false; }, timeoutMs: 30_000, pollMs: 1000, sleep, elapsedNow: () => elapsed });
+  assert.equal(elapsed, 30_000);
+  assert.equal(checks, 30);
+  assert.ok(sleeps >= 30);
 });
 
 test("a browser that can't be opened falls back to the other setup", async () => {
