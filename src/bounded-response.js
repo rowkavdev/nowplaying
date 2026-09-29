@@ -2,7 +2,8 @@
 // server can't make the updater buffer an unbounded amount of memory.
 export async function readBoundedBytes(response, limit, label = "response") {
   if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("limit: expected a positive integer");
-  const declared = Number(response?.headers?.get?.("content-length"));
+  const rawLength = response?.headers?.get?.("content-length");
+  const declared = typeof rawLength === "string" && rawLength.trim() !== "" ? Number(rawLength) : NaN;
   if (Number.isFinite(declared) && declared > limit) throw new Error(`${label} is too large`);
   const body = response?.body;
   if (body && typeof body.getReader === "function") {
@@ -26,6 +27,15 @@ export async function readBoundedBytes(response, limit, label = "response") {
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     return bytes;
   }
+  if (typeof response?.arrayBuffer !== "function" && typeof response?.text !== "function") {
+    throw new TypeError(`${label} has no readable body`);
+  }
+  // Non-streaming adapters hand over the whole body before its size can be
+  // measured, so they are only read when the server declared a sane length
+  // within the cap. Residual: a dishonest declared length can still make
+  // such an adapter buffer too much; only the streamed path above enforces
+  // the cap as bytes arrive.
+  if (!Number.isSafeInteger(declared) || declared < 0) throw new Error(`${label} is too large`);
   if (typeof response?.arrayBuffer === "function") {
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > limit) throw new Error(`${label} is too large`);
@@ -36,7 +46,6 @@ export async function readBoundedBytes(response, limit, label = "response") {
     if (bytes.byteLength > limit) throw new Error(`${label} is too large`);
     return bytes;
   }
-  throw new TypeError(`${label} has no readable body`);
 }
 
 export function timeoutSignal(ms) {

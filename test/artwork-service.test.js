@@ -10,7 +10,7 @@ const config = { baseUrl: "http://media.local", apiKey: "secret" };
 const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAAASUhEUgAAAAEAAAAB", "base64"));
 function response(status, bytes = png) {
   return { status, statusText: status === 404 ? "Not Found" : "OK", ok: status >= 200 && status < 300,
-    headers: { get: (name) => name === "content-type" ? "image/png" : null },
+    headers: { get: (name) => name === "content-type" ? "image/png" : name === "content-length" ? String(bytes.byteLength) : null },
     arrayBuffer: async () => bytes.buffer };
 }
 

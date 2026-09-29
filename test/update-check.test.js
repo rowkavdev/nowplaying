@@ -57,7 +57,7 @@ test("caps the release list response and passes a timeout signal", async () => {
 });
 
 test("reports malformed release JSON as invalid releases", async () => {
-  const response = { ok: true, status: 200, text: async () => "{not json" };
+  const response = { ok: true, status: 200, headers: new Headers({ "content-length": "9" }), text: async () => "{not json" };
   await assert.rejects(checkForUpdate({ platform: "linux", currentVersion: "0.1.0", repository: "x/y", fetchImpl: async () => response }), /invalid releases/);
 });
 

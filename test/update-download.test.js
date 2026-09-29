@@ -12,8 +12,8 @@ function fetchPair(manifest = `${digest}  nowplaying-v0.2.0.tar.gz\n`) {
   return async (url, options) => {
     assert.equal(options.redirect, "follow");
     return url === assetUrl
-      ? { ok: true, url: assetUrl, arrayBuffer: async () => bytes.buffer }
-      : { ok: true, url: checksumUrl, text: async () => manifest };
+      ? { ok: true, url: assetUrl, headers: new Headers({ "content-length": String(bytes.byteLength) }), arrayBuffer: async () => bytes.buffer }
+      : { ok: true, url: checksumUrl, headers: new Headers({ "content-length": String(Buffer.byteLength(manifest)) }), text: async () => manifest };
   };
 }
 
@@ -88,8 +88,8 @@ test("follows GitHub's signed-CDN redirect for the asset and checksum (#749)", a
   const fetchImpl = async (url, options) => {
     assert.equal(options.redirect, "follow");
     return url === assetUrl
-      ? { ok: true, url: cdn, arrayBuffer: async () => bytes.buffer }
-      : { ok: true, url: cdn, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
+      ? { ok: true, url: cdn, headers: new Headers({ "content-length": String(bytes.byteLength) }), arrayBuffer: async () => bytes.buffer }
+      : { ok: true, url: cdn, headers: new Headers({ "content-length": String(Buffer.byteLength(`${digest}  nowplaying-v0.2.0.tar.gz\n`)) }), text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
   };
   const result = await downloadVerifiedUpdate({ update, token: "secret", fetchImpl });
   assert.equal(result.sha256, digest);
