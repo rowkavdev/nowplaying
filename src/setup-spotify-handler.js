@@ -14,7 +14,7 @@ const ERRORS = Object.freeze({ denied: "denied", timeout: "expired", bad_client_
 
 export function createSetupSpotifyHandler({
   credentialStore, onSignedIn = async () => {}, signIn = signInToSpotify,
-  now = Date.now, flowTtlMs = 10 * 60_000, maxFlows = 2, newFlowId = () => randomBytes(18).toString("base64url"),
+  elapsedNow = () => performance.now(), flowTtlMs = 10 * 60_000, maxFlows = 2, newFlowId = () => randomBytes(18).toString("base64url"),
 } = {}) {
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof signIn !== "function") throw new TypeError("signIn must be a function");
@@ -32,14 +32,14 @@ export function createSetupSpotifyHandler({
   const writeChains = new Map();
 
   function prune() {
-    const time = now();
+    const time = elapsedNow();
     for (const [id, flow] of flows) if (!flow.committing && (flow.expiresAt <= time || superseded(flow))) flows.delete(id);
   }
 
   async function complete(flow, tokens) {
     const active = () => flow.generation === generation && !superseded(flow);
     // A late OAuth completion must not revive a flow already reported expired.
-    if (!active() || flow.expiresAt <= now()) return;
+    if (!active() || flow.expiresAt <= elapsedNow()) return;
     const identity = tokens?.identity;
     if (typeof tokens?.refreshToken !== "string" || !tokens.refreshToken || typeof identity?.id !== "string" || !identity.id) {
       flow.result = { status: "failed", error: "spotify_failed" };
@@ -60,13 +60,13 @@ export function createSetupSpotifyHandler({
 
   async function writeCredential(flow, refreshToken, safeIdentity, active) {
     // The chain wait can itself outlast the flow or see it superseded.
-    if (!active() || flow.expiresAt <= now()) return;
+    if (!active() || flow.expiresAt <= elapsedNow()) return;
     const ref = { provider: "spotify", identityId: safeIdentity.id };
     let previous;
     try { previous = await credentialStore.read(ref); }
     catch { flow.result = { status: "failed", error: "credential_store_failed" }; return; }
     // Reading a keychain may itself outlast the flow. Check again before writes.
-    if (!active() || flow.expiresAt <= now()) return;
+    if (!active() || flow.expiresAt <= elapsedNow()) return;
     async function restore() {
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
@@ -79,7 +79,7 @@ export function createSetupSpotifyHandler({
       return;
     }
     // The credential save can also cross expiry. Undo it before the draft write.
-    if (!active() || flow.expiresAt <= now()) {
+    if (!active() || flow.expiresAt <= elapsedNow()) {
       try { await restore(); }
       catch { flow.result = { status: "failed", error: "credential_store_failed" }; }
       return;
@@ -107,7 +107,7 @@ export function createSetupSpotifyHandler({
     if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
     const overlap = (latestByClientId.get(clientId) ?? 0) + 1;
     latestByClientId.set(clientId, overlap);
-    const flow = { clientId, overlap, generation, expiresAt: now() + flowTtlMs, result: { status: "pending" } };
+    const flow = { clientId, overlap, generation, expiresAt: elapsedNow() + flowTtlMs, result: { status: "pending" } };
     let giveUrl;
     const authUrl = new Promise((resolve) => { giveUrl = resolve; });
     let running;
@@ -138,7 +138,7 @@ export function createSetupSpotifyHandler({
   function poll(input) {
     if (!onlyKeys(input, ["action", "flowId"]) || typeof input.flowId !== "string") return json(400, { error: "invalid_request" });
     const flow = flows.get(input.flowId);
-    if (!flow || (!flow.committing && (flow.expiresAt <= now() || superseded(flow)))) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
+    if (!flow || (!flow.committing && (flow.expiresAt <= elapsedNow() || superseded(flow)))) { flows.delete(input.flowId); return json(410, { error: "expired" }); }
     if (flow.result.status === "pending") return json(200, { status: "pending" });
     flows.delete(input.flowId);
     if (flow.result.status === "signed_in") return json(200, { status: "signed_in", provider: "spotify", identity: flow.result.identity });

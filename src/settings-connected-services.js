@@ -39,7 +39,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     pendingHosted = null;
     restart();
   }
-  const spotify = createSetupSpotifyHandler({ credentialStore, onSignedIn: saveSpotify, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) });
+  const spotify = createSetupSpotifyHandler({ credentialStore, onSignedIn: saveSpotify, elapsedNow, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) });
   const hosted = createSetupHostedHandler({ credentials: hostedCredentials, fetchImpl,
     settings: async () => hostedUploadSettings(await current()),
     ...(hostedSignIn ? { createSignIn: hostedSignIn } : {}),
