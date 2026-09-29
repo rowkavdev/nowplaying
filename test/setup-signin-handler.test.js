@@ -233,17 +233,21 @@ test("flows expire, are capped, and can be cancelled", async () => {
   assert.equal((await post(handler, { action: "poll", flowId: "nope" })).status, 410);
 });
 
-test("a flow past its elapsed TTL expires and frees the slot however the wall clock moves (#759)", async () => {
-  let time = 1000;
-  let n = 0;
-  const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn: fakeSignIn(), elapsedNow: () => time, flowTtlMs: 10_000, maxFlows: 1, newFlowId: () => `f${++n}` });
-  await post(handler, { action: "start", provider: "plex" });
-  // Eleven elapsed seconds pass, past the ten-second TTL. With the wall clock
-  // a one-hour rollback kept the flow pending, blocked this start with 429,
-  // and let a late provider completion save the credential.
-  time += 11_000;
-  assert.equal((await post(handler, { action: "poll", flowId: "f1" })).status, 410);
-  assert.equal((await post(handler, { action: "start", provider: "plex" })).status, 200);
+test("a flow past its elapsed TTL expires and frees the slot (#759)", async () => {
+  for (const provider of ["plex", "jellyfin"]) {
+    let time = 1000;
+    let n = 0;
+    const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn: fakeSignIn(), elapsedNow: () => time, flowTtlMs: 10_000, maxFlows: 1, newFlowId: () => `f${++n}` });
+    const start = provider === "plex" ? { action: "start", provider } : { action: "start", provider, baseUrl: "http://127.0.0.1:8096" };
+    await post(handler, start);
+    // Eleven elapsed seconds pass, past the ten-second TTL. The flow reads
+    // only elapsed time, so this is the rollback case from the issue: with
+    // the wall clock a one-hour rollback kept the flow pending, blocked the
+    // second start with 429, and let a late completion save the credential.
+    time += 11_000;
+    assert.equal((await post(handler, { action: "poll", flowId: "f1" })).status, 410, provider);
+    assert.equal((await post(handler, start)).status, 200, provider);
+  }
 });
 
 test("sign-in errors map to safe codes and end the flow", async () => {
