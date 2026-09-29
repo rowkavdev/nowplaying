@@ -117,7 +117,7 @@ test("a delayed signed-in ingest cannot restore playback after removal or sign-o
     const barrier = new Promise((resolve) => { release = resolve; });
     let delayed = false;
     const controlled = { command: async (args) => {
-      if (args[0] === "EVAL" && !delayed) { delayed = true; entered(); await barrier; }
+      if (args[0] === "EVAL" && args[1].includes("local previous = tonumber") && !delayed) { delayed = true; entered(); await barrier; }
       return redis.command(args);
     } };
     const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
@@ -264,4 +264,55 @@ test("GitHub identity check sends the token only to api.github.com and maps erro
   await assert.rejects(createGitHubIdentity({ fetchImpl: async () => ({ ok: false, status: 401 }) })("t"), { status: 401 });
   await assert.rejects(createGitHubIdentity({ fetchImpl: async () => { throw new Error("down"); } })("t"), { status: 502 });
   await assert.rejects(createGitHubIdentity({ fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ id: "7", login: "octo" }) }) })("t"), { status: 502 });
+});
+
+test("simultaneous GitHub sign-ins keep both issued tokens listed", async () => {
+  const { redis, now } = setup();
+  let entered, release;
+  const reached = new Promise((resolve) => { entered = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  let delayed = false;
+  const controlled = { command: async (args) => {
+    if (!delayed && ((args[0] === "GET" && args[1] === "np:udevs:101") || (args[0] === "EVAL" && args[1].includes("np-device-lifecycle-v1") && args[5] === "sign-in"))) {
+      delayed = true;
+      const result = args[0] === "GET" ? await redis.command(args) : undefined;
+      entered(); await gate; return args[0] === "GET" ? result : redis.command(args);
+    }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
+  const first = signIn(service, "First");
+  await reached;
+  const second = await signIn(service, "Second");
+  release();
+  const one = await first;
+  assert.deepEqual((await service.listDevices({ token: one.token })).devices.map((d) => d.name).sort(), ["First", "Second"]);
+  assert.equal((await service.listDevices({ token: second.token })).devices.some((d) => d.current), true);
+});
+
+test("a new sign-in racing sign-out-everywhere is never a live unlisted token", async () => {
+  const { redis, now } = setup();
+  let entered, release;
+  const reached = new Promise((resolve) => { entered = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  let armed = false, delayed = false;
+  const controlled = { command: async (args) => {
+    if (armed && !delayed && ((args[0] === "GET" && args[1] === "np:udevs:101") || (args[0] === "EVAL" && args[1].includes("np-device-lifecycle-v1") && args[5] === "sign-out"))) {
+      delayed = true;
+      const result = args[0] === "GET" ? await redis.command(args) : undefined;
+      entered(); await gate; return args[0] === "GET" ? result : redis.command(args);
+    }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
+  const old = await signIn(service, "Old");
+  armed = true;
+  const signOut = service.signOutEverywhere({ token: old.token });
+  await reached;
+  const fresh = await signIn(service, "Fresh");
+  release(); await signOut;
+  try {
+    const list = await service.listDevices({ token: fresh.token });
+    assert.ok(list.devices.some((d) => d.deviceId === fresh.deviceId));
+  } catch (error) { assert.equal(error.status, 401); }
 });
