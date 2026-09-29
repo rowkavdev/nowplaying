@@ -36,7 +36,7 @@ function fakeFetch(respond) {
 }
 
 test("endpoint check calls /healthz only, with no credentials", async () => {
-  const f = fakeFetch(() => ({ status: 200, text: async () => "ok\n" }));
+  const f = fakeFetch(() => health("ok\n"));
   assert.deepEqual(await checkHostedEndpoint("https://cards.example.com/", { fetchImpl: f.impl }), { ok: true, url: "https://cards.example.com" });
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].url, "https://cards.example.com/healthz");
@@ -46,12 +46,57 @@ test("endpoint check calls /healthz only, with no credentials", async () => {
   assert.equal(f.calls[0].init.body, undefined);
 });
 
+// Models a real server's bounded health reply: a declared Content-Length and
+// no streaming body, so the fallback adapter path sees a trusted size.
+const health = (text) => ({ status: 200, headers: { get: (name) => name === "content-length" ? String(new TextEncoder().encode(text).byteLength) : null }, text: async () => text });
+
 test("endpoint check reports bad URLs, wrong services and network failures", async () => {
   assert.equal((await checkHostedEndpoint("http://cards.example.com")).reason, "invalid_url");
   assert.equal((await checkHostedEndpoint("https://u:p@cards.example.com")).reason, "invalid_url");
   assert.equal((await checkHostedEndpoint("https://x.example", { fetchImpl: async () => ({ status: 404, text: async () => "" }) })).reason, "bad_status");
-  assert.equal((await checkHostedEndpoint("https://x.example", { fetchImpl: async () => ({ status: 200, text: async () => "<html>" }) })).reason, "not_nowplaying");
+  assert.equal((await checkHostedEndpoint("https://x.example", { fetchImpl: async () => (health("<html>")) })).reason, "not_nowplaying");
   assert.equal((await checkHostedEndpoint("https://x.example", { fetchImpl: async () => { throw new TypeError("fetch failed"); } })).reason, "unreachable");
   const hang = (_u, init) => new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(new Error("aborted"))));
   assert.equal((await checkHostedEndpoint("https://x.example", { fetchImpl: hang, timeoutMs: 20 })).reason, "timeout");
+});
+
+test("endpoint check rejects an oversized health body instead of buffering it (#751)", async () => {
+  let chunksRead = 0, cancelled = false;
+  const chunk = new Uint8Array(512);
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: () => null }, // no Content-Length
+    body: {
+      getReader: () => ({
+        read: async () => { chunksRead += 1; return chunksRead > 16 ? { done: true } : { done: false, value: chunk }; },
+        cancel: async () => { cancelled = true; },
+      }),
+    },
+    text: async () => { throw new Error("text() must not be used for a streaming body"); },
+  });
+  assert.equal((await checkHostedEndpoint("https://cards.example.com", { fetchImpl })).reason, "not_nowplaying");
+  assert.equal(cancelled, true);
+  assert.ok(chunksRead <= 4, `stream should stop at the cap, read ${chunksRead} chunks`);
+});
+
+test("endpoint check refuses a no-stream body with no declared size (#751)", async () => {
+  let textCalled = false;
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: () => null },
+    text: async () => { textCalled = true; return `${" ".repeat(1024 * 1024)}ok`; },
+  });
+  assert.equal((await checkHostedEndpoint("https://cards.example.com", { fetchImpl })).reason, "not_nowplaying");
+  assert.equal(textCalled, false, "text() must not be called without a trusted size");
+});
+
+test("endpoint check rejects a declared oversized body without reading it (#751)", async () => {
+  let textCalled = false;
+  const fetchImpl = async () => ({
+    status: 200,
+    headers: { get: (name) => name === "content-length" ? String(2 * 1024 * 1024) : null },
+    text: async () => { textCalled = true; return "ok"; },
+  });
+  assert.equal((await checkHostedEndpoint("https://cards.example.com", { fetchImpl })).reason, "not_nowplaying");
+  assert.equal(textCalled, false);
 });
