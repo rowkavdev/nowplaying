@@ -73,3 +73,27 @@ test("local discovery failure is reported instead of looking like an empty scan"
   assert.deepEqual(failures, [{ provider: "local_discovery", baseUrl: "http://127.0.0.1", reason: "discovery_failed" }]);
 });
 
+
+test("refuses a lengthless non-streaming probe body without reading it", async () => {
+  let read = false;
+  const failures = [];
+  const big = " ".repeat(1024 * 1024) + '<MediaContainer machineIdentifier="fixture" version="1"/>';
+  const servers = await discoverSettingsServers({ hosts: ["192.168.1.42"], localDiscover: async () => [], onProbeFailure: (f) => failures.push(f), fetchImpl: async (url) => {
+    if (url.includes(":32400/")) return { status: 200, headers: new Headers(), text: async () => { read = true; return big; } };
+    throw new Error("closed");
+  } });
+  assert.deepEqual(servers, []);
+  assert.equal(read, false);
+  assert.ok(failures.some((f) => f.provider === "plex" && f.reason === "oversize"));
+});
+
+test("discovers from a streamed probe body without a Content-Length", async () => {
+  const servers = await discoverSettingsServers({ hosts: ["192.168.1.9"], localDiscover: async () => [], fetchImpl: async (url) => {
+    if (url.includes(":32400/")) {
+      const body = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('<MediaContainer machineIdentifier="streamed" version="1"/>')); c.close(); } });
+      return { status: 200, headers: new Headers(), body };
+    }
+    throw new Error("closed");
+  } });
+  assert.deepEqual(servers.map((s) => [s.provider, s.baseUrl]), [["plex", "http://192.168.1.9:32400"]]);
+});
