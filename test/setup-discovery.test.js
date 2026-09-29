@@ -153,7 +153,7 @@ test("non-streaming fallback refuses to buffer a body with no declared size (#74
   assert.equal(textCalled, false, "text() must not be called without a trusted size");
 });
 
-test("discovery cache expires by elapsed time, surviving a backward clock change (#753)", async () => {
+test("discovery cache expires after five elapsed seconds (#753)", async () => {
   let elapsed = 1_800_000;
   let calls = 0;
   let name = "stale-server";
@@ -161,8 +161,9 @@ test("discovery cache expires by elapsed time, surviving a backward clock change
   const get = () => handle({ method: "GET", url: "/api/setup/discover" }).then((r) => JSON.parse(r.body).servers[0].name);
   assert.equal(await get(), "stale-server");
   name = "fresh-server";
-  // Wall time rolling back an hour must not matter: six elapsed seconds later
-  // the five-second cache has expired and discovery runs again.
+  // The cache reads only elapsed time, so this is the rollback case from the
+  // issue: six elapsed seconds later the five-second cache has expired and
+  // discovery runs again.
   elapsed += 6000;
   assert.equal(await get(), "fresh-server");
   assert.equal(calls, 2);
