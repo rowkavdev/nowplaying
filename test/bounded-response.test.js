@@ -37,3 +37,27 @@ test("caps buffered arrayBuffer and text bodies too", async () => {
   assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "2" }), text: async () => "ok" }, 10)).byteLength, 2);
 });
 
+
+test("refuses non-streaming bodies without an acceptable declared length", async () => {
+  let arrayBufferCalled = false;
+  await assert.rejects(
+    readBoundedBytes({ arrayBuffer: async () => { arrayBufferCalled = true; return new Uint8Array(1_048_576).buffer; } }, 1024, "fixture"),
+    /fixture is too large/,
+  );
+  assert.equal(arrayBufferCalled, false);
+  let textCalled = false;
+  await assert.rejects(
+    readBoundedBytes({ text: async () => { textCalled = true; return "x".repeat(1_048_576); } }, 1024, "fixture"),
+    /fixture is too large/,
+  );
+  assert.equal(textCalled, false);
+  // An empty or unparsable Content-Length is no declaration at all.
+  for (const headers of [new Headers({ "content-length": "" }), new Headers({ "content-length": "soon" })]) {
+    await assert.rejects(readBoundedBytes({ headers, text: async () => "ok" }, 1024), /too large/);
+  }
+});
+
+test("buffers non-streaming bodies that declare a length within the cap", async () => {
+  assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "2" }), text: async () => "ok" }, 10)).byteLength, 2);
+  assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "4" }), arrayBuffer: async () => new Uint8Array(4).buffer }, 10)).byteLength, 4);
+});
