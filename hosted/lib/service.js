@@ -36,6 +36,14 @@ const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
 // Keep authorization, per-device sequence check and card-state write in one Redis action.
 // EVAL is atomic on Upstash Redis, including across concurrent function calls.
+// Increment and repair legacy buckets atomically. A no-TTL bucket came from the
+// former INCR-before-EXPIRE window; retain its count and bound it from now on.
+export const REGISTRATION_LIMIT_SCRIPT = `
+redis.call('SET', KEYS[1], '0', 'EX', tonumber(ARGV[1]), 'NX')
+if redis.call('TTL', KEYS[1]) == -1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
+return redis.call('INCR', KEYS[1])
+`;
+
 export const INGEST_ATOMIC_SCRIPT = `
 if not redis.call('GET', KEYS[4]) then return {-1, -1} end
 local previous = tonumber(redis.call('GET', KEYS[1]) or '-1')
@@ -228,8 +236,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
 
   async function register({ clientKey = "unknown" } = {}) {
     const bucket = `np:rl:register:${hashToken(String(clientKey)).slice(0, 32)}`;
-    const count = await cmd("INCR", bucket);
-    if (count === 1) await cmd("EXPIRE", bucket, 3600);
+    const count = await cmd("EVAL", REGISTRATION_LIMIT_SCRIPT, 1, bucket, "3600");
     if (count > REGISTRATIONS_PER_HOUR) throw new ServiceError(429, "rate_limited");
     const cardId = randomId(16);
     const deviceId = randomId(16);

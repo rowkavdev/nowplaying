@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryRedis } from "../hosted/lib/redis.js";
-import { createService, createGitHubIdentity, MAX_DEVICES_PER_USER, SIGNINS_PER_HOUR, STATE_TTL_SECONDS, USER_INGESTS_PER_MINUTE } from "../hosted/lib/service.js";
+import { createService, createGitHubIdentity, hashToken, MAX_DEVICES_PER_USER, SIGNINS_PER_HOUR, STATE_TTL_SECONDS, USER_INGESTS_PER_MINUTE } from "../hosted/lib/service.js";
 import { resolveDeviceStates, currentPosition } from "../hosted/lib/resolve.js";
 
 const GH = { gho_rowan00000000: { id: 101, login: "RowKav" }, gho_other000000000: { id: 202, login: "someone" } };
@@ -315,4 +315,51 @@ test("a new sign-in racing sign-out-everywhere is never a live unlisted token", 
     const list = await service.listDevices({ token: fresh.token });
     assert.ok(list.devices.some((d) => d.deviceId === fresh.deviceId));
   } catch (error) { assert.equal(error.status, 401); }
+});
+
+test("an interrupted first registration does not leave a permanent rate-limit bucket", async () => {
+  let clock = 1_800_000_000_000;
+  const redis = createMemoryRedis({ now: () => clock });
+  let interrupted = false;
+  const controlled = { command: async (args) => {
+    if (!interrupted && args[0] === "EXPIRE" && args[1].startsWith("np:rl:register:")) {
+      interrupted = true;
+      throw new Error("interrupted between increment and expiry");
+    }
+    return redis.command(args);
+  } };
+  const service = createService({ redis: controlled, now: () => clock });
+  await service.register({ clientKey: "same-client" });
+  assert.equal(interrupted, false); // no separate EXPIRE window remains
+  clock += 2 * 60 * 60 * 1000;
+  for (let i = 0; i < 5; i += 1) await service.register({ clientKey: "same-client" });
+});
+
+test("registration repairs an inherited bucket without TTL without resetting its count", async () => {
+  let clock = 1_800_000_000_000;
+  const now = () => clock;
+  const redis = createMemoryRedis({ now });
+  const service = createService({ redis, now });
+  const key = `np:rl:register:${hashToken("old-client").slice(0, 32)}`;
+  await redis.command(["SET", key, "5"]); // interrupted legacy INCR/EXPIRE, with no known window
+  clock += 2 * 60 * 60 * 1000;
+  await assert.rejects(service.register({ clientKey: "old-client" }), { status: 429, code: "rate_limited" });
+  assert.equal(await redis.command(["GET", key]), "6");
+  assert.equal(redis.data.get(key).expiresAt, clock + 3600 * 1000);
+  clock += 3600 * 1000 + 1;
+  await service.register({ clientKey: "old-client" });
+  assert.equal(await redis.command(["GET", key]), "1");
+});
+
+test("registration does not restart a healthy bucket's window or count", async () => {
+  let clock = 1_800_000_000_000;
+  const now = () => clock;
+  const redis = createMemoryRedis({ now });
+  const service = createService({ redis, now });
+  const key = `np:rl:register:${hashToken("healthy-client").slice(0, 32)}`;
+  await redis.command(["SET", key, "3", "EX", 1800]);
+  clock += 600_000;
+  await service.register({ clientKey: "healthy-client" });
+  assert.equal(await redis.command(["GET", key]), "4");
+  assert.equal(redis.data.get(key).expiresAt, clock + 1200 * 1000);
 });
