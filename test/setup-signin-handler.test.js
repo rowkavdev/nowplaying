@@ -174,7 +174,7 @@ test("an expired committing flow cannot be cancelled after a second poll (Plex/J
       }),
     });
     const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn,
-      now: () => time, flowTtlMs: 100, onSignedIn: async () => { updating(); await pendingUpdate; } });
+      elapsedNow: () => time, flowTtlMs: 100, onSignedIn: async () => { updating(); await pendingUpdate; } });
     const { flowId } = read(await post(handler, { action: "start", provider, baseUrl: "http://127.0.0.1:32400" }));
     const polling = post(handler, { action: "poll", flowId });
     await startedUpdate;
@@ -196,7 +196,7 @@ test("a provider response arriving after flow expiry cannot save a credential", 
   let release;
   const pending = new Promise((resolve) => { release = resolve; });
   const signIn = fakeSignIn({ pollPlexPin: async () => pending });
-  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn, now: () => time, flowTtlMs: 100 });
+  const handler = createSetupSignInHandler({ credentialStore: store, deviceId: DEVICE, signIn, elapsedNow: () => time, flowTtlMs: 100 });
   const started = read(await post(handler, { action: "start", provider: "plex" }));
   const polling = post(handler, { action: "poll", flowId: started.flowId });
   time += 101;
@@ -222,7 +222,7 @@ test("Emby and Navidrome: password sign-in saves the secret and never echoes the
 test("flows expire, are capped, and can be cancelled", async () => {
   let time = 1000;
   let n = 0;
-  const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn: fakeSignIn(), now: () => time, flowTtlMs: 100, maxFlows: 2, newFlowId: () => `f${++n}` });
+  const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn: fakeSignIn(), elapsedNow: () => time, flowTtlMs: 100, maxFlows: 2, newFlowId: () => `f${++n}` });
   await post(handler, { action: "start", provider: "plex" });
   await post(handler, { action: "start", provider: "plex" });
   assert.deepEqual(read(await post(handler, { action: "start", provider: "plex" })), { error: "too_many_signins" });
@@ -231,6 +231,19 @@ test("flows expire, are capped, and can be cancelled", async () => {
   time += 101;
   assert.deepEqual(read(await post(handler, { action: "poll", flowId: "f2" })), { error: "expired" });
   assert.equal((await post(handler, { action: "poll", flowId: "nope" })).status, 410);
+});
+
+test("a flow past its elapsed TTL expires and frees the slot however the wall clock moves (#759)", async () => {
+  let time = 1000;
+  let n = 0;
+  const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn: fakeSignIn(), elapsedNow: () => time, flowTtlMs: 10_000, maxFlows: 1, newFlowId: () => `f${++n}` });
+  await post(handler, { action: "start", provider: "plex" });
+  // Eleven elapsed seconds pass, past the ten-second TTL. With the wall clock
+  // a one-hour rollback kept the flow pending, blocked this start with 429,
+  // and let a late provider completion save the credential.
+  time += 11_000;
+  assert.equal((await post(handler, { action: "poll", flowId: "f1" })).status, 410);
+  assert.equal((await post(handler, { action: "start", provider: "plex" })).status, 200);
 });
 
 test("sign-in errors map to safe codes and end the flow", async () => {
