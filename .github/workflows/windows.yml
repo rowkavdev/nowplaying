@@ -63,6 +63,8 @@ jobs:
         run: node --test test/windows-startup.test.js
       - name: Tray menu self-test
         run: node --test test/windows-tray.test.js
+      - name: Installer stop path against a real running app
+        run: node --test test/windows-entry-shutdown.test.js
       - name: Updater hostile fixtures on Windows (bad digest, oversized body, redirect, channel, interrupted replacement)
         run: node --test test/update-check.test.js test/update-download.test.js test/update-install.test.js test/auto-updater.test.js test/update-windows-e2e.test.js
       - name: Attest published Windows bundles
