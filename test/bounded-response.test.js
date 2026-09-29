@@ -31,7 +31,9 @@ test("stops reading and cancels a stream that grows past the cap", async () => {
 });
 
 test("caps buffered arrayBuffer and text bodies too", async () => {
-  await assert.rejects(readBoundedBytes({ arrayBuffer: async () => new ArrayBuffer(11) }, 10), /too large/);
-  await assert.rejects(readBoundedBytes({ text: async () => "x".repeat(11) }, 10), /too large/);
-  assert.equal((await readBoundedBytes({ text: async () => "ok" }, 10)).byteLength, 2);
+  const headers = new Headers({ "content-length": "5" });
+  await assert.rejects(readBoundedBytes({ headers, arrayBuffer: async () => new ArrayBuffer(11) }, 10), /too large/);
+  await assert.rejects(readBoundedBytes({ headers, text: async () => "x".repeat(11) }, 10), /too large/);
+  assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "2" }), text: async () => "ok" }, 10)).byteLength, 2);
 });
+

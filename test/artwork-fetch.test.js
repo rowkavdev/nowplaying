@@ -6,7 +6,7 @@ import { artworkDataUri, fetchArtwork } from "../src/artwork-fetch.js";
 
 const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAAASUhEUgAAAAEAAAAB", "base64"));
 
-function response({ status = 200, type = "image/png", bytes = png, length } = {}) {
+function response({ status = 200, type = "image/png", bytes = png, length = bytes.byteLength } = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -65,7 +65,7 @@ test("rejects declared or actual oversized images", async () => {
   await assert.rejects(
     () => fetchArtwork(
       { url: "https://media.example.test/image", headers: {} },
-      { maxBytes: 8, fetchImpl: async () => response() },
+      { maxBytes: 8, fetchImpl: async () => response({ length: 8 }) },
     ),
     /maximum byte size/,
   );
@@ -160,3 +160,4 @@ test("a separate local listener never receives redirected artwork credentials (#
     await Promise.all([source, destination].map((server) => new Promise((resolve) => server.close(resolve))));
   }
 });
+

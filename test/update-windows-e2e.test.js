@@ -69,7 +69,7 @@ function fakeGitHub(zip, { tarball = new Uint8Array([9]) } = {}) {
     }
     const body = assets[url];
     if (!body) return { ok: false, status: 404 };
-    return { ok: true, url, arrayBuffer: async () => body.slice().buffer };
+    return { ok: true, url, headers: new Headers({ "content-length": String(body.byteLength) }), arrayBuffer: async () => body.slice().buffer };
   };
   return { fetchImpl, requested };
 }
