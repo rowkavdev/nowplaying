@@ -59,6 +59,9 @@ try {
   await page.locator('#signin-username').fill('ci-user');
   await page.locator('#signin-password').fill('ci-demo-password');
   await page.locator('#signin-button').click();
+  await page.getByRole('heading', { name: 'Set up NowPlaying' }).waitFor({ state: 'detached', timeout: 30000 });
+  await page.getByRole('heading', { name: 'Configuration' }).waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('details.drpp-accordion > summary').filter({ hasText: /^Card Settings$/ }).click();
   await page.locator('#card-form').waitFor({ state: 'visible', timeout: 30000 });
   await eventually(async () => (await fetch(`${base}/card.svg`)).ok, 'configured card');
   playing = true;
