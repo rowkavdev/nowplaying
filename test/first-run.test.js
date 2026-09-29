@@ -64,13 +64,14 @@ test("stops waiting after the timeout and reports setup as cancelled", async () 
   assert.equal(c.elapsedNow(), 10_000);
 });
 
-test("the setup wait measures elapsed time, not the adjustable wall clock (#755)", async () => {
+test("the setup wait ends at the timeout in elapsed time (#755)", async () => {
   let elapsed = 0;
   let checks = 0;
   let sleeps = 0;
   const sleep = async (ms) => { elapsed += ms; sleeps += 1; };
-  // Two seconds in, the PC clock rolls back an hour: with the wall clock the
-  // 30s timeout returned after 3,630s and 3,630 config checks.
+  // The wait reads only elapsed time, so this is the rollback case from the
+  // issue: with the wall clock the 30s timeout returned after 3,630s and
+  // 3,630 config checks.
   await runBrowserSetup({ url: "http://127.0.0.1:5000/setup", openUrl: () => {}, configExists: () => { checks += 1; return false; }, timeoutMs: 30_000, pollMs: 1000, sleep, elapsedNow: () => elapsed });
   assert.equal(elapsed, 30_000);
   assert.equal(checks, 30);
