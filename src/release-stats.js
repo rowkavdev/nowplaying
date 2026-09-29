@@ -1,3 +1,6 @@
+import { readBoundedBytes } from "./bounded-response.js";
+import { MAX_RELEASES_BYTES } from "./update-check.js";
+
 export async function fetchReleaseDownloadStats({ repository, token, fetchImpl = fetch } = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "")) throw new TypeError("repository: expected owner/name");
   if (typeof token !== "string" || token.length < 1) throw new TypeError("token: required for private release stats");
@@ -6,7 +9,10 @@ export async function fetchReleaseDownloadStats({ repository, token, fetchImpl =
     redirect: "error",
   });
   if (!response.ok) throw new Error(`release stats unavailable (${response.status})`);
-  const releases = await response.json();
+  // The same releases endpoint update-check reads, so the same hard byte cap applies.
+  const bytes = await readBoundedBytes(response, MAX_RELEASES_BYTES, "release stats response");
+  let releases;
+  try { releases = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new TypeError("release stats: invalid response"); }
   if (!Array.isArray(releases)) throw new TypeError("release stats: invalid response");
   return Object.freeze(releases.map((release) => Object.freeze({
     tag: String(release.tag_name),
