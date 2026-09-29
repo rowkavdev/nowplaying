@@ -91,6 +91,7 @@ try {
   assert.match(styled, /width="520"/);
   assert.match(styled, /fill="#ffffff"/);
   await page.screenshot({ path: join(evidence, 'dev-card-styled.png'), fullPage: true });
+  await page.locator('details.drpp-accordion > summary').filter({ hasText: /^Privacy Settings$/ }).click();
   await page.locator('#privacy-hideTitles').check();
   const privacySave = page.waitForResponse(response => response.url().endsWith('/api/settings') && response.request().method() === 'PUT');
   await page.locator('#privacy-save').click();
