@@ -50,3 +50,36 @@ test("a WebUI restart failure is reported", async () => {
   assert.equal(result.error.message, "port busy");
   await assert.rejects(runTraySession({}), /required/);
 });
+
+test("an outside quit request closes the app and ends the tray (#780)", async () => {
+  const events = [];
+  const quitRequests = createRestartRequests();
+  let trayStopped = 0;
+  const session = runTraySession({
+    app: fakeApp("a", events),
+    runTray: () => new Promise(() => {}),
+    restartApp: async () => { throw new Error("no"); },
+    quitRequests,
+    stopTray: async () => { trayStopped += 1; },
+  });
+  quitRequests.request();
+  const result = await session;
+  assert.equal(result.outcome, "quit");
+  assert.deepEqual(events, ["close a"]);
+  assert.equal(trayStopped, 1);
+});
+
+test("an outside quit without a stopTray hook still closes the app", async () => {
+  const events = [];
+  const quitRequests = createRestartRequests();
+  const session = runTraySession({
+    app: fakeApp("a", events),
+    runTray: () => new Promise(() => {}),
+    restartApp: async () => { throw new Error("no"); },
+    quitRequests,
+  });
+  quitRequests.request();
+  const result = await session;
+  assert.equal(result.outcome, "quit");
+  assert.deepEqual(events, ["close a"]);
+});
