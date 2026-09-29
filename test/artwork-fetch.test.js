@@ -161,3 +161,19 @@ test("a separate local listener never receives redirected artwork credentials (#
   }
 });
 
+
+test("refuses a non-streaming artwork body that declares no length", async () => {
+  let read = false;
+  await assert.rejects(
+    fetchArtwork(
+      { url: "https://media.example.test/image", headers: {} },
+      { maxBytes: 1024, fetchImpl: async () => ({
+        ok: true, status: 200, statusText: "OK",
+        headers: { get(name) { return name === "content-type" ? "image/png" : null; } },
+        async arrayBuffer() { read = true; return new Uint8Array(1_048_576).buffer; },
+      }) },
+    ),
+    /maximum byte size/,
+  );
+  assert.equal(read, false);
+});
