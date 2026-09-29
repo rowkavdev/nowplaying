@@ -11,12 +11,15 @@ import { createWindowsCredentialAdapter } from "../src/windows-credential-adapte
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { parseStartArgs } from "../src/first-run.js";
 import { createRestartRequests, runTraySession } from "../src/tray-session.js";
+import { requestLocalShutdown, shutdownToken, STOP_EXIT } from "../src/windows-shutdown.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
 
 // Declared before any top-level await so the start path below can use it.
 let recovery;
 const restartRequests = createRestartRequests();
+const quitRequests = createRestartRequests();
+let trayChild = null;
 
 const command = process.argv[2] ?? "help";
 
@@ -27,6 +30,11 @@ if (command === "--version" || command === "version") {
   try { manifest = JSON.parse(await readFile(resolve("app", "package.json"), "utf8")); }
   catch { console.error("nowplaying: cannot read app/package.json - the install looks incomplete. Reinstall NowPlaying."); process.exit(1); }
   console.log(manifest.version);
+} else if (command === "stop") {
+  // Ask the running app to quit (the installer calls this before replacing
+  // files, #780). Exit codes: 0 stopped, 3 not running - both let setup
+  // continue - 4 the running app refused, 2 a usage error.
+  process.exitCode = await stop();
 } else if (command === "start") {
   const logger = createAppLogger();
   await logger.event("startup", "starting");
@@ -75,6 +83,8 @@ if (command === "--version" || command === "version") {
     const session = await runTraySession({
       app,
       runTray: (current) => runTrayProcess(`${current.url}/`),
+      quitRequests,
+      stopTray,
       restartApp: async () => { await recovery?.retryNormal(); return guardedStart(configFile); },
       onRestart: (current) => { app = current; },
       restartRequests,
@@ -94,6 +104,37 @@ if (command === "--version" || command === "version") {
 }
 
 // %LOCALAPPDATA% may be absent in a damaged profile or service context.
+async function stop() {
+  // Read-only: stop never creates the device ID file.
+  let deviceId;
+  try {
+    deviceId = (await readFile(resolve(dirname(windowsDataPaths().configFile), "device-id"), "utf8")).trim();
+  } catch {
+    return STOP_EXIT.notRunning;
+  }
+  let token;
+  try {
+    token = shutdownToken(deviceId);
+  } catch {
+    return STOP_EXIT.unavailable;
+  }
+  let port;
+  try {
+    port = resolveAppPort();
+  } catch (error) {
+    console.error(`nowplaying: ${error.message}`);
+    return 2;
+  }
+  const outcome = await requestLocalShutdown({ port, token });
+  if (outcome === "stopped") {
+    console.log("NowPlaying stopped.");
+    return STOP_EXIT.stopped;
+  }
+  if (outcome === "not-running") return STOP_EXIT.notRunning;
+  console.error("nowplaying: the running app did not accept the stop request.");
+  return STOP_EXIT.unavailable;
+}
+
 function windowsDataPaths() {
   try { return { configFile: windowsConfigPath({ localAppData: process.env.LOCALAPPDATA }) }; }
   catch {
@@ -132,7 +173,10 @@ async function startFromWebConfig(configFile, { safeMode = false } = {}) {
   try { build = JSON.parse(await readFile(resolve("app", "build-info.json"), "utf8")); } catch { build = null; }
   const packageType = existsSync(resolve("unins000.exe")) ? "installer" : "portable";
   const deviceId = await loadOrCreateDeviceId(resolve(dirname(configFile), "device-id"));
-  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, deviceId, onConfigured: () => {
+  // The quit request travels through the tray session so a stop closes the
+  // app exactly like a tray Quit, then ends the tray process.
+  const shutdown = { token: shutdownToken(deviceId), request: () => quitRequests.request() };
+  const app = await startAppFromConfig({ configFile, credentialStore, hostedCredentials, deviceId, shutdown, onConfigured: () => {
     if (process.platform === "win32" && existsSync(resolve("nowplaying.exe")) && !process.argv.includes("--no-tray")) restartRequests.request();
     else void restartWithoutTray(configFile);
   }, port: resolveAppPort(), version: typeof manifest.version === "string" ? manifest.version : null, build, packageType, safeMode, startup: windowsStartup(), logFile: process.env.LOCALAPPDATA ? windowsLogPath({ localAppData: process.env.LOCALAPPDATA }) : null });
@@ -149,9 +193,19 @@ function runTrayProcess(dashboardUrl) {
   const args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", scriptPath, "-DashboardUrl", dashboardUrl];
   return new Promise((resolvePromise, reject) => {
     const child = spawn("powershell.exe", args, { shell: false, windowsHide: true, stdio: "ignore" });
+    trayChild = child;
     child.on("error", reject);
-    child.on("close", (code) => resolvePromise(code));
+    child.on("close", (code) => {
+      if (trayChild === child) trayChild = null;
+      resolvePromise(code);
+    });
   });
+}
+
+// The tray process does not watch the app's health, so an outside quit
+// (stop request, #780) ends it explicitly once the app has closed.
+async function stopTray() {
+  trayChild?.kill();
 }
 
 let restartingWithoutTray = false;
