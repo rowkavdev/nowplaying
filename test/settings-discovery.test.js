@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { discoverSettingsServers, subnetCandidates } from "../src/settings-discovery.js";
-const reply = (text) => ({ status: 200, headers: { get: () => null }, text: async () => text });
+const reply = (text) => ({ status: 200, headers: { get: (name) => name === "content-length" ? String(Buffer.byteLength(text)) : null }, text: async () => text });
 
 test("does not enumerate interfaces; scans only an explicitly selected private /24", () => {
   assert.deepEqual(subnetCandidates(), []);
@@ -72,3 +72,4 @@ test("local discovery failure is reported instead of looking like an empty scan"
   assert.deepEqual(servers, []);
   assert.deepEqual(failures, [{ provider: "local_discovery", baseUrl: "http://127.0.0.1", reason: "discovery_failed" }]);
 });
+
