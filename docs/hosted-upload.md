@@ -61,3 +61,9 @@ Disconnecting a PC deletes that PC's state and device key on the service, and re
 - Config: `hosted: { "enabled": true, "url": "https://..." }` in `config.json`. `url` is optional and must be HTTPS.
 - Payload: built by `projectHostedState` in `src/hosted-projection.js`; tests in `test/hosted-projection.test.js` check that fields turned off for the card never reach the wire.
 - Client: `src/hosted-uploader.js`; GitHub sign-in (device flow): `src/hosted-signin.js`. Service and schema: [hosted/README.md](../hosted/README.md). Design: #140.
+
+## Hosted credential destination
+
+New device credentials record the service URL that issued them, including its base path. Uploads, device management and revocation reject a credential bound to another destination before sending it. Old credentials without that field require sign-in again; the app does not guess their issuing service.
+
+If switching services fails while saving Settings, the new credential stays bound to the new service and cannot be sent to the old one. Polling the completed sign-in again retries the Settings save without repeating registration. After a restart, sign in to the intended service again if the destination change did not save.

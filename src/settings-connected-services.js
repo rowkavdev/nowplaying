@@ -59,7 +59,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           // A credential commit and its destination update are one transaction:
           // do not replace this owner while its durable save is in progress.
           owner.committing = true;
-          try { return await credentials.save(...args); }
+          try { return await credentials.save({ ...args[0], baseUrl: normalizeHostedUrl(options.baseUrl) }); }
           catch (error) { owner.committing = false; throw error; }
         },
       } });
@@ -88,7 +88,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       let owner = activeHostedFlow;
       if (path === "/api/setup/hosted/signin") {
         let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
-        if (owner?.committing && input.action === "poll") return json(200, { status: "pending" });
+        if (owner?.committing && !owner.result && input.action === "poll") return json(200, { status: "pending" });
         if (input.action === "start") {
           if (owner && (owner.committing || elapsedNow() < owner.expiresAt)) return json(409, { error: "signin_in_progress" });
           // Ownership changes before the first await, invalidating old saves.
@@ -96,8 +96,13 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           activeHostedFlow = owner;
         }
       }
+      let retryResult = null;
+      if (path === "/api/setup/hosted/signin" && request.method === "POST") {
+        let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+        if (input.action === "poll" && Object.keys(input).length === 1 && !new URL(request.url, "http://127.0.0.1").search) retryResult = owner?.result;
+      }
       let result;
-      try { result = await hosted(request); }
+      try { result = retryResult ?? await hosted(request); }
       catch {
         if (activeHostedFlow !== owner) return json(200, { status: "superseded" });
         // An older concurrent poll may throw while this owner is saving.
@@ -114,9 +119,12 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           // Polls already in flight must not release a durable commit either.
           if (owner?.committing && value.status !== "signed_in") return json(200, { status: "pending" });
           if (value.status === "signed_in") {
+            // Keep the durable credential's owner and completed auth result on
+            // config failure. A poll retries only persistence, not registration.
+            owner.result = result;
             try { await saveHosted(owner?.url ?? DEFAULT_HOSTED_URL); }
             catch { return json(500, { error: "hosted_save_failed" }); }
-            finally { if (activeHostedFlow === owner) activeHostedFlow = null; }
+            if (activeHostedFlow === owner) activeHostedFlow = null;
           } else if (value.status === "started") {
             const seconds = Number(value.expiresIn);
             owner.expiresAt = elapsedNow() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);

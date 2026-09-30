@@ -26,6 +26,13 @@ export function normalizeHostedUrl(value = DEFAULT_HOSTED_URL) {
   return url.origin + url.pathname.replace(/\/+$/, "");
 }
 
+// Credentials are usable only at their issuing service, including its path.
+// Unbound legacy keys need sign-in again; guessing an owner can disclose a key.
+export function hostedCredentialMatches(value, baseUrl) {
+  try { return typeof value?.baseUrl === 'string' && normalizeHostedUrl(value.baseUrl) === normalizeHostedUrl(baseUrl); }
+  catch { return false; }
+}
+
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 // Anonymous per-PC card ({ cardId }) or signed in with GitHub ({ login }).
 function validRegistration(value) {
@@ -90,10 +97,11 @@ export function createHostedUploader({
     // registration only after the durable credential save has succeeded.
     registering = (async () => {
       const stored = await credentials.load();
+      if (stored && !hostedCredentialMatches(stored, origin)) throw new HostedUploadError("credential_destination_mismatch");
       if (validRegistration(stored)) return (registration = { ...stored });
       const created = await request("/api/register");
       if (!validRegistration(created)) throw new HostedUploadError("invalid_registration");
-      const device = { cardId: created.cardId, deviceId: created.deviceId, token: created.token };
+      const device = { cardId: created.cardId, deviceId: created.deviceId, token: created.token, baseUrl: origin };
       await credentials.save(device);
       registration = device;
       return device;
@@ -190,7 +198,7 @@ export function createHostedUploader({
         const failed = registration?.token;
         const stored = await credentials.load().catch(() => null);
         if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
-        if (validRegistration(stored) && stored.token !== failed) {
+        if (validRegistration(stored) && hostedCredentialMatches(stored, origin) && stored.token !== failed) {
           registration = { ...stored }; lastSent = null; failures = 0; retryAt = 0;
           status = { ...status, state: "retrying", lastError: code };
           return { sent: false, reason: "credentials_changed" };
@@ -202,7 +210,7 @@ export function createHostedUploader({
         if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
         if (!cleared) {
           const replacement = await credentials.load().catch(() => null);
-          if (validRegistration(replacement) && replacement.token !== failed) {
+          if (validRegistration(replacement) && hostedCredentialMatches(replacement, origin) && replacement.token !== failed) {
             registration = { ...replacement }; lastSent = null; failures = 0; retryAt = 0;
             status = { ...status, state: "retrying", lastError: code };
             return { sent: false, reason: "credentials_changed" };
@@ -223,6 +231,7 @@ export function createHostedUploader({
     ++pushGeneration;
     const stored = await credentials.load();
     pending = null; lastSent = null;
+    if (stored && !hostedCredentialMatches(stored, origin)) throw new HostedUploadError("credential_destination_mismatch");
     if (validRegistration(stored)) {
       try { await request("/api/revoke", { method: "DELETE", token: stored.token }); }
       catch (error) {

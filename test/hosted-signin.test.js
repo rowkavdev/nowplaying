@@ -48,13 +48,13 @@ test("device flow: code, pending, slow down, then signed in; GitHub token never 
   assert.equal(gh.calls.filter((c) => c.url.includes("access_token")).length, 3);
   const auth = gh.calls.find((c) => c.url.endsWith("/api/auth/github"));
   assert.deepEqual(auth.body, { githubToken: "gho_secretsecret", deviceName: "Desk" });
-  assert.deepEqual({ ...(await credentials.load()) }, { login: "octo", deviceId: DEV, token: TOK });
+  assert.deepEqual({ ...(await credentials.load()) }, { login: "octo", deviceId: DEV, token: TOK, baseUrl: "https://nowplaying-hosted.vercel.app" });
   for (const v of adapter.m.values()) assert.ok(!v.includes("gho_secretsecret"));
 });
 
 test("an old per-PC key is handed over so its card link keeps working", async () => {
   const credentials = createHostedCredentials({ adapter: memAdapter() });
-  await credentials.save({ cardId: "c".repeat(22), deviceId: DEV, token: "o".repeat(43) });
+  await credentials.save({ cardId: "c".repeat(22), deviceId: DEV, token: "o".repeat(43), baseUrl: "https://h.example" });
   const gh = github({ tokenReplies: [{ access_token: "gho_x0000000000" }] });
   let clock = 0;
   const s = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl: gh.fetchImpl, now: () => clock });
@@ -98,7 +98,7 @@ test("repeat client sign-in replaces the saved device through the hosted service
 
 test("failed previous-device replacement leaves the saved credential intact", async () => {
   const credentials = createHostedCredentials({ adapter: memAdapter() });
-  const old = { login: "octo", deviceId: DEV, token: TOK };
+  const old = { login: "octo", deviceId: DEV, token: TOK, baseUrl: "https://h.example" };
   await credentials.save(old);
   const gh = github({ tokenReplies: [{ access_token: "gho_secretsecret" }] });
   const fetchImpl = async (url, init) => url.endsWith("/api/auth/github")
@@ -127,7 +127,7 @@ test("denied, expired and not configured", async () => {
 
 test("a running uploader picks up a new key after a 401 instead of wiping it", async () => {
   const credentials = createHostedCredentials({ adapter: memAdapter() });
-  await credentials.save({ cardId: "c".repeat(22), deviceId: DEV, token: "o".repeat(43) });
+  await credentials.save({ cardId: "c".repeat(22), deviceId: DEV, token: "o".repeat(43), baseUrl: "https://h.example" });
   let revoked = false;
   const fetchImpl = async (url, init) => {
     if (revoked && init.headers.authorization === `Bearer ${"o".repeat(43)}`) return streamJsonFixture({ ok: false, status: 401, json: async () => ({ error: "unauthorized" }) });
@@ -136,12 +136,12 @@ test("a running uploader picks up a new key after a 401 instead of wiping it", a
   const up = createHostedUploader({ baseUrl: "https://h.example", credentials, fetchImpl, now: () => 1_800_000_000_000 });
   const presence = { state: "playing", kind: "track", title: "A", subtitle: "B" };
   await up.push(presence); // registers with the old key in memory
-  await credentials.save({ login: "octo", deviceId: DEV, token: TOK }); // setup signed in meanwhile
+  await credentials.save({ login: "octo", deviceId: DEV, token: TOK, baseUrl: "https://h.example" }); // setup signed in meanwhile
   revoked = true; // and the service revoked the old key
   assert.equal((await up.push({ ...presence, title: "C" })).reason, "credentials_changed");
   assert.equal((await up.push({ ...presence, title: "D" })).sent, true);
   assert.equal(await up.cardUrl(), "https://h.example/u/octo.svg");
-  assert.deepEqual({ ...(await credentials.load()) }, { login: "octo", deviceId: DEV, token: TOK });
+  assert.deepEqual({ ...(await credentials.load()) }, { login: "octo", deviceId: DEV, token: TOK, baseUrl: "https://h.example" });
 });
 
 test("setup signin route: start then poll, needs a credential store", async () => {
@@ -208,8 +208,8 @@ test('stale 401 recovery cannot delete a sign-in saved after its old-key snapsho
   const adapter = memAdapter();
   const credentials = createHostedCredentials({ adapter });
   const signInCredentials = createHostedCredentials({ adapter });
-  const old = { cardId: 'c'.repeat(22), deviceId: DEV, token: 'o'.repeat(43) };
-  const fresh = { login: 'octo', deviceId: DEV, token: TOK };
+  const old = { cardId: 'c'.repeat(22), deviceId: DEV, token: 'o'.repeat(43), baseUrl: 'https://h.example' };
+  const fresh = { login: 'octo', deviceId: DEV, token: TOK, baseUrl: 'https://h.example' };
   await credentials.save(old);
   let loads = 0;
   const store = { ...credentials, load: async () => {

@@ -418,3 +418,28 @@ test("already-revoked hosted key is cleared without re-registering", async () =>
   assert.equal(env.stored(), null);
   assert.equal(env.calls.filter((c) => c.url.endsWith("/api/register")).length, 1);
 });
+
+test('#834 destination mismatch and unbound legacy keys never upload, revoke or register', async () => {
+  for (const baseUrl of [undefined, 'https://other.example', BASE + '/other', 'invalid']) {
+    const device = { login: 'fixture', deviceId: 'd'.repeat(22), token: 't'.repeat(24), ...(baseUrl ? { baseUrl } : {}) };
+    let calls = 0, clears = 0;
+    const up = createHostedUploader({ baseUrl: BASE, credentials: { load: async () => device, save: async () => {}, clear: async () => { clears++; } }, fetchImpl: async () => { calls++; throw Error('must not send'); } });
+    assert.equal((await up.push(track())).reason, 'credential_destination_mismatch');
+    await assert.rejects(up.cardUrl(), { code: 'credential_destination_mismatch' });
+    await assert.rejects(up.disconnect(), { code: 'credential_destination_mismatch' });
+    assert.equal(calls, 0); assert.equal(clears, 0);
+  }
+});
+
+test('#834 401 recovery does not adopt a replacement key issued by another service', async () => {
+  const old = { login: 'old', deviceId: 'd'.repeat(22), token: 'a'.repeat(24), baseUrl: BASE };
+  const next = { ...old, token: 'b'.repeat(24), baseUrl: 'https://other.example' };
+  let stored = old; const sent = [];
+  const up = createHostedUploader({ baseUrl: BASE, credentials: { load: async () => stored, save: async () => {}, clear: async () => {}, clearIfToken: async () => false }, fetchImpl: async (_url, init) => {
+    sent.push(init.headers.authorization); stored = next;
+    return Response.json({ error: 'unauthorized' }, { status: 401 });
+  } });
+  assert.equal((await up.push(track())).reason, 'unauthorized');
+  assert.equal((await up.push(track({ title: 'Next' }))).reason, 'unauthorized');
+  assert.deepEqual(sent, ['Bearer ' + old.token]); assert.equal(stored, next);
+});
