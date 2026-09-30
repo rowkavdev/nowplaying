@@ -15,6 +15,9 @@ const PROVIDERS = new Set(["plex", "jellyfin", "emby", "navidrome"]);
 export function createSettingsServers({ file, credentialStore, deviceId, version, onConfigured = async () => {}, discover = discoverSettingsServers, signIn, fileQueue, beforeRestart = async () => {}, prepareConfig } = {}) {
   if (!file || typeof credentialStore?.save !== "function" || typeof credentialStore?.read !== "function") throw new TypeError("server management needs config file and credential store");
   let queue = Promise.resolve();
+  let removalSequence = 0;
+  const removals = new Map();
+  const identityKey = (provider, id) => JSON.stringify([provider, id]);
   let scan = null;
   let cached = null;
   let configured = false;
@@ -52,7 +55,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     try { await writeFile(temp, body, { mode: 0o600, flag: "wx" }); await rename(temp, file); }
     catch (error) { await rm(temp, { force: true }).catch(() => {}); throw error; }
   }
-  const signin = createSetupSignInHandler({ credentialStore, deviceId, version, requireServerUrl: true, ...(signIn ? { signIn } : {}),
+  const signin = createSetupSignInHandler({ credentialStore, deviceId, version, requireServerUrl: true, commitQueue: serial, ...(signIn ? { signIn } : {}),
     beforeSignIn: async ({ provider, serverUrl }) => serial(async () => {
       const existing = await read();
       // At capacity allow reconnecting to an existing server address, then
@@ -61,14 +64,16 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.serverUrl === serverUrl)) {
         throw new SignInError("too_many_servers");
       }
+      const started = removalSequence;
+      return result => (removals.get(identityKey(result.provider, result.identity.id)) ?? 0) <= started;
     }),
-    beforeSignedIn: async ({ provider, identity }) => serial(async () => {
+    beforeSignedIn: async ({ provider, identity }) => {
       const existing = await read();
       if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.identity.id === identity.id)) {
         throw new SignInError("too_many_servers");
       }
-    }),
-    onSignedIn: async ({ provider, identity, serverUrl }) => serial(async () => {
+    },
+    onSignedIn: async ({ provider, identity, serverUrl }) => {
       if (!PROVIDERS.has(provider) || !serverUrl) throw new TypeError("invalid server");
       const existing = await read();
       const servers = [...(existing?.servers ?? [])].map((s) => ({ provider: s.provider, serverUrl: s.serverUrl, identity: s.identity }));
@@ -86,7 +91,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       prepared?.committed?.();
       configured = true;
       scheduleRestart();
-    }),
+    },
   });
   async function handler(request = {}) {
     const url = new URL(request.url || "/", "http://127.0.0.1");
@@ -140,6 +145,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       if (!servers.length) return json(409, { error: "last_server" });
       try { await save(servers, existing); }
       catch { return json(500, { error: "save_failed" }); }
+      removals.set(identityKey(input.provider, input.id), ++removalSequence);
       // Config is committed first: a keychain failure must not leave the app
       // using a credential for a server the user has removed.
       let tokenRemoved = false;

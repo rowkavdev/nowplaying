@@ -305,3 +305,50 @@ test('#816 current first-run entry commits staged Spotify and hosted with the fi
     assert.equal(config.servers[0].identity.id, 'media');
   } finally { await app.close(); }
 });
+
+for (const provider of ['navidrome', 'emby', 'plex', 'jellyfin']) {
+  test(`#830 removal wins over pending ${provider} sign-in without reviving credentials`, async () => {
+    const file = await fixture();
+    await writeFile(file, serializeSetupConfig({ servers: [
+      { provider: 'jellyfin', serverUrl: 'http://127.0.0.1:8096', identity: { id: 'keep', displayName: 'Keep' } },
+      { provider, serverUrl: 'http://127.0.0.1:4533', identity: { id: 'remove', displayName: 'Remove' } },
+    ], credentialStored: true }));
+    const key = ref => `${ref.provider}:${ref.identityId}`;
+    const values = new Map([[`${provider}:remove`, 'old-token']]);
+    let release, entered;
+    const gate = new Promise(resolve => { release = resolve; });
+    const ready = new Promise(resolve => { entered = resolve; });
+    const result = { status: 'signed_in', provider, identity: { id: 'remove', displayName: 'Remove' }, secret: 'new-token' };
+    const finish = async () => { entered(); await gate; return result; };
+    const mgmt = createSettingsServers({ file, deviceId, credentialStore: {
+      read: async ref => values.get(key(ref)) ?? null,
+      save: async (ref, secret) => values.set(key(ref), secret),
+      remove: async ref => values.delete(key(ref)),
+    }, signIn: {
+      signInNavidrome: finish, signInEmby: finish,
+      startPlexPin: async () => ({ pinId: 1, authUrl: 'https://app.plex.tv/auth' }), pollPlexPin: finish,
+      startJellyfinQuickConnect: async () => ({ secret: 'qc', code: '123' }), pollJellyfinQuickConnect: finish,
+    } });
+    const req = body => mgmt.handler(post('/api/setup/signin', body));
+    let attempt;
+    if (['plex', 'jellyfin'].includes(provider)) {
+      const started = await req({ action: 'start', provider, baseUrl: 'http://127.0.0.1:4533' });
+      attempt = req({ action: 'poll', flowId: JSON.parse(started.body).flowId });
+    } else attempt = req({ action: 'password', provider, baseUrl: 'http://127.0.0.1:4533', username: 'remove', password: 'pw' });
+    await ready;
+    const removed = await mgmt.handler({ method: 'DELETE', url: '/api/settings/servers', body: JSON.stringify({ provider, id: 'remove' }) });
+    assert.equal(removed.status, 200);
+    release();
+    assert.equal((await attempt).status, 410);
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).servers.map(s => s.identity.id), ['keep']);
+    assert.equal(values.has(`${provider}:remove`), false);
+    // A new explicit sign-in after removal is still allowed.
+    const again = ['plex', 'jellyfin'].includes(provider)
+      ? await req({ action: 'poll', flowId: JSON.parse((await req({ action: 'start', provider, baseUrl: 'http://127.0.0.1:4533' })).body).flowId })
+      : await req({ action: 'password', provider, baseUrl: 'http://127.0.0.1:4533', username: 'remove', password: 'pw' });
+    assert.equal(again.status, 200);
+    assert.equal(values.get(`${provider}:remove`), 'new-token');
+    assert.equal((await mgmt.handler({ method: 'DELETE', url: '/api/settings/servers', body: JSON.stringify({ provider, id: 'remove' }) })).status, 200);
+    assert.equal(values.has(`${provider}:remove`), false);
+  });
+}

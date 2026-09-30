@@ -22,7 +22,7 @@ export const DEFAULT_SIGNIN = Object.freeze({
 export function createSetupSignInHandler({
   credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, elapsedNow = () => performance.now(), onSignedIn = async () => {},
   flowTtlMs = 10 * 60_000, maxFlows = 4, newFlowId = () => randomBytes(18).toString("base64url"),
-  requireServerUrl = false, beforeSignIn = async () => {}, beforeSignedIn = async () => {},
+  requireServerUrl = false, beforeSignIn = async () => {}, beforeSignedIn = async () => {}, commitQueue = job => job(),
 } = {}) {
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) throw new TypeError("deviceId is invalid");
@@ -39,7 +39,7 @@ export function createSetupSignInHandler({
   function finish(result, serverUrl, flowIsActive = () => true, beginCommit = () => {}) {
     const key = JSON.stringify([result.provider, result.identity.id]);
     const prior = writeChains.get(key) ?? Promise.resolve();
-    const turn = prior.then(() => finishCommit(result, serverUrl, flowIsActive, beginCommit));
+    const turn = prior.then(() => commitQueue(() => finishCommit(result, serverUrl, flowIsActive, beginCommit)));
     const settled = turn.then(() => {}, () => {});
     writeChains.set(key, settled);
     completing.add(turn);
@@ -116,18 +116,18 @@ export function createSetupSignInHandler({
       // app will read from afterwards, remembered with the account.
       if (requireServerUrl && input.baseUrl === undefined) return json(400, { error: "invalid_server_url" });
       const serverUrl = input.baseUrl === undefined ? undefined : normalizeServerUrl(input.baseUrl);
-      await beforeSignIn({ provider: "plex", serverUrl });
+      const isCurrent = await beforeSignIn({ provider: "plex", serverUrl });
       const pin = await signIn.startPlexPin({ clientId: deviceId });
       if (epoch !== generation) return json(410, { error: "expired" });
-      flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: elapsedNow() + flowTtlMs });
+      flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, isCurrent, expiresAt: elapsedNow() + flowTtlMs });
       return json(200, { status: "pending", flowId, provider: "plex", authUrl: pin.authUrl });
     }
     if (!text(input.baseUrl)) return json(400, { error: "invalid_request" });
     const serverUrl = normalizeServerUrl(input.baseUrl);
-    await beforeSignIn({ provider: "jellyfin", serverUrl });
+    const isCurrent = await beforeSignIn({ provider: "jellyfin", serverUrl });
     const qc = await signIn.startJellyfinQuickConnect({ baseUrl: input.baseUrl, deviceId, version });
     if (epoch !== generation) return json(410, { error: "expired" });
-    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, secret: qc.secret, expiresAt: elapsedNow() + flowTtlMs });
+    flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, isCurrent, secret: qc.secret, expiresAt: elapsedNow() + flowTtlMs });
     return json(200, { status: "pending", flowId, provider: "jellyfin", code: qc.code });
   }
 
@@ -156,7 +156,7 @@ export function createSetupSignInHandler({
     }
     if (result.status !== "signed_in") { flow.polling = false; return json(200, { status: "pending" }); }
     try { return await finish(result, flow.serverUrl,
-      () => flows.get(input.flowId) === flow && flow.expiresAt > elapsedNow(),
+      () => flows.get(input.flowId) === flow && flow.expiresAt > elapsedNow() && (!flow.isCurrent || flow.isCurrent(result)),
       () => { flow.committing = true; }); }
     finally { flow.polling = false; if (flows.get(input.flowId) === flow) flows.delete(input.flowId); }
   }
@@ -166,11 +166,11 @@ export function createSetupSignInHandler({
     if (!text(input.baseUrl) || !text(input.username) || typeof input.password !== "string" || input.password.length > MAX_FIELD) return json(400, { error: "invalid_request" });
     const epoch = generation;
     const serverUrl = normalizeServerUrl(input.baseUrl);
-    await beforeSignIn({ provider: input.provider, serverUrl });
+    const isCurrent = await beforeSignIn({ provider: input.provider, serverUrl });
     const result = input.provider === "emby"
       ? await signIn.signInEmby({ baseUrl: input.baseUrl, username: input.username, password: input.password, deviceId, version })
       : await signIn.signInNavidrome({ baseUrl: input.baseUrl, username: input.username, password: input.password });
-    return finish(result, serverUrl, () => epoch === generation);
+    return finish(result, serverUrl, () => epoch === generation && (!isCurrent || isCurrent(result)));
   }
 
   async function cancel(input) {
