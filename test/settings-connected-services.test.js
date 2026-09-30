@@ -253,3 +253,48 @@ test("hosted credential commit keeps its destination owner through code expiry (
   release(); await finishing;
   assert.deepEqual(JSON.parse(await readFile(file, "utf8")).hosted, { enabled: true, url: "https://host-a.example" });
 });
+
+
+test("real concurrent hosted slow_down failure retains a committing owner (#808 review)", async () => {
+  const file = await configFile();
+  let clock = 0, releaseSave, enterSave, releasePoll, enterPoll, polls = 0;
+  const saving = new Promise(resolve => { enterSave = resolve; });
+  const saveGate = new Promise(resolve => { releaseSave = resolve; });
+  const polling = new Promise(resolve => { enterPoll = resolve; });
+  const pollGate = new Promise(resolve => { releasePoll = resolve; });
+  const svc = createSettingsConnectedServices({ file, elapsedNow: () => clock, credentialStore: { save: async () => {} },
+    hostedCredentials: { load: async () => null, save: async () => { enterSave(); await saveGate; } },
+    hostedSignIn: options => createHostedGitHubSignIn({ ...options, clientId: "fixture", now: () => clock }),
+    fetchImpl: async url => {
+      if (url.endsWith("/device/code")) return Response.json({ device_code: "fixture", user_code: "FIXTURE", verification_uri: "https://github.com/login/device", expires_in: 120, interval: 5 });
+      if (url.endsWith("/access_token")) {
+        if (++polls === 1) { enterPoll(); await pollGate; return Response.json({ error: "slow_down" }); }
+        return Response.json({ access_token: "fixture" });
+      }
+      if (url.endsWith("/api/auth/github")) return Response.json({ login: "fixture", deviceId: "a".repeat(22), token: "a".repeat(24) });
+      throw new Error(`unexpected fixture URL ${url}`);
+    } });
+  const req = body => svc.handler(post("/api/setup/hosted/signin", body));
+  await req({ action: "start", url: "https://host-a.example" });
+  clock = 5000; const old = req({ action: "poll" }); await polling;
+  clock = 10000; const commit = req({ action: "poll" }); await saving;
+  releasePoll(); await old;
+  clock = 121000;
+  assert.equal((await req({ action: "start", url: "https://host-b.example" })).status, 409);
+  releaseSave();
+  assert.equal(JSON.parse((await commit).body).status, "signed_in");
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).hosted, { enabled: true, url: "https://host-a.example" });
+});
+
+
+test("failed hosted durable save releases the owner for retry (#808 review)", async () => {
+  const file = await configFile();
+  const svc = createSettingsConnectedServices({ file, credentialStore: { save: async () => {} },
+    hostedCredentials: { load: async () => null, save: async () => { throw new Error("fixture save failed"); } },
+    hostedSignIn: ({ credentials }) => ({ start: async () => ({ status: "started", expiresIn: 120 }),
+      poll: async () => { await credentials.save({ token: "fixture" }); return { status: "signed_in" }; } }) });
+  const req = body => svc.handler(post("/api/setup/hosted/signin", body));
+  await req({ action: "start", url: "https://host-a.example" });
+  assert.equal((await req({ action: "poll" })).status, 500);
+  assert.equal(JSON.parse((await req({ action: "start", url: "https://host-b.example" })).body).status, "started");
+});
