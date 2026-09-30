@@ -178,3 +178,17 @@ test("default Discord artwork clock survives a backward Date.now correction (#72
     Date.now = originalNow;
   }
 });
+
+test('#813 clear prevents an old lookup hit or miss from filling the refreshed cache', async () => {
+  for (const oldCover of [null, 'https://cdn.example.com/old.png']) {
+    let release, enter, calls = 0;
+    const held = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { enter = resolve; });
+    const resolver = createDiscordArtworkResolver({ metadataLookup: true, lookup: async () => { if (++calls === 1) { enter(); await held; return oldCover; } return 'https://cdn.example.com/new.png'; } });
+    const presence = { state: 'playing', kind: 'track', title: 'Fixture', artist: 'Fixture' };
+    const old = resolver.resolve(presence); await started;
+    resolver.clear(); release(); await old;
+    const next = await resolver.resolve(presence);
+    assert.equal(calls, 2); assert.equal(next.image, 'https://cdn.example.com/new.png'); assert.equal(next.cached, false);
+  }
+});
