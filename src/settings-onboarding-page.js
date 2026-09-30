@@ -31,7 +31,7 @@ load();
 export const SERVICE_SCRIPT = `"use strict";
 (() => {
 const $ = (id) => document.getElementById(id); if (!$('services-section')) return;
-let spotifyFlow=null, spotifyGeneration=0, hostedFlow=false;
+let spotifyFlow=null, spotifyGeneration=0, hostedFlow=false, hostedGeneration=0, hostedStarting=false, hostedExpiresAt=0;
 const say=(id,text)=>{ $(id).textContent=text; };
 async function api(path,method='GET',body) { const r=await fetch(path,{method,cache:'no-store',headers:{Accept:'application/json',...(method==='POST'?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})}); const d=await r.json().catch(()=>({})); if (!r.ok) throw Error(d.error||d.status||'request_failed'); return d; }
 async function load() { try { const s=await api('/api/settings/services'); say('spotify-account',s.spotify ? 'Connected as '+s.spotify.name : 'Not connected'); $('spotify-remove').hidden=!s.spotify; if(s.spotify) $('spotify-client-id').value=s.spotify.clientId; say('hosted-account',s.hosted.login ? 'Signed in as '+s.hosted.login : 'Not signed in'); $('hosted-address').value=s.hosted.url; } catch { say('spotify-service-result','Could not load connected services.'); } }
@@ -40,7 +40,41 @@ async function pollSpotify(generation){ if(generation!==spotifyGeneration||!spot
 $('spotify-remove').addEventListener('click',async()=>{if(!confirm('Disconnect Spotify from this card?'))return;try{const d=await api('/api/settings/services','POST',{action:'remove-spotify'});say('spotify-service-result',d.tokenRemoved ? 'Spotify disconnected and the saved token was removed.' : 'Spotify disconnected from the card, but the saved token could not be deleted from this computer. Remove the nowplaying Spotify credential in your operating system credential manager.');await load();}catch(e){say('spotify-service-result','Could not disconnect Spotify: '+e.message);} });
 $('hosted-preview').addEventListener('toggle',async(e)=>{if(!e.target.open)return;try{const p=await api('/api/setup/hosted/preview'); $('hosted-sent').replaceChildren(...p.sent.map((x)=>{const li=document.createElement('li');li.textContent=x.label;return li;}));say('hosted-withheld','Always sent: '+p.alwaysSent.join(', ')+'. Not sent: '+p.withheld.map(x=>x.label).concat(p.neverSent).join(', '));}catch{say('hosted-withheld','Preview unavailable.');}});
 $('hosted-check').addEventListener('click',async()=>{try{const d=await api('/api/setup/hosted/check','POST',{url:$('hosted-address').value.trim()});say('hosted-service-result',d.ok?'NowPlaying card service is reachable.':'Service check failed: '+d.reason);}catch(e){say('hosted-service-result','Service check failed: '+e.message);} });
-$('hosted-connect').addEventListener('click',async()=>{try{const d=await api('/api/setup/hosted/signin','POST',{action:'start',url:$('hosted-address').value.trim()});if(d.status!=='started')throw Error(d.status);hostedFlow=true;const a=document.createElement('a');a.href=d.verificationUri;a.target='_blank';a.rel='noopener';a.textContent=d.verificationUri;const out=$('hosted-service-result');out.replaceChildren('Open ',a,' and enter code '+d.userCode+'.');setTimeout(pollHosted,Math.max(5,Number(d.interval)||5)*1000);}catch(e){say('hosted-service-result','GitHub sign-in could not start: '+e.message);} });
-async function pollHosted(){if(!hostedFlow)return;try{const d=await api('/api/setup/hosted/signin','POST',{action:'poll'});if(d.status==='pending'){setTimeout(pollHosted,5000);return;}hostedFlow=false;if(d.status!=='signed_in')throw Error(d.status);say('hosted-service-result','Signed in. Your card link: '+d.cardUrl);await load();}catch(e){hostedFlow=false;say('hosted-service-result','GitHub sign-in failed: '+e.message);} }
+$('hosted-connect').addEventListener('click',async()=>{
+  if(hostedStarting || (hostedFlow && performance.now()<hostedExpiresAt))return;
+  const generation=++hostedGeneration;
+  hostedStarting=true;
+  try {
+    const d=await api('/api/setup/hosted/signin','POST',{action:'start',url:$('hosted-address').value.trim()});
+    if(generation!==hostedGeneration)return;
+    if(d.status!=='started')throw Error(d.status);
+    hostedFlow=true;
+    const seconds=Number(d.expiresIn);
+    hostedExpiresAt=performance.now()+(Number.isFinite(seconds)&&seconds>0?seconds:900)*1000;
+    const a=document.createElement('a');a.href=d.verificationUri;a.target='_blank';a.rel='noopener';a.textContent=d.verificationUri;
+    const out=$('hosted-service-result');out.replaceChildren('Open ',a,' and enter code '+d.userCode+'.');
+    setTimeout(()=>pollHosted(generation),Math.max(5,Number(d.interval)||5)*1000);
+  } catch(e) {
+    if(generation!==hostedGeneration)return;
+    hostedFlow=false;
+    say('hosted-service-result','GitHub sign-in could not start: '+e.message);
+  } finally { if(generation===hostedGeneration)hostedStarting=false; }
+});
+async function pollHosted(generation){
+  if(generation!==hostedGeneration||!hostedFlow)return;
+  try {
+    const d=await api('/api/setup/hosted/signin','POST',{action:'poll'});
+    if(generation!==hostedGeneration||!hostedFlow)return;
+    if(d.status==='pending'){setTimeout(()=>pollHosted(generation),5000);return;}
+    hostedFlow=false;
+    if(d.status!=='signed_in')throw Error(d.status);
+    say('hosted-service-result','Signed in. Your card link: '+d.cardUrl);
+    await load();
+  } catch(e){
+    if(generation!==hostedGeneration)return;
+    hostedFlow=false;
+    say('hosted-service-result','GitHub sign-in failed: '+e.message);
+  }
+}
 load();
 })();`;
