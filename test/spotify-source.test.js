@@ -99,3 +99,22 @@ test("a revoked refresh token reads as a sign-in problem, not a generic error", 
   const fetchImpl = async () => (streamJsonFixture({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) }));
   await assert.rejects(refreshAccessToken({ clientId: "0123456789abcdef0123456789abcdef", refreshToken: "r", fetchImpl }), (error) => error.code === "reauth_needed" && error.status === 401);
 });
+
+test('failed poll does not promote unchanged recovered playback on either side (#793)', async () => {
+  for (const older of ['server', 'other']) {
+    const newer = older === 'server' ? 'other' : 'server';
+    const state = { server: { state: 'idle' }, other: { state: 'idle' } };
+    const read = side => async () => { if (state[side] instanceof Error) throw state[side]; return state[side]; };
+    const card = combinePresence({ primary: { getPresence: read('server') }, secondary: { getPresence: read('other') } });
+    state[older] = { state: 'playing', title: 'Older' }; await card.getPresence();
+    state[newer] = { state: 'playing', title: 'Newer' };
+    assert.equal((await card.getPresence()).title, 'Newer');
+    state[older] = new Error('temporary');
+    assert.equal((await card.getPresence()).title, 'Newer');
+    state[older] = { state: 'playing', title: 'Older' };
+    assert.equal((await card.getPresence()).title, 'Newer');
+    state[older] = { state: 'paused', title: 'Older' }; await card.getPresence();
+    state[older] = { state: 'playing', title: 'Older' };
+    assert.equal((await card.getPresence()).title, 'Older', 'real resume resets order');
+  }
+});
