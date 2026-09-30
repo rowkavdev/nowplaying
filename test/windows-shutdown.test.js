@@ -50,3 +50,23 @@ test("an app that stays up after 202 is unavailable", async () => {
 test("stop exit codes the installer relies on stay stable", () => {
   assert.deepEqual({ ...STOP_EXIT }, { stopped: 0, notRunning: 3, unavailable: 4 });
 });
+
+test('backward wall-clock correction cannot extend graceful-stop wait (#789)', async () => {
+  const realNow = Date.now;
+  const realTimeout = globalThis.setTimeout;
+  let wall = 100000, elapsed = 0, checks = 0;
+  Date.now = () => wall;
+  globalThis.setTimeout = (fn, ms) => { elapsed += ms; wall += ms; queueMicrotask(fn); return 0; };
+  try {
+    const result = await requestLocalShutdown({ port: 47832, token: 't', exitTimeoutMs: 30, pollMs: 10, elapsedNow: () => elapsed, fetchImpl: async (url) => {
+      if (url.endsWith('/healthz')) {
+        if (++checks === 2) wall -= 3600000;
+        if (checks > 10) throw new Error('bounded fixture fallback');
+      }
+      return { status: 202 };
+    } });
+    assert.equal(result, 'unavailable');
+    assert.equal(checks, 3);
+    assert.equal(elapsed, 30);
+  } finally { Date.now = realNow; globalThis.setTimeout = realTimeout; }
+});

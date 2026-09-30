@@ -14,7 +14,7 @@ export const SHUTDOWN_SECRET_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 // back to the files-in-use page), 2 a usage error.
 export const STOP_EXIT = Object.freeze({ stopped: 0, notRunning: 3, unavailable: 4 });
 
-export async function requestLocalShutdown({ port, token, fetchImpl = fetch, requestTimeoutMs = 5000, exitTimeoutMs = 10000, pollMs = 250 } = {}) {
+export async function requestLocalShutdown({ port, token, fetchImpl = fetch, requestTimeoutMs = 5000, exitTimeoutMs = 10000, pollMs = 250, elapsedNow = () => performance.now() } = {}) {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new RangeError("port must be an integer from 1024 to 65535");
   if (typeof token !== "string" || token.length === 0) throw new TypeError("token: expected a shutdown token");
   let reply;
@@ -32,7 +32,7 @@ export async function requestLocalShutdown({ port, token, fetchImpl = fetch, req
   }
   if (reply.status !== 202) return "unavailable";
   // The app quits after answering; wait for the port to stop responding.
-  const deadline = Date.now() + exitTimeoutMs;
+  const deadline = elapsedNow() + exitTimeoutMs;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
     try {
@@ -40,6 +40,6 @@ export async function requestLocalShutdown({ port, token, fetchImpl = fetch, req
     } catch {
       return "stopped";
     }
-    if (Date.now() >= deadline) return "unavailable";
+    if (elapsedNow() >= deadline) return "unavailable";
   }
 }
