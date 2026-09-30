@@ -115,3 +115,14 @@ test("token source does not write back a rotated token removed mid-refresh (#725
   assert.deepEqual(saves, []);
   assert.equal(stored, null);
 });
+
+test('hung refresh times out, releases single flight and preserves primary playback (#775)', async () => {
+  const { combinePresence } = await import('../src/spotify-source.js');
+  const tokens = createSpotifyTokenSource({ clientId: 'a'.repeat(32), readRefreshToken: async () => 'refresh', saveRefreshToken: async () => {}, requestTimeoutMs: 20, fetchImpl: async () => new Promise(() => {}) });
+  const primary = { getPresence: async () => ({ state: 'playing', kind: 'track', title: 'Local track' }) };
+  const combined = combinePresence({ primary, secondary: { getPresence: async () => { await tokens.getAccessToken(); return { state: 'idle' }; } } });
+  for (let i = 0; i < 2; i++) {
+    const result = await Promise.race([combined.getPresence(), new Promise(resolve => setTimeout(() => resolve('hung'), 100))]);
+    assert.equal(result.title, 'Local track');
+  }
+});
