@@ -49,3 +49,21 @@ test("failed Spotify OAuth result never claims the account connected", async () 
   assert.match(node("spotify-service-result").textContent, /denied|failed/i);
   assert.equal(node("spotify-open-link").hidden, true);
 });
+
+test('#818 stale Spotify poll cannot clear a replacement flow or overwrite its success', async () => {
+  for (const newerFinishes of [false, true]) {
+    const { node, calls } = page();
+    calls[0].resolve(reply({ spotify: null, hosted: { login: null, url: 'https://cards.example' } })); await tick();
+    node('spotify-client-id').value = '0123456789abcdef0123456789abcdef';
+    node('spotify-connect').click(); calls[1].resolve(reply({ status: 'started', flowId: 'a', authUrl: 'https://accounts.spotify.com/a' })); await tick();
+    const old = calls[2];
+    node('spotify-connect').click(); calls[3].resolve(reply({ status: 'started', flowId: 'b', authUrl: 'https://accounts.spotify.com/b' })); await tick();
+    if (newerFinishes) {
+      calls[4].resolve(reply({ status: 'signed_in' })); await tick();
+      calls[5].resolve(reply({ spotify: { name: 'Fixture', clientId: 'fixture' }, hosted: { login: null, url: 'https://cards.example' } })); await tick();
+    }
+    old.resolve(reply({ error: 'expired' }, false)); await tick();
+    if (newerFinishes) assert.equal(node('spotify-service-result').textContent, 'Spotify connected.');
+    else { assert.equal(node('spotify-open-link').hidden, false); assert.doesNotMatch(node('spotify-service-result').textContent, /failed/); }
+  }
+});
