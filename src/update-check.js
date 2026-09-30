@@ -71,7 +71,7 @@ function compareVersion(a, b) {
     if (left === right) continue;
     const leftNumber = /^\d+$/.test(left);
     const rightNumber = /^\d+$/.test(right);
-    if (leftNumber && rightNumber) return Number(left) - Number(right);
+    if (leftNumber && rightNumber) return left.length - right.length || (left < right ? -1 : 1);
     if (leftNumber !== rightNumber) return leftNumber ? -1 : 1;
     return left < right ? -1 : 1;
   }
