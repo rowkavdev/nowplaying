@@ -136,3 +136,25 @@ test("5xx and network failures remain distinct from rejected sign-ins", async ()
     assert.equal(multi.servers()[0].reason, expected);
   }
 });
+
+test('transient failure keeps activity order but remains an error in status (#792)', async () => {
+  let a = { state: 'playing', kind: 'track', title: 'A' }, b = { state: 'idle' };
+  const multi = createMultiServerProvider([
+    { server: server('plex'), provider: { getPresence: async () => { if (a instanceof Error) throw a; return a; } } },
+    { server: server('jellyfin'), provider: { getPresence: async () => b } },
+  ]);
+  await multi.getPresence();
+  b = { state: 'playing', kind: 'track', title: 'B' };
+  assert.equal((await multi.getPresence()).title, 'B');
+  a = new Error('temporary');
+  assert.equal((await multi.getPresence()).title, 'B');
+  assert.equal(multi.servers()[0].state, 'error');
+  a = { state: 'playing', kind: 'track', title: 'A' };
+  assert.equal((await multi.getPresence()).title, 'B');
+  a = { state: 'idle' }; await multi.getPresence();
+  a = { state: 'playing', kind: 'track', title: 'A' };
+  assert.equal((await multi.getPresence()).title, 'A', 'real stop/restart gets new priority');
+  a = new Error('temporary'); await multi.getPresence();
+  a = { state: 'playing', kind: 'track', title: 'C' };
+  assert.equal((await multi.getPresence()).title, 'C', 'changed item after failure is new activity');
+});

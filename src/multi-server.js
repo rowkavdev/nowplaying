@@ -23,11 +23,13 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   // Activity order is process-local. Wall time can move backward while the
   // app is running, but a new request must still outrank an older one.
   const activeOrder = entries.map(() => null);
+  // Errors remain visible in latest but do not prove playback stopped.
+  const lastSuccessful = entries.map(() => null);
   let nextActivityOrder = 0;
   let inflight = null;
 
   function noteActivity(index, before, presence) {
-    const was = before?.state === "ok" ? before.presence : null;
+    const was = before;
     if (presence?.state !== "playing" && presence?.state !== "paused") return;
     const wasActive = was?.state === "playing" || was?.state === "paused";
     const newItem = !wasActive || presenceItemKey(was) !== presenceItemKey(presence);
@@ -40,7 +42,8 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
       if (entry.unavailable) return latest[index];
       try {
         const presence = await entry.provider.getPresence();
-        noteActivity(index, latest[index], presence);
+        noteActivity(index, lastSuccessful[index], presence);
+        lastSuccessful[index] = presence;
         latest[index] = { state: "ok", presence, at: now() };
       } catch (error) {
         latest[index] = { state: "error", error, at: now() };
