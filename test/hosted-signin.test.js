@@ -217,7 +217,7 @@ test('stale 401 recovery cannot delete a sign-in saved after its old-key snapsho
     if (++loads === 2) await signInCredentials.save(fresh);
     return snapshot;
   } };
-  const up = createHostedUploader({ baseUrl: 'https://h.example', credentials: store, fetchImpl: async (_url, init) => ({ ok: init.headers.authorization !== `Bearer ${old.token}`, status: init.headers.authorization === `Bearer ${old.token}` ? 401 : 202, json: async () => ({}) }) });
+  const up = createHostedUploader({ baseUrl: 'https://h.example', credentials: store, fetchImpl: async (_url, init) => (streamJsonFixture({ ok: init.headers.authorization !== `Bearer ${old.token}`, status: init.headers.authorization === `Bearer ${old.token}` ? 401 : 202, json: async () => ({}) })) });
   const presence = { state: 'playing', kind: 'track', title: 'A' };
   assert.equal((await up.push(presence)).reason, 'credentials_changed');
   assert.deepEqual({ ...await credentials.load() }, fresh);
