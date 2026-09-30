@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMusicBrainzLookup, luceneTerm, MUSICBRAINZ_USER_AGENT } from "../src/musicbrainz-lookup.js";
@@ -11,7 +12,7 @@ function fakeNetwork({ recordings, covers = {} }) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
-    if (url.startsWith("https://musicbrainz.org/")) return { ok: true, status: 200, json: async () => ({ recordings }) };
+    if (url.startsWith("https://musicbrainz.org/")) return streamJsonFixture({ ok: true, status: 200, json: async () => ({ recordings }) });
     const id = url.split("/")[4];
     return { ok: false, status: covers[id] ?? 404 };
   };
@@ -77,14 +78,14 @@ test("never guesses from a title alone", async () => {
 });
 
 test("a MusicBrainz reply that stalls mid-body fails at the deadline instead of hanging", async () => {
-  const fetchImpl = async (url, init) => ({
+  const fetchImpl = async (url, init) => (streamJsonFixture({
     ok: true, status: 200,
     // Headers arrived; the body never finishes until the request is aborted.
     json: () => new Promise((_, reject) => {
       const alive = setTimeout(() => {}, 5_000);
       init.signal.addEventListener("abort", () => { clearTimeout(alive); reject(new Error("aborted")); });
     }),
-  });
+  }));
   const lookup = createMusicBrainzLookup({ fetchImpl, timeoutMs: 30, minIntervalMs: 0 });
   await assert.rejects(lookup({ title: "Song", artist: "Band" }), /aborted/);
 });
