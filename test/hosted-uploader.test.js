@@ -37,7 +37,7 @@ function setup({ start = 1_800_000_000_000 } = {}) {
     }
   };
   let stored = null;
-  const credentials = { load: async () => stored, save: async (value) => { stored = value; }, clear: async () => { stored = null; } };
+  const credentials = { load: async () => stored, save: async (value) => { stored = value; }, clear: async () => { stored = null; }, clearIfToken: async (token) => { if (stored?.token !== token) return false; stored = null; return true; } };
   return {
     service, calls, credentials, fetchImpl, now,
     stored: () => stored,

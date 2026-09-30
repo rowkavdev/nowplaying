@@ -18,24 +18,41 @@ function pick(value) {
   return LOGIN.test(value.login ?? "") ? { login: value.login, deviceId: value.deviceId, token: value.token } : { cardId: value.cardId, deviceId: value.deviceId, token: value.token };
 }
 
+// Serialize read/compare/delete with saves sharing an adapter in this process.
+const adapterQueues = new WeakMap();
+function serialize(adapter, operation) {
+  const previous = adapterQueues.get(adapter) ?? Promise.resolve();
+  const result = previous.then(operation, operation);
+  adapterQueues.set(adapter, result.catch(() => {}));
+  return result;
+}
+
 export function createHostedCredentials({ adapter } = {}) {
   for (const method of ["setPassword", "getPassword", "deletePassword"]) {
     if (typeof adapter?.[method] !== "function") throw new TypeError(`credential adapter.${method} is required`);
   }
+  async function load() {
+    const raw = await adapter.getPassword(SERVICE, ACCOUNT);
+    if (typeof raw !== "string" || !raw) return null;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+    return valid(parsed) ? Object.freeze(pick(parsed)) : null;
+  }
   return Object.freeze({
-    async load() {
-      const raw = await adapter.getPassword(SERVICE, ACCOUNT);
-      if (typeof raw !== "string" || !raw) return null;
-      let parsed;
-      try { parsed = JSON.parse(raw); } catch { return null; }
-      return valid(parsed) ? Object.freeze(pick(parsed)) : null;
+    load: () => serialize(adapter, load),
+    save(value) {
+      if (!valid(value)) return Promise.reject(new TypeError("hosted registration is invalid"));
+      const raw = JSON.stringify(pick(value));
+      return serialize(adapter, () => adapter.setPassword(SERVICE, ACCOUNT, raw));
     },
-    async save(value) {
-      if (!valid(value)) throw new TypeError("hosted registration is invalid");
-      await adapter.setPassword(SERVICE, ACCOUNT, JSON.stringify(pick(value)));
-    },
-    async clear() {
-      await adapter.deletePassword(SERVICE, ACCOUNT);
+    clear: () => serialize(adapter, () => adapter.deletePassword(SERVICE, ACCOUNT)),
+    clearIfToken(token) {
+      return serialize(adapter, async () => {
+        const stored = await load();
+        if (!stored || stored.token !== token) return false;
+        await adapter.deletePassword(SERVICE, ACCOUNT);
+        return true;
+      });
     },
   });
 }

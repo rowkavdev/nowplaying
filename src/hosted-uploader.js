@@ -185,13 +185,26 @@ export function createHostedUploader({
         // pick up the new key instead of wiping it.
         const failed = registration?.token;
         const stored = await credentials.load().catch(() => null);
+        if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
         if (validRegistration(stored) && stored.token !== failed) {
           registration = { ...stored }; lastSent = null; failures = 0; retryAt = 0;
           status = { ...status, state: "retrying", lastError: code };
           return { sent: false, reason: "credentials_changed" };
         }
+        // A reload is only a snapshot. Delete under the store's save lock,
+        // never with an unconditional clear after asynchronous recovery work.
+        const cleared = typeof credentials.clearIfToken === "function"
+          ? await credentials.clearIfToken(failed).catch(() => false) : false;
+        if (generation !== pushGeneration) return { sent: false, reason: "superseded" };
+        if (!cleared) {
+          const replacement = await credentials.load().catch(() => null);
+          if (validRegistration(replacement) && replacement.token !== failed) {
+            registration = { ...replacement }; lastSent = null; failures = 0; retryAt = 0;
+            status = { ...status, state: "retrying", lastError: code };
+            return { sent: false, reason: "credentials_changed" };
+          }
+        }
         registration = null; pending = null;
-        await credentials.clear().catch(() => {});
         status = { ...status, state: "unauthorized", lastError: code };
         return { sent: false, reason: "unauthorized" };
       }
