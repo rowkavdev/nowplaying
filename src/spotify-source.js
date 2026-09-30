@@ -39,7 +39,9 @@ export function combinePresence({ primary, secondary, prefer = "recent" }) {
   const started = { server: null, other: null };
   let nextActivityOrder = 0;
   function track(side, result) {
-    const value = result.status === "fulfilled" ? result.value : null;
+    // A failed poll is unknown playback, not a stop/resume.
+    if (result.status !== "fulfilled") return;
+    const value = result.value;
     if (value?.state !== "playing") { started[side] = null; return; }
     const key = presenceItemKey(value);
     if (started[side]?.key !== key) started[side] = { key, order: ++nextActivityOrder };
