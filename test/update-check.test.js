@@ -95,3 +95,9 @@ test("updateAssetName maps versions to the published names", () => {
   assert.equal(updateAssetName("1.2.3-beta.1", "darwin"), "nowplaying-v1.2.3-beta.1.tar.gz");
   assert.throws(() => updateAssetName("../x", "win32"), /semver/);
 });
+
+test('#810 orders numeric prerelease identifiers beyond safe integers exactly', async () => {
+  const result = await checkForUpdate({ platform: 'linux', currentVersion: '0.9.0', repository: 'o/r', token: 'fixture', channel: 'beta',
+    fetchImpl: fetchReleases([release('1.0.0-9007199254740992'), release('1.0.0-9007199254740993')]) });
+  assert.equal(result.version, '1.0.0-9007199254740993');
+});
