@@ -35,10 +35,13 @@ export async function requestLocalShutdown({ port, token, fetchImpl = fetch, req
   const deadline = elapsedNow() + exitTimeoutMs;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
+    const remaining = deadline - elapsedNow();
+    if (remaining <= 0) return "unavailable";
     try {
-      await fetchImpl(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1000) });
-    } catch {
-      return "stopped";
+      await fetchImpl(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(Math.max(1, Math.min(1000, Math.ceil(remaining)))) });
+    } catch (error) {
+      if (error?.code === "ECONNREFUSED" || error?.cause?.code === "ECONNREFUSED") return "stopped";
+      // Timeouts, resets and parse errors do not prove the listener closed.
     }
     if (elapsedNow() >= deadline) return "unavailable";
   }
