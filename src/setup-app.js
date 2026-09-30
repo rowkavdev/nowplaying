@@ -114,7 +114,7 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
     if (writeConfig) await writeSetupConfig(configFile, finished);
     if (startup && typeof finished.startWithWindows === "boolean") await startup.setEnabled(finished.startWithWindows);
   } : undefined;
-  const draft = createSetupDraftHandler({ store, signIn: Boolean(credentialStore), ...(onFinish ? { onFinish } : {}) });
+  const draft = createSetupDraftHandler({ store, beforeReset: async () => { await Promise.all([spotify.cancelPending?.(), signIn.cancelPending?.()]); }, signIn: Boolean(credentialStore), ...(onFinish ? { onFinish } : {}) });
   // Example cards on the review step, in the installed card look if there is one.
   const preview = createSetupPreviewHandler({ renderOptions: async () => (configFile ? cardRenderOptions((await readCurrentConfig(configFile))?.card) : {}) });
   // "Test Discord" on the Discord step, separate from the media server test.

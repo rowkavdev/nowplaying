@@ -126,3 +126,44 @@ test("slow Plex and Spotify sign-in expose real clickable links when popup block
   assert.match(js, /signin = \{ flowId: null, code: null, timer: null, authUrl: null \}/);
   assert.match(js, /spotify\.authUrl = null/);
 });
+
+
+test('#814 Start over stops Spotify polling and clears browser consent state', async () => {
+  const js = (await handle({ method: 'GET', url: '/setup/app.js' })).body;
+  const send = js.slice(js.indexOf('function send(method, body)'), js.indexOf('function showError'));
+  let stopped = 0, hosted = 0;
+  const spotify = { clientId: 'old-client', flowId: 'old-flow', timer: 9, authUrl: 'old-url' };
+  const fn = new Script('(' + send + ')').runInNewContext({ spotify, busy: false, stopSignIn() {}, stopSpotify() { stopped++; spotify.flowId = null; spotify.timer = null; spotify.authUrl = null; }, resetHostedSignIn() { hosted++; }, showError() {}, render() {}, request() { return Promise.resolve({ draft: {} }); } });
+  fn('DELETE');
+  assert.equal(stopped, 1); assert.equal(hosted, 1);
+  assert.deepEqual(spotify, { clientId: '', flowId: null, timer: null, authUrl: null });
+});
+
+
+test('#814 an in-flight Spotify poll cannot restart a timer after reset', async () => {
+  const js = (await handle({ method: 'GET', url: '/setup/app.js' })).body;
+  const result = js.slice(js.indexOf('function spotifyResult'), js.indexOf('function startSpotify'));
+  let release; let timerCallback; let renders = 0;
+  const context = { spotifyGeneration: 1, spotify: { flowId: 'old-flow', timer: null }, setTimeout(callback) { timerCallback = callback; return 1; }, callSpotify() { return new Promise(resolve => { release = resolve; }); }, render() { renders++; } };
+  const fn = new Script('(' + result + ')').runInNewContext(context);
+  fn({ status: 'pending' }, 1); timerCallback();
+  context.spotifyGeneration++; context.spotify.flowId = null; context.spotify.timer = null;
+  release({ status: 'pending' }); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.spotify.timer, null); assert.equal(renders, 0);
+});
+
+test('#814 current Spotify success refreshes and renders for start and poll', async () => {
+  const js = (await handle({ method: 'GET', url: '/setup/app.js' })).body;
+  const section = js.slice(js.indexOf('function stopSpotify()'), js.indexOf('function spotifyPanel()'));
+  for (const polled of [false, true]) {
+    let renders = 0, timer;
+    const context = { spotifyGeneration: 0, spotify: { flowId: null, timer: null, authUrl: null, clientId: 'fixture' }, busy: false, value: () => '0123456789abcdef0123456789abcdef', showError() {}, render() { renders++; }, callSpotify: async body => polled && body.action === 'start' ? { status: 'pending', flowId: 'fixture' } : { status: 'signed_in' }, request: async () => ({ draft: { spotify: { identity: { id: 'fixture' } } } }), window: { open() {} }, clearTimeout() {}, setTimeout(fn) { timer = fn; return 1; } };
+    new Script(section + ';startSpotify();').runInNewContext(context);
+    await new Promise(resolve => setImmediate(resolve));
+    if (polled) { const before = renders; timer(); await new Promise(resolve => setImmediate(resolve)); assert.ok(renders > before, 'poll success renders refreshed draft'); }
+    assert.equal(context.busy, false, 'current successful attempt releases busy');
+    assert.equal(context.spotify.flowId, null);
+    assert.equal(context.draft.spotify.identity.id, 'fixture');
+    assert.ok(renders >= 2);
+  }
+});
