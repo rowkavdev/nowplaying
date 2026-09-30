@@ -29,7 +29,7 @@ test("202 then the port going quiet is stopped", async () => {
     fetchImpl: async (url) => {
       calls.push(url);
       if (calls.length === 1) return { status: 202 };
-      throw new Error("fetch failed");
+      throw Object.assign(new Error("fetch failed"), { cause: { code: "ECONNREFUSED" } });
     },
   });
   assert.equal(outcome, "stopped");
@@ -66,7 +66,19 @@ test('backward wall-clock correction cannot extend graceful-stop wait (#789)', a
       return { status: 202 };
     } });
     assert.equal(result, 'unavailable');
-    assert.equal(checks, 3);
+    assert.equal(checks, 2);
     assert.equal(elapsed, 30);
   } finally { Date.now = realNow; globalThis.setTimeout = realTimeout; }
+});
+
+test('#815 a hanging health probe is not proof the listener stopped', async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer((request, response) => { if (request.method === 'POST') { response.writeHead(202); response.end(); } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await requestLocalShutdown({ port: server.address().port, token: 'fixture', exitTimeoutMs: 1100, pollMs: 1 });
+    assert.equal(result, 'unavailable');
+    assert.equal(server.listening, true);
+    assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/`, { method: 'POST' })).status, 202);
+  } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
