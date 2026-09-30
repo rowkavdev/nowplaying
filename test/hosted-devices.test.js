@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHostedDevicesClient, createHostedDevicesHandler, HOSTED_DEVICES_PATH, HOSTED_DEVICES_SCRIPT } from "../src/hosted-devices.js";
@@ -12,7 +13,7 @@ function fakeService({ status = 200, devices } = {}) {
   const fetchImpl = async (url, init) => {
     calls.push({ url, method: init.method, auth: init.headers.authorization, body: init.body ? JSON.parse(init.body) : null });
     const data = init.method === "GET" ? { devices: devices ?? [{ deviceId: ME, name: "Desk", createdAt: 1, lastSeen: 2, current: true, tokenHash: "x" }, { deviceId: OTHER, name: "Laptop", createdAt: 3, lastSeen: null }] } : { ok: true };
-    return { status, json: async () => data };
+    return streamJsonFixture({ status, json: async () => data });
   };
   return { calls, fetchImpl };
 }

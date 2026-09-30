@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 
 // Settings "Hosted card devices" (#140): the PCs signed in to the same GitHub
@@ -38,7 +39,10 @@ export function createHostedDevicesClient({ baseUrl, credentials, fetchImpl = fe
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     let data = null;
-    try { data = await res.json(); } catch { data = null; }
+    try { data = await readBoundedJson(res); } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        data = null;
+      }
     return { status: res.status, data };
   }
 
