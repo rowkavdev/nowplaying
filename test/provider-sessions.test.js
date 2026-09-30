@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPlexProvider } from "../src/providers/plex.js";
@@ -5,7 +6,7 @@ import { createJellyfinProvider } from "../src/providers/jellyfin.js";
 import { createEmbyProvider } from "../src/providers/emby.js";
 import { createNavidromeProvider } from "../src/providers/navidrome.js";
 
-const reply = (body) => async () => ({ ok: true, json: async () => body });
+const reply = (body) => async () => (streamJsonFixture({ ok: true, json: async () => body }));
 
 for (const [name, make] of [
   ["Jellyfin", (fetchImpl) => createJellyfinProvider({ baseUrl: "http://jf.test", apiKey: "k", fetchImpl })],

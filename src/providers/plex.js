@@ -1,3 +1,4 @@
+import { readBoundedJson } from "../bounded-response.js";
 /*
  * Plex session polling adapted from discord-rich-presence-plex (DRPP).
  * Source: https://github.com/phin05/discord-rich-presence-plex/blob/a4f95f08ec96c3f837876e73354665560115dfac/server/plex/client.go
@@ -34,7 +35,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
         headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
       if (!response.ok) throw Object.assign(new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`), { status: response.status });
-      const payload = await response.json();
+      const payload = await readBoundedJson(response);
       const listed = payload?.MediaContainer?.Metadata ?? [];
       if (!Array.isArray(listed)) throw new Error("Plex sessions response was not a list");
       const sessions = listed.filter((item) => item && typeof item === "object");

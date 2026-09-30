@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { playbackTimes } from "../src/providers/fields.js";
@@ -5,7 +6,7 @@ import { createPlexProvider } from "../src/providers/plex.js";
 import { createJellyfinProvider } from "../src/providers/jellyfin.js";
 import { createEmbyProvider } from "../src/providers/emby.js";
 
-const reply = (body) => async () => ({ ok: true, json: async () => body });
+const reply = (body) => async () => (streamJsonFixture({ ok: true, json: async () => body }));
 
 test("playbackTimes holds a position past the end at the end", () => {
   assert.deepEqual(playbackTimes(200_500, 200_000), { positionMs: 200_000, durationMs: 200_000 });

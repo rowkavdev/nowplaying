@@ -1,3 +1,4 @@
+import { readBoundedJson } from "../bounded-response.js";
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
 
@@ -38,7 +39,7 @@ export function createSpotifyProvider({ getAccessToken, forgetAccessToken = () =
         }
         throw error;
       }
-      return mapPlayback(await response.json());
+      return mapPlayback(await readBoundedJson(response));
     },
   });
 }
