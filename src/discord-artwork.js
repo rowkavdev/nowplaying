@@ -88,6 +88,7 @@ export function createDiscordArtworkResolver({
   validateOptions({ publicProxyBase, metadataLookup, fallbackAsset, ttlMs, negativeTtlMs, maxEntries });
   if (metadataLookup && typeof lookup !== "function") throw new TypeError("discord artwork: lookup is required when metadataLookup is enabled");
   const cache = new Map();
+  let generation = 0;
   let last = Object.freeze({ strategy: "none", failure: null });
 
   function remember(key, entry, ttl) {
@@ -102,6 +103,8 @@ export function createDiscordArtworkResolver({
   }
 
   async function resolve(presence = {}) {
+    const owner = generation;
+    const rememberCurrent = (...args) => { if (owner === generation) remember(...args); };
     const ref = presence.artwork ? JSON.stringify([presence.artwork.provider, presence.artwork.itemId, presence.artwork.imageId, presence.artwork.imageTag]) : "";
     // The media kind is part of the key so a film, an episode and a song that
     // share a title and subtitle never reuse each other's artwork (#154).
@@ -118,7 +121,7 @@ export function createDiscordArtworkResolver({
       const checked = classifyArtworkUrl(presence.artworkUrl);
       if (checked.ok) {
         const entry = { image: checked.url, strategy: "provider", failure: null };
-        remember(key, entry, ttlMs);
+        rememberCurrent(key, entry, ttlMs);
         return finish({ ...entry, cached: false });
       }
       failure = checked.failure;
@@ -126,7 +129,7 @@ export function createDiscordArtworkResolver({
     if (publicProxyBase && ref) {
       const opaque = createHash("sha256").update(ref).digest("hex").slice(0, 32);
       const entry = { image: `${publicProxyBase.replace(/\/+$/, "")}/${opaque}`, strategy: "proxy", failure };
-      remember(key, entry, ttlMs);
+      rememberCurrent(key, entry, ttlMs);
       return finish({ ...entry, cached: false });
     }
     // MusicBrainz only knows music: a film or episode title would match a
@@ -138,7 +141,7 @@ export function createDiscordArtworkResolver({
         const checked = classifyArtworkUrl(found);
         if (checked.ok) {
           const entry = { image: checked.url, strategy: "lookup", failure };
-          remember(key, entry, ttlMs);
+          rememberCurrent(key, entry, ttlMs);
           return finish({ ...entry, cached: false });
         }
         failure = failure ?? `lookup_${found ? checked.failure : "miss"}`;
@@ -147,7 +150,7 @@ export function createDiscordArtworkResolver({
       }
     }
     const entry = { image: fallbackAsset, strategy: "fallback", failure };
-    remember(key, entry, negativeTtlMs);
+    rememberCurrent(key, entry, negativeTtlMs);
     return finish({ ...entry, cached: false });
   }
 
@@ -155,6 +158,7 @@ export function createDiscordArtworkResolver({
   // update looks artwork up again. Returns how many entries were dropped.
   function clear() {
     const dropped = cache.size;
+    generation++;
     cache.clear();
     last = Object.freeze({ strategy: "none", failure: null });
     return dropped;
