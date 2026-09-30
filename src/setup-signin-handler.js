@@ -27,6 +27,7 @@ export function createSetupSignInHandler({
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) throw new TypeError("deviceId is invalid");
   const flows = new Map();
+  const writeChains = new Map();
 
   function prune() {
     const time = elapsedNow();
@@ -34,6 +35,16 @@ export function createSetupSignInHandler({
   }
 
   async function finish(result, serverUrl, flowIsActive = () => true, beginCommit = () => {}) {
+    const key = JSON.stringify([result.provider, result.identity.id]);
+    const prior = writeChains.get(key) ?? Promise.resolve();
+    const turn = prior.then(() => finishExclusive(result, serverUrl, flowIsActive, beginCommit));
+    const settled = turn.then(() => {}, () => {});
+    writeChains.set(key, settled);
+    try { return await turn; }
+    finally { if (writeChains.get(key) === settled) writeChains.delete(key); }
+  }
+
+  async function finishExclusive(result, serverUrl, flowIsActive, beginCommit) {
     const expired = () => json(410, { error: "expired" });
     if (!flowIsActive()) return expired();
     const ref = { provider: result.provider, identityId: result.identity.id };

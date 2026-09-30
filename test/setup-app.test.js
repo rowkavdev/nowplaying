@@ -404,3 +404,18 @@ test("signing in again replaces the stored secret and leaves the config pointing
   assert.deepEqual(parseAppConfig(after).servers[0].credentialRef, parseAppConfig(before).servers[0].credentialRef);
   assert.doesNotMatch(after, /secret|new-pw/);
 });
+
+
+test('#811 Windows self-test provider fixture uses bytes for bounded connection checks', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'np-win-fixture-')); let secret = null;
+  const app = await startSetupApp({ draftFile: join(dir, 'draft.json'), deviceId: 'windows-fixture-device',
+    credentialStore: { save: async (_ref, value) => { secret = value; }, read: async () => secret ? JSON.stringify({ token: 't', salt: 's' }) : null, remove: async () => { secret = null; } },
+    signIn: { signInNavidrome: async () => ({ provider: 'navidrome', identity: { id: 'selftest', displayName: 'Self Test' }, secret: 'fixture' }) },
+    fetchImpl: async url => Response.json(new URL(url).pathname.endsWith('/getUser.view') ? { 'subsonic-response': { status: 'ok', user: { username: 'selftest' } } } : { 'subsonic-response': { status: 'ok', nowPlaying: {} } }) });
+  try {
+    const request = (path, body) => fetch(new URL(path, app.url), { method: 'POST', headers: { 'content-type': 'application/json', 'X-Nowplaying-Session': app.sessionSecret }, body: JSON.stringify(body) });
+    assert.equal((await request('/api/setup/signin', { action: 'password', provider: 'navidrome', baseUrl: 'http://127.0.0.1:4533', username: 'selftest', password: 'fixture' })).status, 200);
+    const tested = await (await request('/api/setup/test', {})).json();
+    assert.equal(tested.status, 'connected');
+  } finally { await app.close(); }
+});

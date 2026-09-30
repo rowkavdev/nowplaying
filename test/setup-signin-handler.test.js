@@ -381,3 +381,25 @@ test("a credential write that throws after storing is compensated", async () => 
   assert.deepEqual([response.status, read(response)], [500, { error: "credential_store_failed" }]);
   assert.equal(await store.read({ provider: "emby", identityId: "u1" }), null);
 });
+
+test('#811 same-identity credential commits serialize rollback before newer success', async () => {
+  let entered, release, value = 'original';
+  const inside = new Promise(resolve => { entered = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const handler = createSetupSignInHandler({ deviceId: DEVICE,
+    credentialStore: { read: async () => value, save: async (_ref, secret) => { value = secret; }, remove: async () => { value = null; } },
+    signIn: { signInEmby: async ({ password }) => ({ provider: 'emby', identity: { id: 'same', displayName: 'Fixture' }, secret: password }) },
+    onSignedIn: async ({ serverUrl }) => { if (serverUrl === 'https://older.example') { entered(); await gate; throw Error('fixture config failure'); } },
+  });
+  const post = (password, baseUrl) => handler({ url: '/api/setup/signin', method: 'POST', body: JSON.stringify({ action: 'password', provider: 'emby', baseUrl, username: 'Fixture', password }) });
+  const older = post('older', 'https://older.example'); await inside;
+  let completed = false;
+  const newer = post('newer', 'https://newer.example').then(result => { completed = true; return result; });
+  await new Promise(resolve => setImmediate(resolve));
+  const premature = completed;
+  release();
+  assert.equal((await older).status, 500);
+  assert.equal((await newer).status, 200);
+  assert.equal(premature, false, 'newer write waits for old save/config/rollback transaction');
+  assert.equal(value, 'newer');
+});
