@@ -2,6 +2,7 @@
 // Credentials never enter config.json; only account identity and host choice do.
 import { readFile } from "node:fs/promises";
 import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
+import { createHostedGitHubSignIn } from "./hosted-signin.js";
 import { createSetupHostedHandler } from "./setup-hosted-handler.js";
 import { createAppSettingsStore } from "./app-settings.js";
 import { parseAppConfig, hostedUploadSettings } from "./app-config.js";
@@ -16,9 +17,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
   let pendingSpotify = null;
   let removingSpotify = false;
   let pendingHosted = null;
-  let activeHostedUrl = null;
-  let hostedSigningIn = false;
-  let hostedSignInExpiresAt = 0;
+  let activeHostedFlow = null;
   async function current() {
     try { return parseAppConfig(await readFile(file, "utf8")); }
     catch (error) { if (error?.code === "ENOENT") return null; throw error; }
@@ -42,7 +41,20 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
   const spotify = createSetupSpotifyHandler({ credentialStore, onSignedIn: saveSpotify, elapsedNow, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) });
   const hosted = createSetupHostedHandler({ credentials: hostedCredentials, fetchImpl,
     settings: async () => hostedUploadSettings(await current()),
-    ...(hostedSignIn ? { createSignIn: hostedSignIn } : {}),
+    createSignIn: options => {
+      const owner = activeHostedFlow;
+      const credentials = options.credentials;
+      return (hostedSignIn ?? createHostedGitHubSignIn)({ ...options, credentials: {
+        load: (...args) => credentials.load(...args),
+        save: async (...args) => {
+          if (activeHostedFlow !== owner) throw new Error("hosted sign-in superseded");
+          // A credential commit and its destination update are one transaction:
+          // do not replace this owner while its durable save is in progress.
+          owner.committing = true;
+          return credentials.save(...args);
+        },
+      } });
+    },
   });
   async function afterFirstServer() {
     if (!pendingSpotify && !pendingHosted) return;
@@ -64,29 +76,42 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       return result;
     }
     if (path.startsWith("/api/setup/hosted/")) {
+      let owner = activeHostedFlow;
       if (path === "/api/setup/hosted/signin") {
         let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
-        if (input.action === "start" && hostedSigningIn && elapsedNow() < hostedSignInExpiresAt) return json(409, { error: "signin_in_progress" });
-        // An abandoned device flow must not block retries after its code expires.
-        if (input.action === "start") { hostedSigningIn = true; hostedSignInExpiresAt = elapsedNow() + 900_000; }
+        if (owner?.committing && input.action === "poll") return json(200, { status: "pending" });
+        if (input.action === "start") {
+          if (owner && (owner.committing || elapsedNow() < owner.expiresAt)) return json(409, { error: "signin_in_progress" });
+          // Ownership changes before the first await, invalidating old saves.
+          owner = { url: null, expiresAt: elapsedNow() + 900_000, committing: false };
+          activeHostedFlow = owner;
+        }
       }
-      const result = await hosted(request);
-      if (path === "/api/setup/hosted/signin" && result?.status === 200) {
-        const value = JSON.parse(result.body);
-        if (value.status === "signed_in") {
-          hostedSigningIn = false;
-          hostedSignInExpiresAt = 0;
-          try { await saveHosted(activeHostedUrl ?? DEFAULT_HOSTED_URL); }
-          catch { return json(500, { error: "hosted_save_failed" }); }
-        } else if (value.status === "started") {
-          const seconds = Number(value.expiresIn);
-          hostedSignInExpiresAt = elapsedNow() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);
-          // URL is validated by the existing hosted handler; retain it only
-          // once start succeeded. It never contains a credential.
-          let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
-          activeHostedUrl = normalizeHostedUrl(input.url ?? DEFAULT_HOSTED_URL);
-        } else if (value.status !== "pending") { hostedSigningIn = false; hostedSignInExpiresAt = 0; activeHostedUrl = null; }
-      } else if (path === "/api/setup/hosted/signin") { hostedSigningIn = false; hostedSignInExpiresAt = 0; }
+      let result;
+      try { result = await hosted(request); }
+      catch {
+        if (activeHostedFlow !== owner) return json(200, { status: "superseded" });
+        if (path === "/api/setup/hosted/signin") activeHostedFlow = null;
+        return json(500, { error: "hosted_save_failed" });
+      }
+      if (path === "/api/setup/hosted/signin") {
+        if (activeHostedFlow !== owner) return json(200, { status: "superseded" });
+        if (result?.status === 200) {
+          const value = JSON.parse(result.body);
+          // Polls already in flight must not release a durable commit either.
+          if (owner?.committing && value.status !== "signed_in") return json(200, { status: "pending" });
+          if (value.status === "signed_in") {
+            try { await saveHosted(owner?.url ?? DEFAULT_HOSTED_URL); }
+            catch { return json(500, { error: "hosted_save_failed" }); }
+            finally { if (activeHostedFlow === owner) activeHostedFlow = null; }
+          } else if (value.status === "started") {
+            const seconds = Number(value.expiresIn);
+            owner.expiresAt = elapsedNow() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);
+            let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+            owner.url = normalizeHostedUrl(input.url ?? DEFAULT_HOSTED_URL);
+          } else if (value.status !== "pending") activeHostedFlow = null;
+        } else if (!owner?.committing) activeHostedFlow = null;
+      }
       return result;
     }
     if ((request.method ?? "GET") === "GET") {

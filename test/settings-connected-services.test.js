@@ -4,6 +4,9 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createSettingsConnectedServices } from "../src/settings-connected-services.js";
+import { createPresence } from "../src/presence.js";
+import { createHostedGitHubSignIn } from "../src/hosted-signin.js";
+import { createHostedUploader } from "../src/hosted-uploader.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 const CID = "0123456789abcdef0123456789abcdef";
 const post = (url, body) => ({ url, method: "POST", body: JSON.stringify(body), headers: { "sec-fetch-site": "same-origin" } });
@@ -186,4 +189,67 @@ test("abandoned hosted sign-in can restart after its real lifetime across a wall
   wall -= 3_600_000; elapsed += 180_000; // wall clock jumps back an hour; three elapsed minutes pass (> 120s code lifetime)
   assert.equal((await svc.handler(startReq)).status, 200);
   assert.equal(starts, 2);
+});
+
+
+test("superseded hosted auth cannot save A credentials, enable B or clear B guard (#808)", async () => {
+  const file = await configFile();
+  let clock = 0, saved = null, releaseA, enteredA;
+  const reachedA = new Promise(resolve => { enteredA = resolve; });
+  const heldA = new Promise(resolve => { releaseA = resolve; });
+  const a = { login: "host-a", deviceId: "a".repeat(22), token: "a".repeat(24) };
+  const b = { login: "host-b", deviceId: "b".repeat(22), token: "b".repeat(24) };
+  const writes = [], uploads = [];
+  const credentials = { load: async () => saved, save: async value => { writes.push(value); saved = value; }, clear: async () => { saved = null; } };
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith("/device/code")) return Response.json({ device_code: "fixture", user_code: "ABCD-EFGH", verification_uri: "https://github.com/login/device", expires_in: 120, interval: 5 });
+    if (url.endsWith("/access_token")) return Response.json({ access_token: "fixture-github-token" });
+    if (url === "https://host-a.example/api/auth/github") { enteredA(); await heldA; return Response.json(a); }
+    if (url === "https://host-b.example/api/auth/github") return Response.json(b);
+    if (url.endsWith("/api/ingest")) { uploads.push({ url, token: init.headers.authorization }); return Response.json({}); }
+    throw new Error(`unexpected fixture request ${url}`);
+  };
+  const svc = createSettingsConnectedServices({ file, credentialStore: { save: async () => {} }, hostedCredentials: credentials,
+    elapsedNow: () => clock, fetchImpl, hostedSignIn: options => createHostedGitHubSignIn({ ...options, clientId: "fixture", now: () => clock }) });
+  const start = url => svc.handler(post("/api/setup/hosted/signin", { action: "start", url }));
+  const poll = () => svc.handler(post("/api/setup/hosted/signin", { action: "poll" }));
+  await start("https://host-a.example");
+  clock = 119_000;
+  const old = poll();
+  await reachedA;
+  clock = 121_000;
+  assert.equal(JSON.parse((await start("https://host-b.example")).body).status, "started");
+  releaseA(); await old;
+  assert.deepEqual(writes, [], "superseded auth must not persist credentials");
+  assert.equal(JSON.parse(await readFile(file, "utf8")).hosted?.enabled === true, false, "old completion must not enable B");
+  assert.equal((await start("https://host-c.example")).status, 409, "old completion must not clear B guard");
+  clock += 5000;
+  assert.equal(JSON.parse((await poll()).body).status, "signed_in");
+  const config = JSON.parse(await readFile(file, "utf8"));
+  assert.deepEqual(config.hosted, { enabled: true, url: "https://host-b.example" });
+  assert.deepEqual(writes, [b]);
+  const uploader = createHostedUploader({ baseUrl: config.hosted.url, credentials, fetchImpl });
+  await uploader.push(createPresence({ state: "playing", kind: "track", title: "Fixture" }));
+  assert.deepEqual(uploads, [{ url: "https://host-b.example/api/ingest", token: `Bearer ${b.token}` }]);
+});
+
+
+test("hosted credential commit keeps its destination owner through code expiry (#808)", async () => {
+  const file = await configFile();
+  let clock = 0, enter, release;
+  const saving = new Promise(resolve => { enter = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  const svc = createSettingsConnectedServices({ file, elapsedNow: () => clock, credentialStore: { save: async () => {} },
+    hostedCredentials: { load: async () => null, save: async () => { enter(); await gate; } },
+    hostedSignIn: ({ credentials }) => ({ start: async () => ({ status: "started", expiresIn: 120 }),
+      poll: async () => { await credentials.save({ token: "fixture" }); return { status: "signed_in" }; } }) });
+  const start = url => svc.handler(post("/api/setup/hosted/signin", { action: "start", url }));
+  const poll = () => svc.handler(post("/api/setup/hosted/signin", { action: "poll" }));
+  await start("https://host-a.example");
+  const finishing = poll(); await saving;
+  clock = 121_000;
+  assert.equal(JSON.parse((await poll()).body).status, "pending", "a second poll cannot release the commit owner");
+  assert.equal((await start("https://host-b.example")).status, 409);
+  release(); await finishing;
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).hosted, { enabled: true, url: "https://host-a.example" });
 });
