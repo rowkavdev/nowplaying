@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHostedGitHubSignIn } from "../src/hosted-signin.js";
@@ -21,7 +22,7 @@ function github({ tokenReplies }) {
   const fetchImpl = async (url, init) => {
     const body = JSON.parse(init.body);
     calls.push({ url, body });
-    const reply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
+    const reply = (data, status = 200) => (streamJsonFixture({ ok: status < 400, status, json: async () => data }));
     if (url === "https://github.com/login/device/code") return reply({ device_code: "dc", user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 });
     if (url === "https://github.com/login/oauth/access_token") return reply(replies.shift());
     if (url.endsWith("/api/auth/github")) return reply({ login: "octo", deviceId: DEV, token: TOK, cardPath: "/u/octo.svg" }, 201);
@@ -69,7 +70,7 @@ test("repeat client sign-in replaces the saved device through the hosted service
   const requests = [];
   const fetchImpl = async (url, init) => {
     const body = JSON.parse(init.body);
-    const reply = (data, status = 200) => ({ ok: status < 400, status, json: async () => data });
+    const reply = (data, status = 200) => (streamJsonFixture({ ok: status < 400, status, json: async () => data }));
     if (url.endsWith("/login/device/code")) return reply({ device_code: "dc", user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 });
     if (url.endsWith("/login/oauth/access_token")) return reply({ access_token: "gho_secretsecret" });
     if (url.endsWith("/api/auth/github")) {
@@ -101,7 +102,7 @@ test("failed previous-device replacement leaves the saved credential intact", as
   await credentials.save(old);
   const gh = github({ tokenReplies: [{ access_token: "gho_secretsecret" }] });
   const fetchImpl = async (url, init) => url.endsWith("/api/auth/github")
-    ? { ok: false, status: 409, json: async () => ({ error: "previous_device_missing" }) }
+    ? streamJsonFixture({ ok: false, status: 409, json: async () => ({ error: "previous_device_missing" }) })
     : gh.fetchImpl(url, init);
   let clock = 0;
   const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl, now: () => clock });
@@ -129,8 +130,8 @@ test("a running uploader picks up a new key after a 401 instead of wiping it", a
   await credentials.save({ cardId: "c".repeat(22), deviceId: DEV, token: "o".repeat(43) });
   let revoked = false;
   const fetchImpl = async (url, init) => {
-    if (revoked && init.headers.authorization === `Bearer ${"o".repeat(43)}`) return { ok: false, status: 401, json: async () => ({ error: "unauthorized" }) };
-    return { ok: true, status: 202, json: async () => ({ accepted: true }) };
+    if (revoked && init.headers.authorization === `Bearer ${"o".repeat(43)}`) return streamJsonFixture({ ok: false, status: 401, json: async () => ({ error: "unauthorized" }) });
+    return streamJsonFixture({ ok: true, status: 202, json: async () => ({ accepted: true }) });
   };
   const up = createHostedUploader({ baseUrl: "https://h.example", credentials, fetchImpl, now: () => 1_800_000_000_000 });
   const presence = { state: "playing", kind: "track", title: "A", subtitle: "B" };
@@ -163,9 +164,9 @@ test("hosted device flow polls and expires by elapsed time after a wall-clock ro
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
-    return { status: 200, ok: true, json: async () => url.endsWith("/device/code")
+    return streamJsonFixture({ status: 200, ok: true, json: async () => url.endsWith("/device/code")
       ? { device_code: "fixture", user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 }
-      : { error: "authorization_pending" } };
+      : { error: "authorization_pending" } });
   };
   const credentials = createHostedCredentials({ adapter: memAdapter() });
   const signIn = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl, now: () => elapsed });

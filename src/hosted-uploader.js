@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 import { projectHostedState } from "./hosted-projection.js";
 
 // Pushes privacy-filtered playback state from the desktop app to the hosted
@@ -68,7 +69,10 @@ export function createHostedUploader({
       if (body !== undefined) headers["content-type"] = "application/json";
       const res = await fetchImpl(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal, redirect: "error" });
       let data = null;
-      try { data = await res.json(); } catch { data = null; }
+      try { data = await readBoundedJson(res); } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        data = null;
+      }
       if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, data);
       return data;
     } catch (error) {

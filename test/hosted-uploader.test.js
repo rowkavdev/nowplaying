@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,7 +26,7 @@ function setup({ start = 1_800_000_000_000 } = {}) {
     if (offline) throw new TypeError("fetch failed");
     const path = new URL(url).pathname;
     const token = /^Bearer (.+)$/.exec(init.headers.authorization ?? "")?.[1];
-    const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+    const reply = (status, body) => (streamJsonFixture({ ok: status < 400, status, json: async () => body }));
     try {
       if (path === "/api/register") return reply(201, await service.register({ clientKey: "test" }));
       if (path === "/api/ingest") return reply(202, await service.ingest({ token, payload: JSON.parse(init.body) }));
@@ -198,7 +199,7 @@ test("a stale server without a prior sequence reports recovery unavailable", asy
   env.advanceServer(-60 * 60 * 1000);
   const fetchImpl = async (url, init) => {
     const result = await env.fetchImpl(url, init);
-    if (result.status === 409) return { ...result, json: async () => ({ error: "stale_sequence" }) };
+    if (result.status === 409) return streamJsonFixture({ ...result, json: async () => ({ error: "stale_sequence" }) });
     return result;
   };
   const restarted = env.uploader({ fetchImpl });

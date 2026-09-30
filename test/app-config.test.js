@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
@@ -441,7 +442,7 @@ test("privacy saves clear the hosted card during a provider outage; ordinary gra
       if (String(url).startsWith("https://cards.example.test/")) {
         const path = new URL(url).pathname;
         const token = /^Bearer (.+)$/.exec(init.headers.authorization ?? "")?.[1];
-        const reply = (status, body) => ({ ok: status < 400, status, json: async () => body });
+        const reply = (status, body) => (streamJsonFixture({ ok: status < 400, status, json: async () => body }));
         try {
           if (path === "/api/register") return reply(201, await service.register({ clientKey: "fixture" }));
           if (path === "/api/ingest") return reply(202, await service.ingest({ token, payload: JSON.parse(init.body) }));
