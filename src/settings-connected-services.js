@@ -51,7 +51,8 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           // A credential commit and its destination update are one transaction:
           // do not replace this owner while its durable save is in progress.
           owner.committing = true;
-          return credentials.save(...args);
+          try { return await credentials.save(...args); }
+          catch (error) { owner.committing = false; throw error; }
         },
       } });
     },
@@ -91,6 +92,10 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       try { result = await hosted(request); }
       catch {
         if (activeHostedFlow !== owner) return json(200, { status: "superseded" });
+        // An older concurrent poll may throw while this owner is saving.
+        // Only a failed save releases its commit flag; unrelated poll errors
+        // must not detach durable credentials from their destination update.
+        if (owner?.committing) return json(200, { status: "pending" });
         if (path === "/api/setup/hosted/signin") activeHostedFlow = null;
         return json(500, { error: "hosted_save_failed" });
       }
