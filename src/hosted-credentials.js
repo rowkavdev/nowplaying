@@ -1,3 +1,5 @@
+import { normalizeHostedUrl } from "./hosted-uploader.js";
+
 // Keeps the hosted card device registration in
 // the OS credential store (Windows Credential Manager in the app), next to the
 // media-server sign-in. Never written to config.json.
@@ -12,10 +14,12 @@ const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 // signed in with GitHub ({ login, deviceId, token }, #140).
 function valid(value) {
   if (!value || typeof value !== "object" || !ID.test(value.deviceId) || !TOKEN.test(value.token)) return false;
+  if (value.baseUrl !== undefined) { try { normalizeHostedUrl(value.baseUrl); } catch { return false; } }
   return LOGIN.test(value.login ?? "") || ID.test(value.cardId ?? "");
 }
 function pick(value) {
-  return LOGIN.test(value.login ?? "") ? { login: value.login, deviceId: value.deviceId, token: value.token } : { cardId: value.cardId, deviceId: value.deviceId, token: value.token };
+  const identity = LOGIN.test(value.login ?? "") ? { login: value.login } : { cardId: value.cardId };
+  return { ...identity, deviceId: value.deviceId, token: value.token, ...(value.baseUrl !== undefined ? { baseUrl: normalizeHostedUrl(value.baseUrl) } : {}) };
 }
 
 // Serialize read/compare/delete with saves sharing an adapter in this process.

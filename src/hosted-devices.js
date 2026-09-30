@@ -1,5 +1,5 @@
 import { readBoundedJson } from "./bounded-response.js";
-import { normalizeHostedUrl } from "./hosted-uploader.js";
+import { normalizeHostedUrl, hostedCredentialMatches } from "./hosted-uploader.js";
 
 // Settings "Hosted card devices" (#140): the PCs signed in to the same GitHub
 // account. Rename, sign out one PC, or sign out everywhere. The browser talks
@@ -48,7 +48,7 @@ export function createHostedDevicesClient({ baseUrl, credentials, fetchImpl = fe
 
   async function signedIn() {
     const stored = await credentials.load();
-    return stored && LOGIN.test(stored.login ?? "") && typeof stored.token === "string" ? stored : null;
+    return hostedCredentialMatches(stored, origin) && LOGIN.test(stored.login ?? "") && typeof stored.token === "string" ? stored : null;
   }
 
   // Returns { signedIn, login?, devices, signedOutHere? }. A 401 means this

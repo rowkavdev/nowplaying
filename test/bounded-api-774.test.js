@@ -8,6 +8,6 @@ function streamed() {
 }
 test('774 bounded chunked response rejects and cancels', async () => {
   const fixture = streamed();
-  await assert.rejects(createHostedDevicesClient({ baseUrl: 'http://127.0.0.1', credentials: { load: async () => ({ login: 'fixture', token: 'fixture' }) }, fetchImpl: async () => fixture.response }).run());
+  await assert.rejects(createHostedDevicesClient({ baseUrl: 'http://127.0.0.1', credentials: { load: async () => ({ login: 'fixture', token: 'fixture', baseUrl: 'http://127.0.0.1' }) }, fetchImpl: async () => fixture.response }).run());
   fixture.checked();
 });

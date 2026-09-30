@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { normalizeHostedUrl } from "./hosted-uploader.js";
+import { normalizeHostedUrl, hostedCredentialMatches } from "./hosted-uploader.js";
 
 // "Sign in with GitHub" for the hosted card (#140), using GitHub's device
 // flow: the app shows a short code, the user approves it on github.com, and
@@ -59,14 +59,15 @@ export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = proc
 
   // Hands the GitHub token to the hosted service once; keeps only the device key.
   async function finish(githubToken) {
-    const legacy = await credentials.load().catch(() => null);
+    const stored = await credentials.load().catch(() => null);
+    const legacy = hostedCredentialMatches(stored, origin) ? stored : null;
     let res;
     try {
       res = await post(`${origin}/api/auth/github`, { githubToken, deviceName: String(deviceName || "PC").slice(0, 40), ...(legacy?.cardId && legacy?.token ? { legacyToken: legacy.token } : {}), ...(legacy?.login && legacy?.token ? { previousToken: legacy.token } : {}) });
     } catch { return { status: "hosted_unreachable" }; }
     const d = res.data;
     if (!res.ok || typeof d?.login !== "string" || typeof d?.deviceId !== "string" || typeof d?.token !== "string") return { status: res.status === 429 ? "rate_limited" : "hosted_error" };
-    await credentials.save({ login: d.login, deviceId: d.deviceId, token: d.token });
+    await credentials.save({ login: d.login, deviceId: d.deviceId, token: d.token, baseUrl: origin });
     return { status: "signed_in", login: d.login, cardUrl: `${origin}/u/${d.login}.svg` };
   }
 

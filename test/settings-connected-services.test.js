@@ -4,6 +4,9 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createSettingsConnectedServices } from "../src/settings-connected-services.js";
+import { createAppSettingsStore } from "../src/app-settings.js";
+import { createHostedCredentials } from "../src/hosted-credentials.js";
+import { createHostedDevicesClient } from "../src/hosted-devices.js";
 import { createSettingsServers } from "../src/settings-servers.js";
 import { createPresence } from "../src/presence.js";
 import { createHostedGitHubSignIn } from "../src/hosted-signin.js";
@@ -228,7 +231,7 @@ test("superseded hosted auth cannot save A credentials, enable B or clear B guar
   assert.equal(JSON.parse((await poll()).body).status, "signed_in");
   const config = JSON.parse(await readFile(file, "utf8"));
   assert.deepEqual(config.hosted, { enabled: true, url: "https://host-b.example" });
-  assert.deepEqual(writes, [b]);
+  assert.deepEqual(writes, [{ ...b, baseUrl: "https://host-b.example" }]);
   const uploader = createHostedUploader({ baseUrl: config.hosted.url, credentials, fetchImpl });
   await uploader.push(createPresence({ state: "playing", kind: "track", title: "Fixture" }));
   assert.deepEqual(uploads, [{ url: "https://host-b.example/api/ingest", token: `Bearer ${b.token}` }]);
@@ -349,4 +352,51 @@ test('#831 disconnect cannot race a staged snapshot in the first-server transact
   assert.equal(JSON.parse(await readFile(file, 'utf8')).spotify, undefined);
   assert.equal(values.has('spotify:spotify'), false);
   assert.equal(values.get('navidrome:server'), 'server-token');
+});
+
+
+test('#834 failed destination rename keeps B credentials off A and permits config-only retry', async () => {
+  const file = await configFile();
+  const a = 'https://host-a.example', b = 'https://host-b.example';
+  const config = JSON.parse(await readFile(file, 'utf8'));
+  config.hosted = { enabled: true, url: a };
+  await writeFile(file, JSON.stringify(config));
+  let raw = null, failRename = true, clock = 0;
+  const credentials = createHostedCredentials({ adapter: { getPassword: async () => raw,
+    setPassword: async (_service, _account, value) => { raw = value; }, deletePassword: async () => { raw = null; } } });
+  await credentials.save({ login: 'host-a', deviceId: 'a'.repeat(22), token: 'a'.repeat(24), baseUrl: a });
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    requests.push({ url, auth: init.headers.authorization, body: init.body ? JSON.parse(init.body) : null });
+    if (url.endsWith('/device/code')) return Response.json({ device_code: 'dc', user_code: 'CODE', verification_uri: 'https://github.com/login/device', expires_in: 120, interval: 5 });
+    if (url.endsWith('/access_token')) return Response.json({ access_token: 'fixture-github-token' });
+    if (url === b + '/api/auth/github') return Response.json({ login: 'host-b', deviceId: 'b'.repeat(22), token: 'b'.repeat(24) });
+    if (url.endsWith('/api/ingest')) return Response.json({});
+    throw new Error('unexpected fixture request');
+  };
+  const settingsStore = createAppSettingsStore({ file, renameRetryDelaysMs: [], renameFile: async (...args) => {
+    if (failRename) throw Object.assign(new Error('fixture rename failure'), { code: 'EACCES' });
+    const { rename } = await import('node:fs/promises'); return rename(...args);
+  } });
+  const svc = createSettingsConnectedServices({ file, settingsStore, credentialStore: { save: async () => {} }, hostedCredentials: credentials,
+    fetchImpl, elapsedNow: () => clock, hostedSignIn: options => createHostedGitHubSignIn({ ...options, clientId: 'fixture', now: () => clock }) });
+  await svc.handler(post('/api/setup/hosted/signin', { action: 'start', url: b }));
+  clock = 5000;
+  assert.equal((await svc.handler(post('/api/setup/hosted/signin', { action: 'poll' }))).status, 500);
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).hosted.url, a);
+  const up = createHostedUploader({ baseUrl: a, credentials, fetchImpl });
+  const result = await up.push(createPresence({ state: 'playing', kind: 'track', title: 'Fixture' }));
+  assert.equal(result.sent, false);
+  assert.equal(requests.filter(r => r.url === a + '/api/ingest').length, 0);
+  assert.equal((await credentials.load()).baseUrl, b);
+  assert.equal((await createHostedDevicesClient({ baseUrl: a, credentials, fetchImpl }).run()).signedIn, false);
+  const registrationRequest = requests.find(r => r.url === b + '/api/auth/github');
+  assert.equal(registrationRequest.body.previousToken, undefined, 'A token must not be handed to B for replacement');
+  failRename = false;
+  const retried = await svc.handler(post('/api/setup/hosted/signin', { action: 'poll' }));
+  assert.equal(JSON.parse(retried.body).status, 'signed_in');
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).hosted.url, b);
+  assert.equal(requests.filter(r => r.url === b + '/api/auth/github').length, 1);
+  assert.equal((await createHostedUploader({ baseUrl: b, credentials, fetchImpl }).push(createPresence({ state: 'playing', kind: 'track', title: 'Fixture' }))).sent, true);
+  assert.deepEqual(requests.filter(r => r.auth), [{ url: b + '/api/ingest', auth: 'Bearer ' + 'b'.repeat(24), body: requests.find(r => r.url === b + '/api/ingest').body }]);
 });

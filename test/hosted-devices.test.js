@@ -6,7 +6,7 @@ import { createHostedDevicesClient, createHostedDevicesHandler, HOSTED_DEVICES_P
 const ME = "A".repeat(22);
 const OTHER = "B".repeat(22);
 const creds = (value) => ({ load: async () => value });
-const signedIn = { login: "rowkavdev", deviceId: ME, token: "t".repeat(40) };
+const signedIn = { baseUrl: "https://nowplaying-hosted.vercel.app", login: "rowkavdev", deviceId: ME, token: "t".repeat(40) };
 
 function fakeService({ status = 200, devices } = {}) {
   const calls = [];
@@ -42,7 +42,7 @@ test("anonymous or missing registration is signed out without calling the servic
 
 test("rename and remove another PC post the action, then re-list", async () => {
   const svc = fakeService();
-  const client = createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds(signedIn), fetchImpl: svc.fetchImpl });
+  const client = createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds({ ...signedIn, baseUrl: "https://x.example" }), fetchImpl: svc.fetchImpl });
   await client.run({ action: "rename", deviceId: OTHER, name: "Work" });
   await client.run({ action: "remove", deviceId: OTHER });
   assert.deepEqual(svc.calls.map((c) => [c.method, c.body?.action ?? null]), [["POST", "rename"], ["GET", null], ["POST", "remove"], ["GET", null]]);
@@ -53,7 +53,7 @@ test("removing this PC, sign-out-everywhere or a 401 signs this PC out", async (
   for (const [action, status] of [[{ action: "remove", deviceId: ME }, 200], [{ action: "remove-all" }, 200], [{ action: "list" }, 401]]) {
     const svc = fakeService({ status });
     let out = 0;
-    const handle = createHostedDevicesHandler({ getClient: () => createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds(signedIn), fetchImpl: svc.fetchImpl }), onSignedOut: async () => { out += 1; }, fallback });
+    const handle = createHostedDevicesHandler({ getClient: () => createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds({ ...signedIn, baseUrl: "https://x.example" }), fetchImpl: svc.fetchImpl }), onSignedOut: async () => { out += 1; }, fallback });
     const res = await handle(post(action));
     assert.equal(res.status, 200);
     assert.deepEqual(JSON.parse(res.body), { signedIn: false, devices: [] });
@@ -75,6 +75,6 @@ test("handler checks method, site and input; passes other paths through", async 
 
 test("service errors map to safe statuses", async () => {
   const svc = fakeService({ status: 500 });
-  const handle = createHostedDevicesHandler({ getClient: () => createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds(signedIn), fetchImpl: svc.fetchImpl }), fallback });
+  const handle = createHostedDevicesHandler({ getClient: () => createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds({ ...signedIn, baseUrl: "https://x.example" }), fetchImpl: svc.fetchImpl }), fallback });
   assert.equal((await handle(post({ action: "list" }))).status, 502);
 });
