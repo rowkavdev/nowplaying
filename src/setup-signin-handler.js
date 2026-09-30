@@ -28,23 +28,29 @@ export function createSetupSignInHandler({
   if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) throw new TypeError("deviceId is invalid");
   const flows = new Map();
   const writeChains = new Map();
+  const completing = new Set();
+  let generation = 0;
 
   function prune() {
     const time = elapsedNow();
     for (const [id, flow] of flows) if (flow.expiresAt <= time && !flow.committing) flows.delete(id);
   }
 
-  async function finish(result, serverUrl, flowIsActive = () => true, beginCommit = () => {}) {
+  function finish(result, serverUrl, flowIsActive = () => true, beginCommit = () => {}) {
     const key = JSON.stringify([result.provider, result.identity.id]);
     const prior = writeChains.get(key) ?? Promise.resolve();
-    const turn = prior.then(() => finishExclusive(result, serverUrl, flowIsActive, beginCommit));
+    const turn = prior.then(() => finishCommit(result, serverUrl, flowIsActive, beginCommit));
     const settled = turn.then(() => {}, () => {});
     writeChains.set(key, settled);
-    try { return await turn; }
-    finally { if (writeChains.get(key) === settled) writeChains.delete(key); }
+    completing.add(turn);
+    turn.finally(() => {
+      completing.delete(turn);
+      if (writeChains.get(key) === settled) writeChains.delete(key);
+    }).catch(() => {});
+    return turn;
   }
 
-  async function finishExclusive(result, serverUrl, flowIsActive, beginCommit) {
+  async function finishCommit(result, serverUrl, flowIsActive, beginCommit) {
     const expired = () => json(410, { error: "expired" });
     if (!flowIsActive()) return expired();
     const ref = { provider: result.provider, identityId: result.identity.id };
@@ -56,6 +62,11 @@ export function createSetupSignInHandler({
       return json(500, { error: "draft_update_failed" });
     }
     if (!flowIsActive()) return expired();
+    return commitCredential(result, ref, event, flowIsActive, beginCommit);
+  }
+
+  async function commitCredential(result, ref, event, flowIsActive, beginCommit) {
+    const expired = () => json(410, { error: "expired" });
     // A repeat sign-in replaces the same OS credential. Keep the old value
     // until the draft/config write succeeds so a failed write can restore it.
     if (typeof credentialStore.read !== "function" || typeof credentialStore.remove !== "function") return json(500, { error: "credential_store_failed" });
@@ -67,6 +78,11 @@ export function createSetupSignInHandler({
       if (previous === null || previous === undefined) await credentialStore.remove(ref);
       else await credentialStore.save(ref, previous);
     }
+    return saveAndCommit(result, ref, event, flowIsActive, beginCommit, restore);
+  }
+
+  async function saveAndCommit(result, ref, event, flowIsActive, beginCommit, restore) {
+    const expired = () => json(410, { error: "expired" });
     try { await credentialStore.save(ref, result.secret); }
     catch {
       // Some adapters write before they report failure. Compensate anyway.
@@ -86,11 +102,12 @@ export function createSetupSignInHandler({
       catch { return json(500, { error: "credential_store_failed" }); }
       return json(500, { error: "draft_update_failed" });
     }
-    return json(200, { status: "signed_in", provider: result.provider, identity });
+    return json(200, { status: "signed_in", provider: result.provider, identity: event.identity });
   }
 
   async function start(input) {
     if (!onlyKeys(input, ["action", "provider", "baseUrl"]) || !FLOW_PROVIDERS.has(input.provider)) return json(400, { error: "invalid_request" });
+    const epoch = generation;
     prune();
     if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
     const flowId = newFlowId();
@@ -101,6 +118,7 @@ export function createSetupSignInHandler({
       const serverUrl = input.baseUrl === undefined ? undefined : normalizeServerUrl(input.baseUrl);
       await beforeSignIn({ provider: "plex", serverUrl });
       const pin = await signIn.startPlexPin({ clientId: deviceId });
+      if (epoch !== generation) return json(410, { error: "expired" });
       flows.set(flowId, { provider: "plex", pinId: pin.pinId, serverUrl, expiresAt: elapsedNow() + flowTtlMs });
       return json(200, { status: "pending", flowId, provider: "plex", authUrl: pin.authUrl });
     }
@@ -108,6 +126,7 @@ export function createSetupSignInHandler({
     const serverUrl = normalizeServerUrl(input.baseUrl);
     await beforeSignIn({ provider: "jellyfin", serverUrl });
     const qc = await signIn.startJellyfinQuickConnect({ baseUrl: input.baseUrl, deviceId, version });
+    if (epoch !== generation) return json(410, { error: "expired" });
     flows.set(flowId, { provider: "jellyfin", baseUrl: input.baseUrl, serverUrl, secret: qc.secret, expiresAt: elapsedNow() + flowTtlMs });
     return json(200, { status: "pending", flowId, provider: "jellyfin", code: qc.code });
   }
@@ -145,12 +164,13 @@ export function createSetupSignInHandler({
   async function password(input) {
     if (!onlyKeys(input, ["action", "provider", "baseUrl", "username", "password"]) || !PASSWORD_PROVIDERS.has(input.provider)) return json(400, { error: "invalid_request" });
     if (!text(input.baseUrl) || !text(input.username) || typeof input.password !== "string" || input.password.length > MAX_FIELD) return json(400, { error: "invalid_request" });
+    const epoch = generation;
     const serverUrl = normalizeServerUrl(input.baseUrl);
     await beforeSignIn({ provider: input.provider, serverUrl });
     const result = input.provider === "emby"
       ? await signIn.signInEmby({ baseUrl: input.baseUrl, username: input.username, password: input.password, deviceId, version })
       : await signIn.signInNavidrome({ baseUrl: input.baseUrl, username: input.username, password: input.password });
-    return finish(result, serverUrl);
+    return finish(result, serverUrl, () => epoch === generation);
   }
 
   async function cancel(input) {
@@ -163,7 +183,7 @@ export function createSetupSignInHandler({
 
   const actions = { start, poll, password, cancel };
 
-  return async function handle(request = {}) {
+  async function handle(request = {}) {
     const url = new URL(request.url || "/", "http://127.0.0.1");
     if (url.pathname !== PATH) return null;
     if ((request.method || "GET") !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "POST" });
@@ -178,7 +198,9 @@ export function createSetupSignInHandler({
       if (error instanceof SignInError) return json(error.status === "too_many_servers" ? 409 : NETWORK_FAILURES.includes(error.status) ? 502 : 400, { error: error.status });
       return json(500, { error: "signin_failed" });
     }
-  };
+  }
+  handle.cancelPending = async () => { generation++; flows.clear(); await Promise.allSettled(Array.from(completing)); };
+  return handle;
 }
 
 function onlyKeys(input, allowed) {

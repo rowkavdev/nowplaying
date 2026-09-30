@@ -63,6 +63,7 @@ const JS = `"use strict";
     expired: "That Spotify sign-in expired. Start again.",
     too_many_signins: "Too many sign-ins are open. Wait a minute and try again.",
   };
+  var spotifyGeneration = 0;
   var spotify = { flowId: null, timer: null, clientId: "", authUrl: null };
   var TEST_MESSAGES = {
     connected: "Connected. NowPlaying can see what you're playing.",
@@ -228,22 +229,30 @@ const JS = `"use strict";
   }
 
   function stopSpotify() {
+    spotifyGeneration++;
+    clearSpotify();
+  }
+
+  function clearSpotify() {
     if (spotify.timer) clearTimeout(spotify.timer);
     spotify.flowId = null;
     spotify.timer = null;
     spotify.authUrl = null;
   }
 
-  function spotifyResult(result) {
+  function spotifyResult(result, epoch) {
+    if (epoch !== spotifyGeneration) return;
     if (result.status === "signed_in") {
-      stopSpotify();
-      return request("GET").then(function (fresh) { draft = fresh.draft; });
+      clearSpotify();
+      var refreshEpoch = spotifyGeneration;
+      return request("GET").then(function (fresh) { if (refreshEpoch === spotifyGeneration) draft = fresh.draft; });
     }
     if (result.status === "pending" && spotify.flowId) {
       spotify.timer = setTimeout(function () {
-        callSpotify({ action: "poll", flowId: spotify.flowId }).then(spotifyResult)
-          .catch(function (error) { stopSpotify(); showError(error.message); })
-          .then(function () { render(); });
+        if (epoch !== spotifyGeneration) return;
+        callSpotify({ action: "poll", flowId: spotify.flowId }).then(function (result) { return spotifyResult(result, epoch); })
+          .catch(function (error) { if (epoch !== spotifyGeneration) return; clearSpotify(); showError(error.message); })
+          .then(function () { if (epoch === spotifyGeneration) render(); });
       }, 2000);
     }
   }
@@ -254,16 +263,18 @@ const JS = `"use strict";
     busy = true;
     showError("");
     stopSpotify();
+    var epoch = spotifyGeneration;
     render();
     callSpotify({ action: "start", clientId: spotify.clientId }).then(function (result) {
+      if (epoch !== spotifyGeneration) return;
       if (result.status === "pending") {
         spotify.flowId = result.flowId;
         spotify.authUrl = result.authUrl && result.authUrl.indexOf("https://accounts.spotify.com/") === 0 ? result.authUrl : null;
         if (spotify.authUrl) window.open(spotify.authUrl, "_blank", "noopener");
       }
-      return spotifyResult(result);
-    }).catch(function (error) { showError(error.message); })
-      .then(function () { busy = false; render(); });
+      return spotifyResult(result, epoch);
+    }).catch(function (error) { if (epoch === spotifyGeneration) showError(error.message); })
+      .then(function () { if (epoch === spotifyGeneration) { busy = false; render(); } });
   }
 
   function spotifyPanel() {
@@ -361,6 +372,7 @@ const JS = `"use strict";
   function send(method, body) {
     stopSignIn();
     if (busy) return;
+    if (method === "DELETE") { stopSpotify(); spotify.clientId = ""; resetHostedSignIn(); }
     busy = true;
     showError("");
     render();

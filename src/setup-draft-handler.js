@@ -6,7 +6,7 @@ const CHANGE_KEYS = new Set(["provider", "discordEnabled", "discordIdleBehavior"
 
 // onFinish runs when the review step is confirmed, before the draft moves to
 // "complete"; if it throws, the wizard stays on review so the user can retry.
-export function createSetupDraftHandler({ store, signIn = true, onFinish = async () => {} } = {}) {
+export function createSetupDraftHandler({ store, signIn = true, onFinish = async () => {}, beforeReset = async () => {} } = {}) {
   if (!store || typeof store.load !== "function" || typeof store.save !== "function" || typeof store.clear !== "function") {
     throw new TypeError("setup draft handler.store is invalid");
   }
@@ -22,6 +22,7 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
       return json(200, { draft, resumed, discarded });
     }
     if (method === "DELETE") {
+      await beforeReset();
       await store.clear();
       return json(200, { draft: (await store.load()).draft, resumed: false, discarded: false });
     }

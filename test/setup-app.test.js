@@ -419,3 +419,34 @@ test('#811 Windows self-test provider fixture uses bytes for bounded connection 
     assert.equal(tested.status, 'connected');
   } finally { await app.close(); }
 });
+
+test('#814 Start over invalidates optional Spotify approval from the abandoned draft', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'np-reset-')); let finish; const saved = [];
+  const app = await startSetupApp({ draftFile: join(dir, 'draft.json'), deviceId: 'reset-test-device', credentialStore: { read: async () => null, save: async (...args) => saved.push(args), remove: async () => true },
+    spotifySignIn: ({ openUrl }) => new Promise(resolve => { finish = resolve; openUrl('https://accounts.spotify.com/authorize'); }) });
+  try {
+    const request = async (path, body, method = 'POST') => fetch(new URL(path, app.url), { method, headers: { 'content-type': 'application/json', 'X-Nowplaying-Session': app.sessionSecret }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const started = await (await request('/api/setup/spotify', { action: 'start', clientId: '0123456789abcdef0123456789abcdef' })).json();
+    await request('/api/setup/draft', null, 'DELETE');
+    finish({ refreshToken: 'fixture', identity: { id: 'old', displayName: 'Old' } });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const poll = await request('/api/setup/spotify', { action: 'poll', flowId: started.flowId });
+    assert.equal(poll.status, 410); assert.deepEqual(saved, []);
+    const fresh = await (await request('/api/setup/draft', null, 'GET')).json();
+    assert.equal(fresh.draft.spotify, null);
+  } finally { await app.close(); }
+});
+
+
+test('#814 Start over also invalidates a pending password sign-in', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'np-media-reset-')); let finish, began; const entered = new Promise(resolve => { began = resolve; }); const saved = [];
+  const app = await startSetupApp({ draftFile: join(dir, 'draft.json'), deviceId: 'media-reset-device', credentialStore: { read: async () => null, save: async (...args) => saved.push(args), remove: async () => true }, signIn: { signInNavidrome: () => new Promise(resolve => { finish = resolve; began(); }) } });
+  try {
+    const request = (path, body, method = 'POST') => fetch(new URL(path, app.url), { method, headers: { 'content-type': 'application/json', 'X-Nowplaying-Session': app.sessionSecret }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const pending = request('/api/setup/signin', { action: 'password', provider: 'navidrome', baseUrl: 'http://127.0.0.1:4533', username: 'old', password: 'fixture' });
+    await entered; await request('/api/setup/draft', null, 'DELETE');
+    finish({ provider: 'navidrome', identity: { id: 'old', displayName: 'Old' }, secret: 'fixture' });
+    assert.equal((await pending).status, 410); assert.deepEqual(saved, []);
+    assert.equal((await (await request('/api/setup/draft', null, 'GET')).json()).draft.account, null);
+  } finally { await app.close(); }
+});
