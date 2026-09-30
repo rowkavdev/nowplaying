@@ -11,7 +11,7 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
     throw new TypeError("setup draft handler.store is invalid");
   }
 
-  return async function handle(request = {}) {
+  async function handle(request = {}) {
     const url = new URL(request.url || "/", "http://localhost");
     if (url.pathname !== PATH) return null;
     if (url.search) return json(400, { error: "invalid_request" });
@@ -23,8 +23,11 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
     }
     if (method === "DELETE") {
       await beforeReset();
-      await store.clear();
-      return json(200, { draft: (await store.load()).draft, resumed: false, discarded: false });
+      const reset = async () => {
+        await store.clear();
+        return json(200, { draft: (await store.load()).draft, resumed: false, discarded: false });
+      };
+      return typeof store.transaction === "function" ? store.transaction(reset) : reset();
     }
     if (method !== "POST") return json(405, { error: "method_not_allowed" }, { Allow: "GET, POST, DELETE" });
 
@@ -66,7 +69,8 @@ export function createSetupDraftHandler({ store, signIn = true, onFinish = async
     }
     const saved = await store.save(next);
     return json(200, { draft: saved });
-  };
+  }
+  return request => request?.method === "POST" && typeof store.transaction === "function" ? store.transaction(() => handle(request)) : handle(request);
 }
 
 function json(status, value, extra = {}) {
