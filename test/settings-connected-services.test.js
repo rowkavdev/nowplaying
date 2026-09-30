@@ -298,3 +298,19 @@ test("failed hosted durable save releases the owner for retry (#808 review)", as
   assert.equal((await req({ action: "poll" })).status, 500);
   assert.equal(JSON.parse((await req({ action: "start", url: "https://host-b.example" })).body).status, "started");
 });
+
+test('#817 disconnect removes staged first-run Spotify credential and reports failure honestly', async () => {
+  for (const succeeds of [true, false]) {
+    const file = await configFile(false); let finish; const removed = [];
+    const svc = createSettingsConnectedServices({ file,
+      credentialStore: { read: async () => null, save: async () => {}, remove: async ref => { removed.push(ref); return succeeds; } },
+      spotifySignIn: ({ openUrl }) => new Promise(resolve => { finish = resolve; openUrl('https://accounts.spotify.com/authorize'); }) });
+    const started = await svc.handler(post('/api/setup/spotify', { action: 'start', clientId: CID }));
+    finish({ refreshToken: 'fixture', identity: { id: 'staged', displayName: 'Staged' } });
+    await waitForSpotify(svc.handler, JSON.parse(started.body).flowId);
+    const result = await svc.handler(post('/api/settings/services', { action: 'remove-spotify' }));
+    assert.deepEqual(removed, [{ provider: 'spotify', identityId: 'staged' }]);
+    assert.equal(JSON.parse(result.body).tokenRemoved, succeeds);
+    assert.equal(JSON.parse((await svc.handler({ url: '/api/settings/services' })).body).spotify, null);
+  }
+});

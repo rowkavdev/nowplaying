@@ -134,12 +134,13 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
         await spotify.cancelPending();
         const config = await current();
         if (config?.spotify) await store.updateSpotify(null);
+        const disconnected = config?.spotify ?? pendingSpotify;
         pendingSpotify = null;
         // Remove the saved refresh token. Config is removed first, so a failed
         // keychain delete cannot make the app keep using it.
-        let tokenRemoved = !config?.spotify;
-        if (config?.spotify && typeof credentialStore.remove === "function") {
-          try { tokenRemoved = await credentialStore.remove(config.spotify.credentialRef); }
+        let tokenRemoved = !disconnected;
+        if (disconnected && typeof credentialStore.remove === "function") {
+          try { tokenRemoved = await credentialStore.remove(disconnected.credentialRef ?? { provider: "spotify", identityId: disconnected.identity.id }); }
           catch { tokenRemoved = false; }
         }
         restart();
