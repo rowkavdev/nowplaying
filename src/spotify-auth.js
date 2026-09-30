@@ -75,9 +75,22 @@ export function readCallback(callbackUrl, expectedState) {
   return code;
 }
 
-async function tokenRequest(fields, fetchImpl) {
+async function tokenRequest(fields, fetchImpl, requestTimeoutMs = 10_000) {
+  const controller = new AbortController();
+  let timer;
+  const timedOut = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new SpotifyAuthError("Spotify token request timed out", "token_failed"));
+    }, requestTimeoutMs);
+  });
+  try {
+  // Race also bounds injected adapters that ignore abort. Keep the deadline
+  // through body parsing, and never use a token result after timeout.
+  return await Promise.race([timedOut, (async () => {
   const response = await fetchImpl(TOKEN_URL, {
     method: "POST",
+    signal: controller.signal,
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(fields).toString(),
   });
@@ -95,26 +108,28 @@ async function tokenRequest(fields, fetchImpl) {
     refreshToken: typeof payload.refresh_token === "string" && payload.refresh_token ? payload.refresh_token : null,
     expiresInMs: expiresIn * 1000,
   };
+  })()]);
+  } finally { clearTimeout(timer); }
 }
 
-export async function exchangeCode({ clientId, code, redirectUri, verifier, fetchImpl = fetch }) {
+export async function exchangeCode({ clientId, code, redirectUri, verifier, fetchImpl = fetch, requestTimeoutMs = 10_000 }) {
   if (typeof code !== "string" || !code) throw new TypeError("code is required");
   if (typeof verifier !== "string" || !verifier) throw new TypeError("verifier is required");
   return tokenRequest({
     grant_type: "authorization_code", code, redirect_uri: checkRedirectUri(redirectUri),
     client_id: checkClientId(clientId), code_verifier: verifier,
-  }, fetchImpl);
+  }, fetchImpl, requestTimeoutMs);
 }
 
-export async function refreshAccessToken({ clientId, refreshToken, fetchImpl = fetch }) {
+export async function refreshAccessToken({ clientId, refreshToken, fetchImpl = fetch, requestTimeoutMs = 10_000 }) {
   if (typeof refreshToken !== "string" || !refreshToken) throw new SpotifyAuthError("Not signed in to Spotify", "reauth_needed");
-  return tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: checkClientId(clientId) }, fetchImpl);
+  return tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: checkClientId(clientId) }, fetchImpl, requestTimeoutMs);
 }
 
 // getAccessToken() for the Spotify provider. Keeps the access token in memory
 // only, refreshes a minute before it expires, and saves a rotated refresh
 // token straight away (Spotify may issue a new one on each refresh).
-export function createSpotifyTokenSource({ clientId, readRefreshToken, saveRefreshToken, fetchImpl = fetch, now = Date.now }) {
+export function createSpotifyTokenSource({ clientId, readRefreshToken, saveRefreshToken, fetchImpl = fetch, now = Date.now, requestTimeoutMs = 10_000 }) {
   checkClientId(clientId);
   if (typeof readRefreshToken !== "function" || typeof saveRefreshToken !== "function") {
     throw new TypeError("readRefreshToken and saveRefreshToken are required");
@@ -123,7 +138,7 @@ export function createSpotifyTokenSource({ clientId, readRefreshToken, saveRefre
   let pending = null;
   async function refresh() {
     const usedToken = await readRefreshToken();
-    const result = await refreshAccessToken({ clientId, refreshToken: usedToken, fetchImpl });
+    const result = await refreshAccessToken({ clientId, refreshToken: usedToken, fetchImpl, requestTimeoutMs });
     // Re-check liveness before writing: the stored credential may have been
     // removed (disconnect) or rotated (another instance) while the network
     // call was in flight. Saving then would resurrect or clobber it (#725).
