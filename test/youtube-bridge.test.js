@@ -35,7 +35,7 @@ test("rejects web pages, wrong tokens and bad payloads", () => {
   assert.equal(b.receive({ method: "POST", headers: { ...headers, authorization: "Bearer nope" }, body: video() }).status, 401);
   assert.equal(b.receive({ method: "GET", headers, body: video() }).status, 405);
   for (const body of [null, [], video({ videoId: "short" }), video({ title: "" }), video({ state: "buffering" }), video({ extra: 1 }),
-    video({ thumbnail: "http://i.ytimg.com/x.jpg" }), video({ thumbnail: "https://192.168.1.2/x.jpg" }), video({ tabId: "../x" }), video({ positionMs: -1 }), video({ live: "yes" })]) {
+    video({ tabId: "../x" }), video({ positionMs: -1 }), video({ live: "yes" })]) {
     assert.equal(b.receive({ method: "POST", headers, body }).status, 400, JSON.stringify(body));
   }
   assert.equal(b.tabCount(), 0);
@@ -166,4 +166,15 @@ test("Discord shows a YouTube video as Watching and YouTube Music as Listening (
   t = 3000;
   bridge.receive({ method: "POST", headers, body: { tabId: "tab3", videoId: "abcdefghijk", title: "Short", state: "playing", shorts: true } });
   assert.equal((await discord.getPresence()).title, "A song");
+});
+
+test('unsupported cosmetic artwork never discards valid playback (#16)', async () => {
+  for (const thumbnail of ['https://i9.ytimg.com/vi/dQw4w9WgXcQ/hqdefault_custom_1.jpg', 'https://yt4.ggpht.com/a.jpg', 'http://i.ytimg.com/a.jpg', 'https://192.168.1.2/a.jpg', 'not a URL', 42, 'x'.repeat(501)]) {
+    const { b } = bridge();
+    assert.equal(b.receive({ method: 'POST', headers, body: video({ thumbnail }) }).status, 204);
+    const presence = await b.provider.getPresence();
+    assert.equal(presence.state, 'playing');
+    assert.equal(presence.title, 'A video');
+    assert.equal(presence.artworkUrl, null);
+  }
 });

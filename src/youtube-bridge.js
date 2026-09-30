@@ -45,10 +45,13 @@ function ms(value) {
 
 function thumbnailUrl(value) {
   if (value === undefined || value === null) return null;
-  if (typeof value !== "string" || value.length > 500) throw new TypeError("bad thumbnail");
-  const url = new URL(value);
-  // YouTube thumbnails only; nothing that could point at a private address.
-  if (url.protocol !== "https:" || !["i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com", "i4.ytimg.com", "yt3.ggpht.com", "lh3.googleusercontent.com"].includes(url.hostname)) throw new TypeError("bad thumbnail");
+  // Artwork is cosmetic. Keep valid playback while dropping untrusted URLs.
+  if (typeof value !== "string" || value.length > 500) return null;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  // Preserve the fetch allowlist: accepting the event does not authorize
+  // fetching artwork from an arbitrary host or private address.
+  if (url.protocol !== "https:" || url.username || url.password || url.port || !["i.ytimg.com", "i1.ytimg.com", "i2.ytimg.com", "i3.ytimg.com", "i4.ytimg.com", "yt3.ggpht.com", "lh3.googleusercontent.com"].includes(url.hostname)) return null;
   return url.toString();
 }
 
