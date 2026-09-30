@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 // Opt-in artwork lookup for Discord presence (#124). Sends only the track
 // title and artist to MusicBrainz, then points Discord at the Cover Art
 // Archive front cover for the best-matching release. Follows the MusicBrainz
@@ -44,7 +45,7 @@ export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgen
     const query = `recording:${luceneTerm(title)} AND artist:${luceneTerm(artist)}`;
     const response = await limited(`${API}?${new URLSearchParams({ query, fmt: "json", limit: "5" })}`, { redirect: "error" });
     if (!response.ok) return null;
-    const body = await response.json();
+    const body = await readBoundedJson(response);
     const releases = (Array.isArray(body?.recordings) ? body.recordings : [])
       .filter((recording) => Number(recording?.score) >= minScore)
       .flatMap((recording) => (Array.isArray(recording.releases) ? recording.releases : []))
