@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runInNewContext } from "node:vm";
@@ -18,7 +19,7 @@ async function view(status) {
   };
   runInNewContext((await handle({ url: "/status.js" })).body, {
     document: { getElementById: get, createElement: () => ({ textContent: "" }) },
-    fetch: async () => ({ ok: true, json: async () => snapshot }),
+    fetch: async () => (streamJsonFixture({ ok: true, json: async () => snapshot })),
     Date, setInterval() {}, navigator: { clipboard: { writeText: async () => {} } },
   });
   for (let i = 0; i < 10 && get("summary").textContent === ""; i++) await new Promise((resolve) => setImmediate(resolve));
