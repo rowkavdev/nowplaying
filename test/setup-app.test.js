@@ -450,3 +450,20 @@ test('#814 Start over also invalidates a pending password sign-in', async () => 
     assert.equal((await (await request('/api/setup/draft', null, 'GET')).json()).draft.account, null);
   } finally { await app.close(); }
 });
+
+test('#812 overlapping setup changes preserve both accepted fields', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'np-overlap-'));
+  const app = await startSetupApp({ draftFile: join(dir, 'draft.json') });
+  const request = body => fetch(new URL('/api/setup/draft', app.url), { method: 'POST', headers: { 'content-type': 'application/json', 'X-Nowplaying-Session': app.sessionSecret }, body: JSON.stringify(body) });
+  try {
+    for (let i = 0; i < 20; i++) {
+      await request({ action: 'save', changes: { discordEnabled: true, discordIdleBehavior: 'clear' } });
+      const responses = await Promise.all([request({ action: 'save', changes: { discordEnabled: false } }), request({ action: 'save', changes: { discordIdleBehavior: 'recent' } })]);
+      assert.deepEqual(responses.map(r => r.status), [200, 200]);
+      const bodies = await Promise.all(responses.map(r => r.json()));
+      const fresh = await (await fetch(new URL('/api/setup/draft', app.url))).json();
+      assert.equal(fresh.draft.discordEnabled, false); assert.equal(fresh.draft.discordIdleBehavior, 'recent');
+      assert.ok(bodies.some(body => JSON.stringify(body.draft) === JSON.stringify(fresh.draft)));
+    }
+  } finally { await app.close(); }
+});

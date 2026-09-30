@@ -127,19 +127,19 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
-  const onSignedIn = async ({ provider, identity, serverUrl }) => {
+  const onSignedIn = async ({ provider, identity, serverUrl }) => store.transaction(async () => {
     const { draft: current } = await store.load();
     await store.save({ ...current, provider, account: { provider, id: identity.id, displayName: identity.displayName, ...(serverUrl ? { serverUrl } : {}) } });
-  };
+  });
   const signIn = credentialStore
     ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })
     : async () => null;
   // Optional Spotify sign-in for the card (#135); like the media server
   // sign-in it needs somewhere safe to keep the refresh token.
-  const onSpotifySignedIn = async ({ clientId, identity }) => {
+  const onSpotifySignedIn = async ({ clientId, identity }) => store.transaction(async () => {
     const { draft: current } = await store.load();
     await store.save({ ...current, spotify: { clientId, identity } });
-  };
+  });
   const spotify = credentialStore
     ? createSetupSpotifyHandler({ credentialStore, onSignedIn: onSpotifySignedIn, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) })
     : async () => null;
