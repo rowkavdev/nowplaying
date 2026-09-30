@@ -14,6 +14,14 @@ const ROUTE = "/api/settings/services";
 export function createSettingsConnectedServices({ file, credentialStore, hostedCredentials, onConfigured = async () => {}, settingsStore, spotifySignIn, hostedSignIn, fetchImpl = fetch, elapsedNow = () => performance.now() } = {}) {
   if (!file || typeof credentialStore?.save !== "function") throw new TypeError("Spotify credential store required");
   const store = settingsStore ?? createAppSettingsStore({ file });
+  // First-server persistence and staged-service changes use one queue. Provider
+  // waits and cancellation stay outside it so they cannot deadlock the commit.
+  let queue = Promise.resolve();
+  function serial(job) {
+    const run = queue.then(job);
+    queue = run.catch(() => {});
+    return run;
+  }
   let pendingSpotify = null;
   let removingSpotify = false;
   let pendingHosted = null;
@@ -23,21 +31,21 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     catch (error) { if (error?.code === "ENOENT") return null; throw error; }
   }
   const restart = () => setTimeout(() => { Promise.resolve(onConfigured()).catch(() => {}); }, 500);
-  async function saveSpotify(account) {
+  function saveSpotify(account) { return serial(async () => {
     const config = await current();
     if (!config) { pendingSpotify = account; return; }
     await store.updateSpotify(account);
     pendingSpotify = null;
     // The flow result is only returned on poll. Restarting here can destroy
     // the handler before the browser sees its signed-in result.
-  }
-  async function saveHosted(url) {
+  }); }
+  function saveHosted(url) { return serial(async () => {
     const config = await current();
     if (!config) { pendingHosted = url; return; }
     await store.updateHostedDestination({ enabled: true, url: url === DEFAULT_HOSTED_URL ? null : url });
     pendingHosted = null;
     restart();
-  }
+  }); }
   const spotify = createSetupSpotifyHandler({ credentialStore, onSignedIn: saveSpotify, elapsedNow, ...(spotifySignIn ? { signIn: spotifySignIn } : {}) });
   const hosted = createSetupHostedHandler({ credentials: hostedCredentials, fetchImpl,
     settings: async () => hostedUploadSettings(await current()),
@@ -57,11 +65,11 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       } });
     },
   });
-  async function afterFirstServer() {
+  function afterFirstServer() { return serial(async () => {
     if (!pendingSpotify && !pendingHosted) return;
     if (pendingSpotify) { await store.updateSpotify(pendingSpotify); pendingSpotify = null; }
     if (pendingHosted) { await store.updateHostedDestination({ enabled: true, url: pendingHosted === DEFAULT_HOSTED_URL ? null : pendingHosted }); pendingHosted = null; }
-  }
+  }); }
   async function handler(request = {}) {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
     if (path !== ROUTE && path !== "/api/setup/spotify" && !path.startsWith("/api/setup/hosted/")) return null;
@@ -132,19 +140,21 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       removingSpotify = true;
       try {
         await spotify.cancelPending();
-        const config = await current();
-        if (config?.spotify) await store.updateSpotify(null);
-        const disconnected = config?.spotify ?? pendingSpotify;
-        pendingSpotify = null;
-        // Remove the saved refresh token. Config is removed first, so a failed
-        // keychain delete cannot make the app keep using it.
-        let tokenRemoved = !disconnected;
-        if (disconnected && typeof credentialStore.remove === "function") {
-          try { tokenRemoved = await credentialStore.remove(disconnected.credentialRef ?? { provider: "spotify", identityId: disconnected.identity.id }); }
-          catch { tokenRemoved = false; }
-        }
-        restart();
-        return json(200, { removed: true, tokenRemoved });
+        return await serial(async () => {
+          const config = await current();
+          if (config?.spotify) await store.updateSpotify(null);
+          const disconnected = config?.spotify ?? pendingSpotify;
+          pendingSpotify = null;
+          // Remove the saved refresh token. Config is removed first, so a failed
+          // keychain delete cannot make the app keep using it.
+          let tokenRemoved = !disconnected;
+          if (disconnected && typeof credentialStore.remove === "function") {
+            try { tokenRemoved = await credentialStore.remove(disconnected.credentialRef ?? { provider: "spotify", identityId: disconnected.identity.id }); }
+            catch { tokenRemoved = false; }
+          }
+          restart();
+          return json(200, { removed: true, tokenRemoved });
+        });
       } finally { removingSpotify = false; }
     }
     return json(400, { error: "invalid_request" });
@@ -158,6 +168,6 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       committed: () => { if (pendingSpotify === spotify) pendingSpotify = null; if (pendingHosted === hosted) pendingHosted = null; },
     };
   }
-  return { handler, afterFirstServer, prepareFirstServer };
+  return { handler, afterFirstServer, prepareFirstServer, serial };
 }
 function json(status, value) { return { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, body: `${JSON.stringify(value)}\n` }; }
