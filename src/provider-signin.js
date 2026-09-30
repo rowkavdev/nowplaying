@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 import { createHash, randomBytes } from "node:crypto";
 import { networkFailure } from "./setup-network-failure.js";
 
@@ -41,7 +42,7 @@ async function request(fetchImpl, url, init = {}) {
   }
   if (response.status === 401 || response.status === 403) throw new SignInError("authentication_failed");
   if (!response.ok) throw new SignInError("connection_failed");
-  try { return await response.json(); } catch { throw new SignInError("connection_failed"); }
+  try { return await readBoundedJson(response); } catch { throw new SignInError("connection_failed"); }
 }
 
 function identity(id, displayName) {

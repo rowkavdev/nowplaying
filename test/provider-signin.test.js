@@ -14,7 +14,7 @@ function fakeFetch(routes) {
     const route = routes[key];
     if (!route) throw new TypeError(`unexpected ${key}`);
     const { status = 200, body } = typeof route === "function" ? route(url, init) : route;
-    return { ok: status >= 200 && status < 300, status, json: async () => body };
+    return new Response(JSON.stringify(body ?? {}), { status });
   };
   return { calls, fetchImpl };
 }
