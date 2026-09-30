@@ -202,3 +202,40 @@ test("default hosted device flow clock is independent of Date.now (#729)", async
     performance.now = originalElapsed;
   }
 });
+
+test('stale 401 recovery cannot delete a sign-in saved after its old-key snapshot (#791)', async () => {
+  const adapter = memAdapter();
+  const credentials = createHostedCredentials({ adapter });
+  const signInCredentials = createHostedCredentials({ adapter });
+  const old = { cardId: 'c'.repeat(22), deviceId: DEV, token: 'o'.repeat(43) };
+  const fresh = { login: 'octo', deviceId: DEV, token: TOK };
+  await credentials.save(old);
+  let loads = 0;
+  const store = { ...credentials, load: async () => {
+    const snapshot = await credentials.load();
+    if (++loads === 2) await signInCredentials.save(fresh);
+    return snapshot;
+  } };
+  const up = createHostedUploader({ baseUrl: 'https://h.example', credentials: store, fetchImpl: async (_url, init) => ({ ok: init.headers.authorization !== `Bearer ${old.token}`, status: init.headers.authorization === `Bearer ${old.token}` ? 401 : 202, json: async () => ({}) }) });
+  const presence = { state: 'playing', kind: 'track', title: 'A' };
+  assert.equal((await up.push(presence)).reason, 'credentials_changed');
+  assert.deepEqual({ ...await credentials.load() }, fresh);
+  assert.equal((await up.push(presence)).sent, true);
+});
+
+test('conditional credential deletion serializes with a new save even across wrappers', async () => {
+  const adapter = memAdapter();
+  const one = createHostedCredentials({ adapter });
+  const two = createHostedCredentials({ adapter });
+  await one.save({ login: 'old', deviceId: DEV, token: 'o'.repeat(43) });
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const realDelete = adapter.deletePassword;
+  adapter.deletePassword = async (...args) => { await gate; return realDelete(...args); };
+  const clearing = one.clearIfToken('o'.repeat(43));
+  const saving = two.save({ login: 'new', deviceId: DEV, token: TOK });
+  release();
+  assert.equal(await clearing, true);
+  await saving;
+  assert.equal((await one.load()).login, 'new');
+});
