@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createSettingsConnectedServices } from "../src/settings-connected-services.js";
+import { createSettingsServers } from "../src/settings-servers.js";
 import { createPresence } from "../src/presence.js";
 import { createHostedGitHubSignIn } from "../src/hosted-signin.js";
 import { createHostedUploader } from "../src/hosted-uploader.js";
@@ -313,4 +314,39 @@ test('#817 disconnect removes staged first-run Spotify credential and reports fa
     assert.equal(JSON.parse(result.body).tokenRemoved, succeeds);
     assert.equal(JSON.parse((await svc.handler({ url: '/api/settings/services' })).body).spotify, null);
   }
+});
+
+
+test('#831 disconnect cannot race a staged snapshot in the first-server transaction', async () => {
+  const file = await configFile(false);
+  const values = new Map();
+  const key = ref => `${ref.provider}:${ref.identityId}`;
+  const credentialStore = { read: async ref => values.get(key(ref)) ?? null,
+    save: async (ref, secret) => values.set(key(ref), secret), remove: async ref => values.delete(key(ref)) };
+  let finish, release, captured;
+  const gate = new Promise(resolve => { release = resolve; });
+  const snapshot = new Promise(resolve => { captured = resolve; });
+  const svc = createSettingsConnectedServices({ file, credentialStore,
+    spotifySignIn: ({ openUrl }) => new Promise(resolve => { finish = resolve; openUrl('https://accounts.spotify.com/authorize'); }) });
+  const started = await svc.handler(post('/api/setup/spotify', { action: 'start', clientId: CID }));
+  finish({ refreshToken: 'spotify-token', identity: { id: 'spotify', displayName: 'Spotify' } });
+  await waitForSpotify(svc.handler, JSON.parse(started.body).flowId);
+  const mgmt = createSettingsServers({ file, credentialStore, deviceId: 'first-server-fixture', fileQueue: svc.serial,
+    prepareConfig: async existing => { const prepared = svc.prepareFirstServer(existing); captured(); await gate; return prepared; },
+    signIn: { signInNavidrome: async () => ({ provider: 'navidrome', identity: { id: 'server', displayName: 'Server' }, secret: 'server-token' }) } });
+  const commit = mgmt.handler(post('/api/setup/signin', { action: 'password', provider: 'navidrome', baseUrl: 'http://127.0.0.1:4533', username: 'server', password: 'pw' }));
+  await snapshot;
+  let disconnected = false;
+  const removal = svc.handler(post('/api/settings/services', { action: 'remove-spotify' })).then(response => { disconnected = true; return response; });
+  await new Promise(resolve => setImmediate(resolve));
+  // Always release the held commit even when the pre-fix assertion fails.
+  const early = disconnected;
+  release();
+  const [signedIn, removed] = await Promise.all([commit, removal]);
+  assert.equal(early, false, 'disconnect must wait for the first-server commit');
+  assert.equal(signedIn.status, 200);
+  assert.deepEqual(JSON.parse(removed.body), { removed: true, tokenRemoved: true });
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).spotify, undefined);
+  assert.equal(values.has('spotify:spotify'), false);
+  assert.equal(values.get('navidrome:server'), 'server-token');
 });
