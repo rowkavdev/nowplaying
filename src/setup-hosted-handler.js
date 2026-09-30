@@ -43,8 +43,9 @@ export function createSetupHostedHandler({ settings = async () => ({}), fetchImp
       }
       if (input.action === "poll") {
         if (!signIn) return json(200, { status: "not_started" });
-        const result = await signIn.poll();
-        if (result.status !== "pending") signIn = null;
+        const polled = signIn;
+        const result = await polled.poll();
+        if (signIn === polled && result.status !== "pending") signIn = null;
         return json(200, result);
       }
       return json(400, { error: "invalid_request" });

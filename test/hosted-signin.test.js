@@ -239,3 +239,22 @@ test('conditional credential deletion serializes with a new save even across wra
   await saving;
   assert.equal((await one.load()).login, 'new');
 });
+
+test('late terminal poll from flow A leaves newly started flow B intact (#790)', async () => {
+  for (const status of ['expired', 'denied', 'signed_in']) {
+    let complete;
+    const deferred = new Promise(resolve => { complete = resolve; });
+    let created = 0, bPolls = 0;
+    const handler = createSetupHostedHandler({ credentials: {}, createSignIn: () => ++created === 1
+      ? { start: async () => ({ status: 'started' }), poll: () => deferred }
+      : { start: async () => ({ status: 'started' }), poll: async () => { bPolls++; return { status: 'pending' }; } } });
+    const request = action => handler({ method: 'POST', url: '/api/setup/hosted/signin', body: JSON.stringify({ action }) });
+    await request('start');
+    const polling = request('poll');
+    await request('start');
+    complete({ status });
+    assert.equal(JSON.parse((await polling).body).status, status);
+    assert.equal(JSON.parse((await request('poll')).body).status, 'pending');
+    assert.equal(bPolls, 1);
+  }
+});
