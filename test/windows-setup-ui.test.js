@@ -29,7 +29,7 @@ test("native setup window walks every step, including sign-in, against the real 
     const body = path.endsWith("/getUser.view")
       ? { "subsonic-response": { status: "ok", user: { username: "selftest" } } }
       : { "subsonic-response": { status: "ok", nowPlaying: {} } };
-    return { ok: true, status: 200, statusText: "OK", json: async () => body };
+    return Response.json(body);
   };
   const startupApplied = [];
   const startup = { isEnabled: async () => false, setEnabled: async (value) => { startupApplied.push(value); } };
