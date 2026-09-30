@@ -278,3 +278,30 @@ test("a failed pre-save callback removes a newly acquired credential", async () 
   assert.equal(values.has("navidrome:u1"), false);
   await assert.rejects(readFile(file, "utf8"), { code: "ENOENT" });
 });
+
+
+test('#816 current first-run entry commits staged Spotify and hosted with the first server', async () => {
+  const file = await fixture(); let finish;
+  const app = await startAppFromConfig({ configFile: file, credentialStore: store, deviceId, port: 0,
+    spotifySignIn: ({ openUrl }) => new Promise(resolve => { finish = resolve; openUrl('https://accounts.spotify.com/authorize'); }),
+    hostedCredentials: { load: async () => null, save: async () => {} },
+    hostedSignIn: () => ({ start: async () => ({ status: 'started' }), poll: async () => ({ status: 'signed_in' }) }),
+    signIn: { signInNavidrome: async () => ({ provider: 'navidrome', identity: { id: 'media', displayName: 'Media' }, secret: 'fixture' }) } });
+  try {
+    const page = await fetch(`${app.url}/settings`);
+    const cookie = page.headers.get('set-cookie').split(';')[0];
+    const call = async (url, body) => fetch(`${app.url}${url}`, { method: 'POST', headers: { cookie, 'content-type': 'application/json', origin: app.url }, body: JSON.stringify(body) });
+    const started = await (await call('/api/setup/spotify', { action: 'start', clientId: '0123456789abcdef0123456789abcdef' })).json();
+    finish({ refreshToken: 'fixture', identity: { id: 'spotify', displayName: 'Spotify' } });
+    let status; for (let i = 0; i < 30; i++) { status = await (await call('/api/setup/spotify', { action: 'poll', flowId: started.flowId })).json(); if (status.status !== 'pending') break; await new Promise(r => setTimeout(r, 10)); }
+    assert.equal(status.status, 'signed_in');
+    await call('/api/setup/hosted/signin', { action: 'start', url: 'https://cards.example' });
+    await call('/api/setup/hosted/signin', { action: 'poll' });
+    const result = await call('/api/setup/signin', { action: 'password', provider: 'navidrome', baseUrl: 'http://127.0.0.1:4533', username: 'fixture', password: 'fixture' });
+    assert.equal(result.status, 200);
+    const config = JSON.parse(await readFile(file, 'utf8'));
+    assert.equal(config.spotify.identity.id, 'spotify');
+    assert.deepEqual(config.hosted, { enabled: true, url: 'https://cards.example' });
+    assert.equal(config.servers[0].identity.id, 'media');
+  } finally { await app.close(); }
+});

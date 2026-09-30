@@ -148,6 +148,15 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     }
     return json(400, { error: "invalid_request" });
   }
-  return { handler, afterFirstServer };
+  // Prepare optional sections without reading/writing a missing config. Clear
+  // only the staged snapshot actually committed, never a newer staged result.
+  function prepareFirstServer(existing) {
+    const spotify = pendingSpotify, hosted = pendingHosted;
+    return {
+      config: { ...existing, ...(spotify ? { spotify } : {}), ...(hosted ? { hosted: { enabled: true, url: hosted === DEFAULT_HOSTED_URL ? null : hosted } } : {}) },
+      committed: () => { if (pendingSpotify === spotify) pendingSpotify = null; if (pendingHosted === hosted) pendingHosted = null; },
+    };
+  }
+  return { handler, afterFirstServer, prepareFirstServer };
 }
 function json(status, value) { return { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, body: `${JSON.stringify(value)}\n` }; }

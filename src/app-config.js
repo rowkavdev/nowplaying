@@ -285,7 +285,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     if (error?.startupCode !== "CONFIG_MISSING" || !configFile) throw error;
     if (typeof credentialStore.save !== "function" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId ?? "")) throw new StartupError("SETUP_UNAVAILABLE", "A credential store and stable device ID are needed to connect a server. Run `nowplaying setup` or install the desktop app.");
     const services = createSettingsConnectedServices({ file: configFile, credentialStore, hostedCredentials, onConfigured, fetchImpl, ...(spotifySignIn ? { spotifySignIn } : {}), ...(hostedSignIn ? { hostedSignIn } : {}) });
-    const management = createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, beforeRestart: services.afterFirstServer, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) });
+    const management = createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, prepareConfig: services.prepareFirstServer, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) });
     const handler = createFirstRunSettingsHandler({ servers: async (request) => (await services.handler(request)) ?? management.handler(request) });
     const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
     let address;
