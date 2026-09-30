@@ -1,9 +1,10 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSpotifyProvider } from "../src/providers/spotify.js";
 
 function reply(status, body, headers = {}) {
-  return { status, ok: status >= 200 && status < 300, headers: new Headers(headers), json: async () => body };
+  return streamJsonFixture({ status, ok: status >= 200 && status < 300, headers: new Headers(headers), json: async () => body });
 }
 
 function provider(res, token = "access") {

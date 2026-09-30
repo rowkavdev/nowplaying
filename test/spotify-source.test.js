@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { combinePresence, createSpotifySource } from "../src/spotify-source.js";
@@ -27,8 +28,8 @@ test("Spotify source reads and saves the refresh token through the credential st
   const saved = new Map([["spotify:me", "r1"]]);
   const store = { read: async (ref) => saved.get(`${ref.provider}:${ref.identityId}`), save: async (ref, v) => { saved.set(`${ref.provider}:${ref.identityId}`, v); } };
   const fetchImpl = async (url) => {
-    if (new URL(url).hostname === "accounts.spotify.com") return { ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r2", expires_in: 3600 }) };
-    return { ok: true, status: 200, headers: new Headers(), json: async () => ({ is_playing: true, progress_ms: 1, currently_playing_type: "track", item: { name: "Song", duration_ms: 10, artists: [{ name: "A" }], album: { images: [] } } }) };
+    if (new URL(url).hostname === "accounts.spotify.com") return streamJsonFixture({ ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r2", expires_in: 3600 }) });
+    return streamJsonFixture({ ok: true, status: 200, headers: new Headers(), json: async () => ({ is_playing: true, progress_ms: 1, currently_playing_type: "track", item: { name: "Song", duration_ms: 10, artists: [{ name: "A" }], album: { images: [] } } }) });
   };
   const config = { spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "me" }, credentialRef: { provider: "spotify", identityId: "me" } } };
   const source = createSpotifySource(config, store, { fetchImpl });
@@ -79,10 +80,10 @@ test("a 401 from Spotify drops the cached access token so the next poll refreshe
   const store = { read: async (ref) => saved.get(`${ref.provider}:${ref.identityId}`), save: async (ref, v) => { saved.set(`${ref.provider}:${ref.identityId}`, v); } };
   let refreshes = 0;
   const fetchImpl = async (url, init) => {
-    if (new URL(url).hostname === "accounts.spotify.com") { refreshes += 1; return { ok: true, status: 200, json: async () => ({ access_token: `a${refreshes}`, expires_in: 3600 }) }; }
+    if (new URL(url).hostname === "accounts.spotify.com") { refreshes += 1; return streamJsonFixture({ ok: true, status: 200, json: async () => ({ access_token: `a${refreshes}`, expires_in: 3600 }) }); }
     // The first token was revoked server-side; only a fresh one works.
-    if (init.headers.Authorization === "Bearer a1") return { ok: false, status: 401, headers: new Headers(), json: async () => ({}) };
-    return { ok: true, status: 200, headers: new Headers(), json: async () => ({ is_playing: true, currently_playing_type: "track", item: { name: "Song", artists: [], album: { images: [] } } }) };
+    if (init.headers.Authorization === "Bearer a1") return streamJsonFixture({ ok: false, status: 401, headers: new Headers(), json: async () => ({}) });
+    return streamJsonFixture({ ok: true, status: 200, headers: new Headers(), json: async () => ({ is_playing: true, currently_playing_type: "track", item: { name: "Song", artists: [], album: { images: [] } } }) });
   };
   const config = { spotify: { clientId: "0123456789abcdef0123456789abcdef", identity: { id: "me" }, credentialRef: { provider: "spotify", identityId: "me" } } };
   let clock = 0;
@@ -95,6 +96,6 @@ test("a 401 from Spotify drops the cached access token so the next poll refreshe
 
 test("a revoked refresh token reads as a sign-in problem, not a generic error", async () => {
   const { refreshAccessToken } = await import("../src/spotify-auth.js");
-  const fetchImpl = async () => ({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) });
+  const fetchImpl = async () => (streamJsonFixture({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) }));
   await assert.rejects(refreshAccessToken({ clientId: "0123456789abcdef0123456789abcdef", refreshToken: "r", fetchImpl }), (error) => error.code === "reauth_needed" && error.status === 401);
 });

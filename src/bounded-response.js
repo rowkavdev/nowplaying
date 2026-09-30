@@ -51,3 +51,9 @@ export async function readBoundedBytes(response, limit, label = "response") {
 export function timeoutSignal(ms) {
   return typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(ms) : undefined;
 }
+
+// Remote JSON must expose bytes, not an unbounded pre-parsed json() adapter.
+export async function readBoundedJson(response, limit = 1024 * 1024) {
+  const bytes = await readBoundedBytes(response, limit, "JSON response");
+  return JSON.parse(new TextDecoder().decode(bytes));
+}

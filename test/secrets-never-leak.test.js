@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
@@ -68,7 +69,7 @@ const PROVIDERS = {
 // headers (tokens included), and a server that rejects the sign-in.
 const FAILURES = {
   refused: async (url, init) => { throw new TypeError("fetch failed", { cause: Object.assign(new Error(`connect ECONNREFUSED ${url} ${JSON.stringify(init?.headers ?? {})}`), { code: "ECONNREFUSED" }) }); },
-  rejected: async () => ({ ok: false, status: 401, statusText: "Unauthorized", json: async () => ({}), text: async () => "" }),
+  rejected: async () => (streamJsonFixture({ ok: false, status: 401, statusText: "Unauthorized", json: async () => ({}), text: async () => "" })),
 };
 
 test("a failing server never puts a secret into errors, diagnostics, status or the log", async () => {

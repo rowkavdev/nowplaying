@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPlexProvider } from "../src/providers/plex.js";
@@ -9,7 +10,7 @@ test("polls and maps the selected Plex user session", async () => {
     token: "secret",
     fetchImpl: async (url, init) => {
       request = { url, init };
-      return {
+      return streamJsonFixture({
         ok: true,
         async json() {
           return { MediaContainer: { Metadata: [
@@ -21,7 +22,7 @@ test("polls and maps the selected Plex user session", async () => {
             },
           ] } };
         },
-      };
+      });
     },
   });
 
@@ -46,7 +47,7 @@ test("returns idle when no matching session exists", async () => {
   const provider = createPlexProvider({
     baseUrl: "http://plex.test",
     token: "secret",
-    fetchImpl: async () => ({ ok: true, async json() { return { MediaContainer: { Metadata: [] } }; } }),
+    fetchImpl: async () => (streamJsonFixture({ ok: true, async json() { return { MediaContainer: { Metadata: [] } }; } })),
   });
   const presence = await provider.getPresence({ username: "rowan" });
   assert.equal(presence.state, "idle");
@@ -57,9 +58,9 @@ test("retries an uncertain Plex owner lookup after a transient HTTP failure", as
   const provider = createPlexProvider({ baseUrl: "http://plex.test", token: "secret",
     fetchImpl: async (url) => url.endsWith("/accounts")
       ? { ok: ++accountCalls > 1, status: accountCalls === 1 ? 503 : 200 }
-      : { ok: true, json: async () => ({ MediaContainer: { Metadata: [
+      : streamJsonFixture({ ok: true, json: async () => ({ MediaContainer: { Metadata: [
         { title: "Owner track", type: "track", User: { id: "1" }, Player: { state: "playing" } },
-      ] } }) },
+      ] } }) }),
   });
   assert.equal((await provider.getPresence({ userId: "plex-tv-id" })).state, "idle");
   assert.equal((await provider.getPresence({ userId: "plex-tv-id" })).title, "Owner track");
@@ -72,9 +73,9 @@ test("a shared Plex token never reads the owner's local session", async () => {
   const provider = createPlexProvider({ baseUrl: "http://plex.test", token: "shared-token",
     fetchImpl: async (url) => url.endsWith("/accounts")
       ? (calls++, { ok: false, status: 401 })
-      : { ok: true, json: async () => ({ MediaContainer: { Metadata: [
+      : streamJsonFixture({ ok: true, json: async () => ({ MediaContainer: { Metadata: [
         { title: "Owner's track", type: "track", User: { id: "1" }, Player: { state: "playing" } },
-      ] } }) },
+      ] } }) }),
   });
   assert.equal((await provider.getPresence({ userId: "shared-user-id" })).state, "idle");
   assert.equal((await provider.getPresence({ userId: "shared-user-id" })).state, "idle");
@@ -90,7 +91,7 @@ function sessionProvider(session) {
   return createPlexProvider({
     baseUrl: "http://plex.test/",
     token: "secret",
-    fetchImpl: async () => ({ ok: true, async json() { return { MediaContainer: { Metadata: [session] } }; } }),
+    fetchImpl: async () => (streamJsonFixture({ ok: true, async json() { return { MediaContainer: { Metadata: [session] } }; } })),
   });
 }
 

@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createEmbyProvider } from "../src/providers/emby.js";
@@ -8,10 +9,10 @@ test("maps an Emby episode session", async () => {
     baseUrl: "https://emby.test/", apiKey: "secret",
     fetchImpl: async (url, init) => {
       request = { url, init };
-      return { ok: true, json: async () => [{
+      return streamJsonFixture({ ok: true, json: async () => [{
         UserName: "Rowan", PlayState: { IsPaused: true, PositionTicks: 10_000_000 },
         NowPlayingItem: { Id: "1", Type: "Episode", Name: "Pilot", SeriesName: "Show", RunTimeTicks: 30_000_000, ImageTags: { Primary: "tag" } },
-      }] };
+      }] });
     },
   });
   const presence = await provider.getPresence({ username: "rowan" });
@@ -28,7 +29,7 @@ test("maps an Emby episode session", async () => {
 test("returns idle without active media", async () => {
   const provider = createEmbyProvider({
     baseUrl: "https://emby.test", apiKey: "secret",
-    fetchImpl: async () => ({ ok: true, json: async () => [] }),
+    fetchImpl: async () => (streamJsonFixture({ ok: true, json: async () => [] })),
   });
   assert.equal((await provider.getPresence()).state, "idle");
 });
@@ -45,7 +46,7 @@ test("whoami reads the signed-in Emby user from /Users/Me", async () => {
   let seen;
   const provider = createEmbyProvider({
     baseUrl: "https://media.test/", apiKey: "token",
-    fetchImpl: async (url, options) => { seen = { url: String(url), token: options.headers["X-Emby-Token"] }; return { ok: true, json: async () => ({ Id: "abc", Name: "Rowan", Policy: { IsAdministrator: true } }) }; },
+    fetchImpl: async (url, options) => { seen = { url: String(url), token: options.headers["X-Emby-Token"] }; return streamJsonFixture({ ok: true, json: async () => ({ Id: "abc", Name: "Rowan", Policy: { IsAdministrator: true } }) }); },
   });
   assert.deepEqual(await provider.whoami(), { id: "abc", displayName: "Rowan" });
   assert.deepEqual(seen, { url: "https://media.test/Users/Me", token: "token" });
@@ -54,7 +55,7 @@ test("whoami reads the signed-in Emby user from /Users/Me", async () => {
 function oneEmbyItem(item) {
   return createEmbyProvider({
     baseUrl: "https://emby.test", apiKey: "secret",
-    fetchImpl: async () => ({ ok: true, json: async () => [{ UserName: "Rowan", PlayState: {}, NowPlayingItem: { Id: "1", ...item } }] }),
+    fetchImpl: async () => (streamJsonFixture({ ok: true, json: async () => [{ UserName: "Rowan", PlayState: {}, NowPlayingItem: { Id: "1", ...item } }] })),
   });
 }
 

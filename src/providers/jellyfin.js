@@ -1,3 +1,4 @@
+import { readBoundedJson } from "../bounded-response.js";
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
 import { optionalCount, optionalText, optionalYear, playbackTimes, pickSession, sessionList } from "./fields.js";
@@ -12,14 +13,14 @@ export function createJellyfinProvider({ baseUrl, apiKey, fetchImpl = fetch }) {
     async getPresence({ username, userId } = {}) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/Sessions`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
       if (!response.ok) throw Object.assign(new Error(`Jellyfin sessions request failed: ${response.status} ${response.statusText}`), { status: response.status });
-      const sessions = sessionList(await response.json(), "Jellyfin");
+      const sessions = sessionList(await readBoundedJson(response), "Jellyfin");
       const session = pickSession(sessions, (candidate) => matchesSession(candidate, { username, userId }), (candidate) => Boolean(candidate.PlayState?.IsPaused));
       return session ? mapSession(session) : { state: "idle" };
     },
     async whoami() {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/Users/Me`, { headers: { Accept: "application/json", "X-Emby-Token": apiKey } });
       if (!response.ok) throw Object.assign(new Error(`Jellyfin user request failed: ${response.status} ${response.statusText}`), { status: response.status });
-      const user = await response.json();
+      const user = await readBoundedJson(response);
       return { id: typeof user?.Id === "string" ? user.Id : null, displayName: typeof user?.Name === "string" ? user.Name : null };
     },
   });

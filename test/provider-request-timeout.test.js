@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fetchWithTimeout } from "../src/providers/request.js";
@@ -57,7 +58,7 @@ test("Plex owner lookup has a deadline too, so a stuck /accounts can't hang pres
     baseUrl: "http://plex.test", token: "t",
     fetchImpl: async (url, init = {}) => {
       seen.push([url, init.signal]);
-      if (url.endsWith("/status/sessions")) return { ok: true, json: async () => ({ MediaContainer: { Metadata: [{ type: "track", title: "x", User: { id: "1" } }] } }) };
+      if (url.endsWith("/status/sessions")) return streamJsonFixture({ ok: true, json: async () => ({ MediaContainer: { Metadata: [{ type: "track", title: "x", User: { id: "1" } }] } }) });
       return { ok: true };
     },
   });
