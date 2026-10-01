@@ -8,6 +8,7 @@ export function sendJson(res, status, body, headers = {}) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("cache-control", "no-store");
+  res.setHeader("x-content-type-options", "nosniff");
   for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
   res.end(JSON.stringify(body));
 }
@@ -114,6 +115,7 @@ export function sendCard(req, res, presence, options) {
   res.setHeader("content-type", "image/svg+xml; charset=utf-8");
   res.setHeader("cache-control", "public, max-age=30, s-maxage=30");
   res.setHeader("etag", etag);
+  res.setHeader("x-content-type-options", "nosniff");
   res.setHeader("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   if (etagMatches(req.headers["if-none-match"], etag)) { res.statusCode = 304; return res.end(); }
   res.statusCode = 200;
