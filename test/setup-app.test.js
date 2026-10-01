@@ -467,3 +467,12 @@ test('#812 overlapping setup changes preserve both accepted fields', async () =>
     }
   } finally { await app.close(); }
 });
+
+test("a fresh setup turns Discord cover upload on and the saved file reads back on", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
+  const file = join(dir, "config.json");
+  const account = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
+  await writeSetupConfig(file, { provider: "jellyfin", account });
+  assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkUpload, true);
+  assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.artworkUpload, true);
+});
