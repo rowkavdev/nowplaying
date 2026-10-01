@@ -28,14 +28,14 @@ test("renders the high-contrast paper palette", () => {
 test("compact preset hides secondary rows by default", () => {
   const svg = renderCard(presence, { theme: "compact" });
   assert.match(svg, /height="74"/);
-  assert.doesNotMatch(svg, />NOW PLAYING<\/text>/);
+  assert.doesNotMatch(svg, />Now playing<\/text>/);
   assert.doesNotMatch(svg, />Artist<\/text>/);
   assert.doesNotMatch(svg, /height="4"/);
 });
 
 test("explicit visibility overrides the compact preset", () => {
   const svg = renderCard(presence, { theme: "compact", show: { state: true } });
-  assert.match(svg, />NOW PLAYING<\/text>/);
+  assert.match(svg, />Now playing<\/text>/);
 });
 
 test("accepts normalized custom color tokens", () => {
@@ -61,7 +61,7 @@ test("rejects unknown themes and unsafe colors", () => {
 });
 
 test("an artwork tint is pulled into a safe lightness range (#447)", () => {
-  const stop = (svg) => /<stop offset="0" stop-color="(#[0-9a-f]{6})"\/>/.exec(svg)?.[1];
+  const stop = (svg) => /<rect x="0.5" y="0.5"[^>]* fill="(#[0-9a-f]{6})"/.exec(svg)?.[1];
   const lightness = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); return (Math.max(r, g, b) + Math.min(r, g, b)) / 2; };
   const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
   const white = stop(renderCard(presence, { tint: "#ffffff" }));
@@ -70,6 +70,7 @@ test("an artwork tint is pulled into a safe lightness range (#447)", () => {
   assert.ok(orange && lightness(orange) < 0.25, `dark card with an orange cover stays dark: ${orange}`);
   const paperBlack = stop(renderCard(presence, { theme: "paper", tint: "#000000" }));
   assert.ok(paperBlack && lightness(paperBlack) > 0.9, `paper card with a black cover stays light: ${paperBlack}`);
-  assert.equal(stop(renderCard(presence, {})), undefined);
+  assert.equal(stop(renderCard(presence, {})), "#0d1117");
+  assert.doesNotMatch(renderCard(presence, { tint: "#f28c28" }), /Gradient/);
   assert.throws(() => renderCard(presence, { tint: "orange" }), TypeError);
 });

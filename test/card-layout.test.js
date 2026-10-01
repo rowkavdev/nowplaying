@@ -25,8 +25,8 @@ test("field order and text alignment are optional and bounded", () => {
   assert.equal(renderCard(presence, { layout: { fieldOrder: ["state", "title", "subtitle"], textAlign: "start" } }), renderCard(presence));
   const flipped = renderCard(presence, { layout: { fieldOrder: ["title", "subtitle", "state"] } });
   const y = (label) => Number(flipped.match(new RegExp(`<text x="\\d+" y="(\\d+)"[^>]*>${label}<`))[1]);
-  assert.ok(y("Song") < y("Artist") && y("Artist") < y("NOW PLAYING"));
-  assert.ok(Number(flipped.match(/<svg[^>]* height="(\d+)"/)[1]) >= y("NOW PLAYING") + 24);
+  assert.ok(y("Song") < y("Artist") && y("Artist") < y("Now playing"));
+  assert.ok(Number(flipped.match(/<svg[^>]* height="(\d+)"/)[1]) >= y("Now playing") + 24);
   const middle = renderCard(presence, { width: 400, layout: { textAlign: "middle" } });
   assert.match(middle, /<text x="200" y="\d+" text-anchor="middle"[^>]*>Song</);
   const end = renderCard(presence, { width: 400, layout: { textAlign: "end" } });
@@ -69,4 +69,22 @@ test("right-to-left layout mirrors text, artwork and progress", () => {
   assert.match(renderCard(hebrew, { width: 440, layout: { direction: "rtl", textAlign: "end" } }), /<text x="24" y="\d+" text-anchor="end" direction="rtl"[^>]*>שלום</);
   assert.match(renderCard(hebrew, { artworkDataUri: art, layout: { direction: "rtl", artworkPosition: "left" } }), /<image [^>]*x="24"/, "an explicit side wins");
   for (const layout of [{ direction: "RTL" }, { direction: true }]) assert.throws(() => renderCard(hebrew, { layout }), TypeError);
+});
+
+test("flat look options render and reject unknown values", async () => {
+  const { renderCard } = await import("../src/card.js");
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
+  const art = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC";
+  const flat = renderCard(presence, { artworkDataUri: art });
+  assert.doesNotMatch(flat, /Gradient|<circle/);
+  assert.match(flat, />Now playing<\/text>/);
+  assert.match(renderCard(presence, { layout: { statusStyle: "caps" } }), />NOW PLAYING<\/text>/);
+  assert.match(renderCard(presence, { layout: { statusStyle: "dot" } }), /<circle/);
+  assert.match(renderCard(presence, { layout: { fontFamily: "mono" } }), /ui-monospace/);
+  assert.match(renderCard(presence, { artworkDataUri: art, layout: { artShape: "circle" } }), /id="art"><rect[^>]* rx="50"/);
+  assert.match(renderCard(presence, { layout: { progressStyle: "rounded" } }), /height="4" rx="2"/);
+  assert.doesNotMatch(renderCard(presence, { layout: { border: "none" } }), /stroke=/);
+  for (const bad of [{ fontFamily: "comic" }, { statusStyle: "x" }, { artShape: "star" }, { progressStyle: "x" }, { border: "thick" }]) {
+    assert.throws(() => renderCard(presence, { layout: bad }), TypeError);
+  }
 });

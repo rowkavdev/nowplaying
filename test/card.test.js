@@ -6,7 +6,7 @@ test("renders an accessible playing card and progress", () => {
   const svg = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 50, durationMs: 100 });
   assert.match(svg, /<svg/);
   assert.match(svg, /role="img"/);
-  assert.match(svg, /NOW PLAYING: Song/);
+  assert.match(svg, /Now playing: Song/);
   assert.match(svg, />Song</);
   assert.match(svg, />Artist</);
   assert.match(svg, /width="196" height="4"/);
@@ -21,7 +21,7 @@ test("escapes untrusted media text", () => {
 
 test("renders a safe idle card", () => {
   const svg = renderCard({ state: "idle", kind: "unknown", title: null, subtitle: null });
-  assert.match(svg, /NOT PLAYING/);
+  assert.match(svg, /Not playing/);
   assert.match(svg, /Nothing playing/);
 });
 
@@ -31,10 +31,10 @@ test("hides selected fields and reflows the card", () => {
     { show: { state: false, subtitle: false, progress: false } },
   );
   assert.match(compact, /height="74"/);
-  assert.doesNotMatch(compact, />NOW PLAYING<\/text>/);
+  assert.doesNotMatch(compact, />Now playing<\/text>/);
   assert.doesNotMatch(compact, />Artist<\/text>/);
   assert.doesNotMatch(compact, /height="4"/);
-  assert.match(compact, /<title id="title">NOW PLAYING: Song<\/title>/);
+  assert.match(compact, /<title id="title">Now playing: Song<\/title>/);
 });
 
 test("can hide the media-kind fallback without hiding a real subtitle", () => {
@@ -68,7 +68,7 @@ test("episodes and films read like TV and films, not music (#143)", async () => 
   const episode = createPresence({ state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost", series: "Lost", season: 4, episode: 5 });
   assert.deepEqual(cardText(episode), { title: "Lost", subtitle: "S04E05 · The Constant" });
   const svg = renderCard(episode);
-  assert.match(svg, /<title id="title">NOW PLAYING: Lost<\/title><desc id="desc">S04E05 · The Constant<\/desc>/);
+  assert.match(svg, /<title id="title">Now playing: Lost<\/title><desc id="desc">S04E05 · The Constant<\/desc>/);
   assert.doesNotMatch(svg, /undefined|null/);
   // Missing numbers or a hidden series fall back cleanly.
   assert.deepEqual(cardText(createPresence({ state: "playing", kind: "episode", title: "Pilot", series: "Show", episode: 1 })), { title: "Show", subtitle: "E01 · Pilot" });
@@ -77,7 +77,7 @@ test("episodes and films read like TV and films, not music (#143)", async () => 
   // Films: year in the title, not repeated underneath.
   const film = createPresence({ state: "playing", kind: "movie", title: "Dune: Part Two", subtitle: "2024", year: 2024 });
   assert.deepEqual(cardText(film), { title: "Dune: Part Two (2024)", subtitle: null });
-  assert.match(renderCard(film), /<title id="title">NOW PLAYING: Dune: Part Two \(2024\)<\/title><desc id="desc">Movie<\/desc>/);
+  assert.match(renderCard(film), /<title id="title">Now playing: Dune: Part Two \(2024\)<\/title><desc id="desc">Movie<\/desc>/);
   assert.deepEqual(cardText(createPresence({ state: "playing", kind: "movie", title: "Heat" })), { title: "Heat", subtitle: null });
   // Music is untouched.
   assert.deepEqual(cardText(createPresence({ state: "playing", kind: "track", title: "Song", subtitle: "Artist" })), { title: "Song", subtitle: "Artist" });
