@@ -403,3 +403,30 @@ test('#811 same-identity credential commits serialize rollback before newer succ
   assert.equal(premature, false, 'newer write waits for old save/config/rollback transaction');
   assert.equal(value, 'newer');
 });
+
+test("concurrent starts cannot exceed maxFlows, and a failed start frees its slot", async () => {
+  for (const provider of ["plex", "jellyfin"]) {
+    let release; const gate = new Promise((resolve) => { release = resolve; });
+    let started = 0; let fail = false;
+    const hold = (value) => async () => { started += 1; await gate; if (fail) throw new SignInError("network_error"); return value; };
+    const signIn = fakeSignIn({
+      startPlexPin: hold({ pinId: 42, authUrl: "https://app.plex.tv/auth#?code=abc" }),
+      startJellyfinQuickConnect: hold({ secret: "qc-secret", code: "123456" }),
+    });
+    let n = 0;
+    const handler = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn, maxFlows: 2, newFlowId: () => `f${++n}` });
+    const body = { action: "start", provider, ...(provider === "jellyfin" ? { baseUrl: "http://127.0.0.1:8096" } : {}) };
+    const pending = Array.from({ length: 6 }, () => post(handler, body));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(started, 2, `${provider}: only maxFlows provider requests may be in flight`);
+    release();
+    const results = await Promise.all(pending);
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 200, 429, 429, 429, 429], provider);
+    // Failed starts must not leak capacity.
+    const second = createSetupSignInHandler({ credentialStore: fakeStore(), deviceId: DEVICE, signIn, maxFlows: 1 });
+    fail = true;
+    assert.notEqual((await post(second, body)).status, 200);
+    fail = false;
+    assert.equal((await post(second, body)).status, 200, `${provider}: slot freed after failure`);
+  }
+});
