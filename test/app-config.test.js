@@ -581,3 +581,17 @@ test("saved privacy restrictions never replay a pre-change card while the provid
     }
   } finally { await app.close(); }
 });
+
+test("artwork failures are classified into safe reason words", async () => {
+  const { classifyArtworkFailure } = await import("../src/app-config.js");
+  const cases = [
+    [Object.assign(new Error("aborted"), { name: "AbortError" }), "timeout"],
+    [new RangeError("Artwork exceeds maximum byte size"), "too_large"],
+    [new TypeError("Artwork content type is not allowed: text/html"), "bad_type"],
+    [new Error("Artwork request failed: 401 Unauthorized"), "unauthorized"],
+    [new Error("Artwork request redirected outside its origin"), "redirected"],
+    [new Error("Artwork request failed: 500 Internal"), "server_error"],
+    [new Error("something http://x/?token=abc"), "error"],
+  ];
+  for (const [error, reason] of cases) assert.equal(classifyArtworkFailure(error), reason);
+});

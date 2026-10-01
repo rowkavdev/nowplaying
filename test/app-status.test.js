@@ -362,3 +362,12 @@ test("status refresh interval follows the elapsed clock across a wall-clock corr
   assert.equal(count, 2);
   assert.equal(status.snapshot().playing.title, "Title-2");
 });
+
+test("the card cover status reports a short allow-listed reason and nothing else", () => {
+  const status = createAppStatus({ config: { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { displayName: "Rowan" } } });
+  assert.equal(status.snapshot().cardArtwork, null);
+  status.setCardArtwork(() => ({ state: "failed", reason: "too_large", detail: "http://secret.example/?token=abc" }));
+  assert.deepEqual({ ...status.snapshot().cardArtwork }, { state: "failed", reason: "too_large" });
+  status.setCardArtwork(() => ({ state: "failed", reason: "http://secret.example/?token=abc" }));
+  assert.equal(status.snapshot().cardArtwork.reason, "unknown");
+});
