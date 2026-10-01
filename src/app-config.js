@@ -76,7 +76,9 @@ export function parseAppConfig(text) {
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
       discordArtworkLookup: parsed.discord?.artworkLookup === "upload" ? "off" : parsed.discord?.artworkLookup,
-      discordArtworkUpload: parsed.discord?.artworkUpload,
+      // A file written before this switch existed only uploaded when it had chosen
+      // "upload"; keep that, so an upgrade never starts sending covers.
+      discordArtworkUpload: parsed.discord?.artworkUpload ?? parsed.discord?.artworkLookup === "upload",
       discordTimestamps: parsed.discord?.timestamps,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
