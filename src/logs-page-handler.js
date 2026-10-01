@@ -12,7 +12,7 @@ const PAGE = `<!doctype html>
 <select id="level"><option value="info">Everything</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
 <button type="button" id="copy-log">Copy</button> <span id="log-result" role="status" aria-live="polite"></span></p>
 <p id="log-empty" role="status" aria-live="polite" hidden>Nothing logged yet.</p>
-<div class="log-table"><table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table></div>
+<div class="log-table" tabindex="0" role="region" aria-label="Recent log events"><table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table></div>
 <p class="hint">The log never includes your server address, user name, what you're playing or sign-in details. Use Copy diagnostics on the Status page for bug reports.</p>
 </section>
 </main></div><script src="/logs.js"></script></body></html>
