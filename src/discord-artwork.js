@@ -110,7 +110,7 @@ export function createDiscordArtworkResolver({
     const ref = presence.artwork ? JSON.stringify([presence.artwork.provider, presence.artwork.itemId, presence.artwork.imageId, presence.artwork.imageTag]) : "";
     // The media kind is part of the key so a film, an episode and a song that
     // share a title and subtitle never reuse each other's artwork (#154).
-    const key = createHash("sha256").update(JSON.stringify([presence.kind ?? "", ref, presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
+    const key = createHash("sha256").update(JSON.stringify([presence.kind ?? "", ref, presence.artwork?.sourceIndex ?? null, presence.artwork?.type ?? "", presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
     const cached = cache.get(key);
     if (cached && cached.expiresAt > now()) {
       cache.delete(key); cache.set(key, cached);
