@@ -25,3 +25,9 @@ test("passes parsed options to the resolver and returns a generic 400", async ()
   assert.deepEqual(received, { width: 320, show: { artwork: true, mediaType: false, progress: false, state: false, subtitle: false } });
   assert.deepEqual(await handler({ url: "/card.svg?width=999" }), { status: 400, headers: {}, body: "Invalid card query" });
 });
+
+test("show=notime hides the clock and plain show links are unchanged", () => {
+  assert.equal(query("show=state,progress,notime").show.time, false);
+  assert.equal("time" in query("show=state,progress").show, false);
+  assert.throws(() => query("show=notime,notime"), { message: "invalid card query" });
+});

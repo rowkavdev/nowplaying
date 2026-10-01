@@ -9,8 +9,8 @@ const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 const DATA_IMAGE_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 const DEFAULT_FIELD_ORDER = Object.freeze(["state", "title", "subtitle"]);
 const TEXT_ANCHORS = Object.freeze({ start: "start", middle: "middle", end: "end" });
-const SHOW_DEFAULTS = Object.freeze({ artwork: true, mediaType: true, progress: true, state: true, subtitle: true });
-const COMPACT_SHOW = Object.freeze({ artwork: false, progress: false, state: false, subtitle: false });
+const SHOW_DEFAULTS = Object.freeze({ artwork: true, mediaType: true, progress: true, state: true, subtitle: true, time: true });
+const COMPACT_SHOW = Object.freeze({ artwork: false, progress: false, state: false, subtitle: false, time: false });
 
 
 export function resolveCardTheme(theme = "midnight-blue", colors = {}) {
@@ -128,7 +128,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const dot = statusStyle !== "plain" && visibility.state && presence.state === "playing" && edge !== "middle";
   const timeCandidate = presence.durationMs > 0 && Number.isFinite(presence.positionMs) ? `${clock(Math.min(Math.max(0, presence.positionMs), presence.durationMs))} / ${clock(presence.durationMs)}` : "";
   const timeFits = (dot ? 14 : 0) + estimateWidth(status, 11, 0.64, statusStyle === "caps" ? 1.1 : 0) + 16 + estimateWidth(timeCandidate, 11, 0.6, 0) <= contentWidth;
-  const showTime = Boolean(timeCandidate) && timeFits && visibility.progress && visibility.state && !customOrder && textAlign === "start";
+  const showTime = visibility.time && Boolean(timeCandidate) && timeFits && visibility.progress && visibility.state && !customOrder && textAlign === "start";
   const timeX = rtl ? contentX : contentX + contentWidth;
   const timeAnchor = rtl ? "start" : "end";
   const timeLabel = showTime ? timeCandidate : "";

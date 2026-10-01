@@ -88,3 +88,13 @@ test("flat look options render and reject unknown values", async () => {
     assert.throws(() => renderCard(presence, { layout: bad }), TypeError);
   }
 });
+
+test("show.time hides the elapsed and total clock but keeps the bar", async () => {
+  const { renderCard } = await import("../src/card.js");
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 83000, durationMs: 214000 };
+  assert.match(renderCard(presence), /1:23 \/ 3:34/);
+  const hidden = renderCard(presence, { show: { time: false } });
+  assert.doesNotMatch(hidden, /1:23/);
+  assert.match(hidden, /height="4"/);
+  assert.throws(() => renderCard(presence, { show: { time: "no" } }), TypeError);
+});
