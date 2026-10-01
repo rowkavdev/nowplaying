@@ -55,3 +55,22 @@ test("socket errors are swallowed", async () => {
   const servers = await discoverLanServers({ timeoutMs: 50, socketFactory: () => { throw new Error("EACCES"); } });
   assert.deepEqual(servers, []);
 });
+
+test("aborting while sockets are still binding settles discovery even if bind callbacks never fire", async () => {
+  const closed = [];
+  const hung = () => ({ on() {}, bind() {}, setBroadcast() {}, send() {}, close() { closed.push(true); } });
+  const controller = new AbortController();
+  const pending = discoverLanServers({ signal: controller.signal, timeoutMs: 50, socketFactory: hung });
+  controller.abort();
+  const result = await Promise.race([pending, new Promise((resolve) => setTimeout(() => resolve("pending"), 300))]);
+  assert.deepEqual(result, []);
+  assert.ok(closed.length >= 2);
+});
+
+test("aborting a real discovery immediately settles it", async () => {
+  const controller = new AbortController();
+  const pending = discoverLanServers({ signal: controller.signal, timeoutMs: 50, broadcastAddress: "127.0.0.1", port: 9 });
+  controller.abort();
+  const result = await Promise.race([pending, new Promise((resolve) => setTimeout(() => resolve("pending"), 300))]);
+  assert.deepEqual(result, []);
+});
