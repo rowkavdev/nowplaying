@@ -46,6 +46,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 - **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork or listening history. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
 - **Sign-ins stay in Windows Credential Manager.** `%LOCALAPPDATA%\nowplaying\config.json` holds settings and server addresses, not passwords or tokens. Don't post that file without checking it.
 - **Settings > Privacy** can hide titles, artwork, progress or whole media types before they reach the card or Discord. A hidden type looks like nothing playing. [Privacy guide](docs/wiki/Privacy-and-safe-configuration.md).
+- **Discord cover art is uploaded to a temporary host.** Discord can't reach a private Plex, Jellyfin or Emby address, so "Show my server's cover" is on by default and sends the cover to litterbox.catbox.moe, which deletes it after 72 hours. Untick it in Settings > Discord to turn it off. [Details](docs/artwork.md#discord-cover-upload).
 - **Local Settings binds to `127.0.0.1`.** The hosted card doesn't require a public port or inbound access to your PC. A public README card is visible to anyone who opens it; [GitHub may cache its image](docs/wiki/Add-a-README-card.md#if-the-readme-looks-stale).
 
 ## Settings, updates and problems

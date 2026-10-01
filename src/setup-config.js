@@ -3,7 +3,7 @@ import { isServerUrl } from "./setup.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
-const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz", "upload"]);
+const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress"];
 const PRIVACY_KINDS = new Set(["movie", "episode", "track"]);
@@ -111,7 +111,10 @@ export function createSetupConfig(input = {}) {
     throw new TypeError("setup config.discordEnabled must be a boolean");
   }
   if (input.discordArtworkLookup !== undefined && !ARTWORK_LOOKUPS.has(input.discordArtworkLookup)) {
-    throw new TypeError("setup config.discordArtworkLookup must be off, musicbrainz or upload");
+    throw new TypeError("setup config.discordArtworkLookup must be off or musicbrainz");
+  }
+  if (input.discordArtworkUpload !== undefined && typeof input.discordArtworkUpload !== "boolean") {
+    throw new TypeError("setup config.discordArtworkUpload must be a boolean");
   }
   if (input.discordTimestamps !== undefined && !TIMESTAMP_MODES.has(input.discordTimestamps)) {
     throw new TypeError("setup config.discordTimestamps must be elapsed, remaining, both or none");
@@ -136,6 +139,9 @@ export function createSetupConfig(input = {}) {
       // Configs written before this field existed stay off: nothing new is
       // sent until the user runs setup again or turns it on.
       artworkLookup: input.discordArtworkLookup ?? "off",
+      // Copying the server's own cover to a temporary public host is on
+      // unless this is false, so a missing field means on.
+      ...(input.discordArtworkUpload === false ? { artworkUpload: false } : {}),
       // Discord timer (set from the settings page): elapsed, remaining, both
       // or none. Left out means "both", so setup's own output is unchanged.
       ...(input.discordTimestamps !== undefined ? { timestamps: input.discordTimestamps } : {}),
