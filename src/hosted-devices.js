@@ -148,7 +148,22 @@ function when(ms) { return ms ? new Date(ms).toLocaleString() : "never"; }
 async function call(body) {
   const res = await fetch(${JSON.stringify(HOSTED_DEVICES_PATH)}, { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(String(res.status));
-  return res.json();
+  // Read at most MAX bytes before parsing, so a misbehaving reply can't make the page buffer an unbounded body.
+  const MAX = 65536;
+  const reader = res.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const part = await reader.read();
+    if (part.done) break;
+    size += part.value.byteLength;
+    if (size > MAX) { reader.cancel().catch(() => {}); throw new Error("too_large"); }
+    chunks.push(part.value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 function button(text, onClick) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", onClick); return b; }
 function render(data) {
