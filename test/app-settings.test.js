@@ -18,13 +18,13 @@ async function configFile(input = JELLYFIN) {
 
 test("shows the Discord settings with defaults for older configs", () => {
   const config = parseAppConfig(serializeSetupConfig({ ...JELLYFIN, discordArtworkLookup: undefined }));
-  assert.deepEqual({ ...discordSettingsView(config) }, { enabled: true, timestamps: "both", artworkLookup: "off", artworkUpload: true, idleBehavior: "clear" });
+  assert.deepEqual({ ...discordSettingsView(config) }, { enabled: true, timestamps: "both", artworkLookup: "off", artworkUpload: false, idleBehavior: "clear" });
 });
 
 test("applies Discord changes and keeps everything else", () => {
   const before = parseAppConfig(serializeSetupConfig(JELLYFIN));
   const { config } = applyDiscordChanges(before, { enabled: false, timestamps: "remaining" });
-  assert.deepEqual({ ...config.discord }, { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", timestamps: "remaining" });
+  assert.deepEqual({ ...config.discord }, { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", artworkUpload: false, timestamps: "remaining" });
   assert.deepEqual(config.identity, before.identity);
   assert.equal(config.serverUrl, before.serverUrl);
   assert.deepEqual({ ...config.hosted }, { ...before.hosted });
@@ -74,7 +74,7 @@ test("the running app saves Discord settings from its own page only", async () =
     assert.equal(page.status, 200);
     assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
     const cookie = page.headers.get("set-cookie").split(";")[0];
-    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).discord, { enabled: true, timestamps: "both", artworkLookup: "musicbrainz", artworkUpload: true, idleBehavior: "clear" });
+    assert.deepEqual((await (await fetch(`${app.url}/api/settings`)).json()).discord, { enabled: true, timestamps: "both", artworkLookup: "musicbrainz", artworkUpload: false, idleBehavior: "clear" });
     const put = (headers, body = { discord: { enabled: false, timestamps: "elapsed" } }) => fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
     // No session cookie, or a request from another site: refused, nothing saved.
     assert.equal((await put({})).status, 403);
@@ -85,7 +85,7 @@ test("the running app saves Discord settings from its own page only", async () =
     assert.equal((await put({ Cookie: cookie }, { discord: { enabled: true }, hosted: { enabled: true } })).status, 400);
     const saved = await put({ Cookie: cookie });
     assert.equal(saved.status, 200);
-    assert.deepEqual((await saved.json()).discord, { enabled: false, timestamps: "elapsed", artworkLookup: "musicbrainz", artworkUpload: true, idleBehavior: "clear" });
+    assert.deepEqual((await saved.json()).discord, { enabled: false, timestamps: "elapsed", artworkLookup: "musicbrainz", artworkUpload: false, idleBehavior: "clear" });
     assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.timestamps, "elapsed");
     const refresh = await fetch(`${app.url}/api/settings/discord/refresh-artwork`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: "{}" });
     assert.deepEqual([refresh.status, await refresh.json()], [200, { dropped: 0 }]);

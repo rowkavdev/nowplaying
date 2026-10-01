@@ -67,19 +67,28 @@ test("MusicBrainz is still the fallback when the upload fails", async () => {
   assert.equal(result.failure, "upload_error");
 });
 
-test("artworkUpload is a boolean setting that defaults to on and is written only when off", () => {
+test("artworkUpload is a boolean setting, written whenever it is given", () => {
   const base = { servers: [{ provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u", displayName: "u" } }], credentialStored: true };
   assert.equal("artworkUpload" in createSetupConfig(base).discord, false);
   assert.equal(createSetupConfig({ ...base, discordArtworkUpload: false }).discord.artworkUpload, false);
+  assert.equal(createSetupConfig({ ...base, discordArtworkUpload: true }).discord.artworkUpload, true);
   assert.throws(() => createSetupConfig({ ...base, discordArtworkUpload: "no" }), /discordArtworkUpload must be a boolean/);
   assert.doesNotThrow(() => validateSettings({ discord: { artworkUpload: false } }));
   assert.throws(() => validateSettings({ discord: { artworkUpload: "no" } }), /artworkUpload/);
-  assert.deepEqual(discordSettingsView({ discord: {} }).artworkUpload, true);
-  assert.equal(discordSettingsView({ discord: { artworkUpload: false } }).artworkUpload, false);
-  const turnedOff = applyDiscordChanges({ ...parseAppConfig(serializeSetupConfig(base)) }, { artworkUpload: false });
-  assert.equal(turnedOff.config.discord.artworkUpload, false);
-  const back = applyDiscordChanges(turnedOff.config, { artworkUpload: true });
-  assert.equal("artworkUpload" in back.config.discord, false);
+  const turnedOn = applyDiscordChanges({ ...parseAppConfig(serializeSetupConfig(base)) }, { artworkUpload: true });
+  assert.equal(turnedOn.config.discord.artworkUpload, true);
+  const back = applyDiscordChanges(turnedOn.config, { artworkUpload: false });
+  assert.equal(back.config.discord.artworkUpload, false);
+});
+
+test("an existing config without the switch keeps cover upload off unless it had chosen upload", () => {
+  const base = { servers: [{ provider: "plex", serverUrl: "http://127.0.0.1:32400", identity: { id: "u", displayName: "u" } }], credentialStored: true };
+  for (const lookup of [undefined, "off", "musicbrainz"]) {
+    const doc = JSON.parse(serializeSetupConfig({ ...base, ...(lookup ? { discordArtworkLookup: lookup } : {}) }));
+    assert.equal(parseAppConfig(JSON.stringify(doc)).discord.artworkUpload, false, String(lookup));
+  }
+  const fresh = JSON.parse(serializeSetupConfig({ ...base, discordArtworkUpload: true }));
+  assert.equal(parseAppConfig(JSON.stringify(fresh)).discord.artworkUpload, true);
 });
 
 test("a config saved with the old artworkLookup upload value still loads, with upload on", async () => {

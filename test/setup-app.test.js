@@ -61,7 +61,7 @@ test("a sign-in saves the secret to the credential store and only the account to
     assert.deepEqual(JSON.parse(configText), {
       version: 2,
       servers: [{ provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "Rowan" }, credentialRef: { provider: "navidrome", identityId: "rowan" } }],
-      discord: { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz" },
+      discord: { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", artworkUpload: true },
     });
     assert.doesNotMatch(configText, /nd-secret|pw-123/);
     if (process.platform !== "win32") assert.equal((await stat(configFile)).mode & 0o777, 0o600);
