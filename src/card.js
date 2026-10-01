@@ -53,7 +53,10 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     if (typeof value !== "boolean") throw new TypeError(`card.show.${key} must be a boolean`);
   }
   // Hidden subtitle must not influence markup or the automatic text direction.
-  const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${presence.title ?? ""}${visibility.subtitle ? presence.subtitle ?? "" : ""}`));
+  // Direction follows the text the card shows (series for episodes, year for
+  // films), not the raw provider fields.
+  const text = cardText(presence);
+  const rtl = directionSetting === "rtl" || (directionSetting === "auto" && firstStrongIsRtl(`${text.title ?? ""}${visibility.subtitle ? text.subtitle ?? "" : ""}`));
   const artworkPosition = layout.artworkPosition ?? (rtl ? "right" : "left");
   if (!new Set(["left", "right"]).has(artworkPosition)) throw new TypeError("layout.artworkPosition: expected left or right");
   // Album art is square; posters and episode stills keep the 2:3 shape.
@@ -85,7 +88,6 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const contentWidth = width - contentX - padding - (hasArtwork && artworkPosition === "right" ? artworkWidth + 24 : 0);
   const statusWords = presence.state === "playing" ? "Now playing" : presence.state === "paused" ? "Paused" : "Not playing";
   const status = statusStyle === "caps" ? statusWords.toUpperCase() : statusWords;
-  const text = cardText(presence);
   const title = text.title || "Nothing playing";
   const subtitle = text.subtitle || (visibility.mediaType ? providerLabel(presence.kind) : "");
   const hasSubtitle = visibility.subtitle && subtitle;

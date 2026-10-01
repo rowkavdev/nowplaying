@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderCard } from "../src/card.js";
+import { createPresence } from "../src/presence.js";
 
 test("renders an accessible playing card and progress", () => {
   const svg = renderCard({ state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 50, durationMs: 100 });
@@ -120,4 +121,18 @@ test("narrow cards shrink artwork to preserve a readable text column (#539)", ()
   assert.match(wide, /<clipPath id="art"><rect x="48" y="48" width="160"/);
   const hidden = renderCard(presence, { width: 280, artworkDataUri, show: { artwork: false }, layout: { padding: 48, artworkWidth: 160 } });
   assert.match(hidden, /<clipPath id="txt"><rect x="46" y="0" width="188"/);
+});
+
+test("auto direction follows the displayed episode title and visible subtitle, not raw provider fields", () => {
+  const episode = (series, title) => createPresence({ state: "playing", kind: "episode", title, subtitle: series, series, season: 1, episode: 1 });
+  const render = (presence, subtitle, direction) => renderCard(presence, { show: { subtitle }, layout: { direction } });
+  const hebrewSeries = episode("שלום", "Pilot");
+  const latinSeries = episode("Show", "פיילוט");
+  for (const subtitle of [true, false]) {
+    assert.equal(render(hebrewSeries, subtitle, "auto"), render(hebrewSeries, subtitle, "rtl"));
+    assert.equal(render(latinSeries, subtitle, "auto"), render(latinSeries, subtitle, "ltr"));
+  }
+  // Explicit directions still win.
+  assert.match(render(latinSeries, true, "rtl"), /direction="rtl"/);
+  assert.doesNotMatch(render(hebrewSeries, true, "ltr"), /direction="rtl"/);
 });
