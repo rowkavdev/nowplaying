@@ -21,9 +21,11 @@ function fakeBundle() {
 
 test("rejects a bad version or architecture before building", () => {
   const { dir, bundle } = fakeBundle();
-  for (const args of [[bundle, "0.2.0\nPackage: evil", "amd64", dir], [bundle, "v0.2", "amd64", dir], [bundle, "0.2.0", "i386", dir]]) {
-    const result = spawnSync("bash", [script, ...args], { encoding: "utf8" });
-    assert.equal(result.status, 2, args.slice(1, 3).join(" "));
+  const bad = [[bundle, "0.2.0\nSection: evil", "amd64", dir, /invalid version/], [bundle, "v0.2", "amd64", dir, /invalid version/], [bundle, "0.2.0", "i386", dir, /unsupported architecture/]];
+  for (const [bundleDir, version, arch, out, message] of bad) {
+    const result = spawnSync("bash", [script, bundleDir, version, arch, out], { encoding: "utf8" });
+    assert.equal(result.status, 2, JSON.stringify(version));
+    assert.match(result.stderr, message, JSON.stringify(version));
   }
   assert.equal(spawnSync("bash", [script, join(dir, "missing"), "0.2.0", "amd64", dir], { encoding: "utf8" }).status, 2);
 });
@@ -36,8 +38,11 @@ test("builds a .deb with the bundle under /opt, a wrapper in /usr/bin and root o
   assert.match(info, /^Package: nowplaying$/m);
   assert.match(info, /^Version: 0\.2\.0$/m);
   assert.match(info, /^Architecture: arm64$/m);
+  assert.match(info, /^Depends: libc6, libstdc\+\+6, libgcc-s1$/m);
+  assert.doesNotMatch(info, /evil/);
   const listing = execFileSync("dpkg-deb", ["-c", file], { encoding: "utf8" });
   assert.match(listing, /\.\/opt\/nowplaying\/runtime\/node$/m);
   assert.match(listing, /^-rwxr-xr-x root\/root .*\.\/usr\/bin\/nowplaying$/m);
   assert.doesNotMatch(listing, /^\S+ (?!root\/root)\S+/m);
+  assert.match(listing, /^drwxr-xr-x root\/root .* \.\/$/m);
 });
