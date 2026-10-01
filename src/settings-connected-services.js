@@ -79,7 +79,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       if (removingSpotify && request.method === "POST") return json(409, { error: "disconnect_in_progress" });
       const result = await spotify(request);
       if (request.method === "POST" && result?.status === 200) {
-        let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+        const input = lenientJsonObject(request.body);
         if (input.action === "poll" && JSON.parse(result.body).status === "signed_in" && await current()) restart();
       }
       return result;
@@ -87,7 +87,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
     if (path.startsWith("/api/setup/hosted/")) {
       let owner = activeHostedFlow;
       if (path === "/api/setup/hosted/signin") {
-        let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+        const input = lenientJsonObject(request.body);
         if (owner?.committing && !owner.result && input.action === "poll") return json(200, { status: "pending" });
         if (input.action === "start") {
           if (owner && (owner.committing || elapsedNow() < owner.expiresAt)) return json(409, { error: "signin_in_progress" });
@@ -98,7 +98,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
       }
       let retryResult = null;
       if (path === "/api/setup/hosted/signin" && request.method === "POST") {
-        let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+        const input = lenientJsonObject(request.body);
         if (input.action === "poll" && Object.keys(input).length === 1 && !new URL(request.url, "http://127.0.0.1").search) retryResult = owner?.result;
       }
       let result;
@@ -128,7 +128,7 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
           } else if (value.status === "started") {
             const seconds = Number(value.expiresIn);
             owner.expiresAt = elapsedNow() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 900_000);
-            let input; try { input = JSON.parse(request.body ?? "{}"); } catch { input = {}; }
+            const input = lenientJsonObject(request.body);
             owner.url = normalizeHostedUrl(input.url ?? DEFAULT_HOSTED_URL);
           } else if (value.status !== "pending") activeHostedFlow = null;
         } else if (!owner?.committing) activeHostedFlow = null;
@@ -179,3 +179,15 @@ export function createSettingsConnectedServices({ file, credentialStore, hostedC
   return { handler, afterFirstServer, prepareFirstServer, serial };
 }
 function json(status, value) { return { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, body: `${JSON.stringify(value)}\n` }; }
+
+// The sign-in routes only peek at the action to decide ownership before the
+// real handler validates the body. A body of "null" (or a number, string or
+// list) parses fine, and reading .action off null threw out of the handler
+// instead of reaching the 400 the sign-in handler gives. Anything that isn't
+// an object is treated as an empty one here.
+function lenientJsonObject(body) {
+  try {
+    const value = JSON.parse(body ?? "{}");
+    return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
