@@ -34,6 +34,9 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
   if (!Array.isArray(openWritePaths) || openWritePaths.some((path) => typeof path !== "string" || !/^\/[a-z0-9/_-]+$/.test(path))) throw new TypeError("openWritePaths: expected exact paths");
   const openPaths = new Set(openWritePaths);
   const sessionCookie = sessionSecret ? `${SESSION_COOKIE}=${sessionSecret}; Path=/; HttpOnly; SameSite=Strict` : undefined;
+  const writeRejection = (request) => openPaths.has(pathOf(request.url))
+    ? requireJson(request.headers)
+    : rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
   const server = createServer(async (request, response) => {
     if (!isLoopbackAuthority(request.headers.host)) {
       response.writeHead(421, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
@@ -42,9 +45,7 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
     }
     let body;
     if (BODY_METHODS.has(request.method)) {
-      const rejection = openPaths.has(pathOf(request.url))
-        ? requireJson(request.headers)
-        : rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
+      const rejection = writeRejection(request);
       if (rejection) {
         request.resume();
         response.writeHead(rejection.status, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8", Connection: "close" });
