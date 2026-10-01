@@ -168,3 +168,19 @@ test("a second Settings restart after a handled restart still works and a later 
   assert.equal((await session).outcome, "quit");
   assert.deepEqual(f.events, ["close a", "running b", "close b", "running c", "close c", "stop tray"]);
 });
+
+test("a stop request after a tray failure still closes the app once (#880)", async () => {
+  const { watchQuitAfterTrayFailure } = await import("../src/tray-session.js");
+  const quits = createRestartRequests();
+  const session = await runTraySession({
+    app: fakeApp("a", []), runTray: async () => { throw new Error("spawn failed"); },
+    restartApp: async () => { throw new Error("no"); }, quitRequests: quits,
+  });
+  assert.equal(session.outcome, "tray-failed");
+  let closed = 0;
+  assert.equal(watchQuitAfterTrayFailure(session, quits, async () => { closed += 1; }), true);
+  quits.request();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(closed, 1);
+  assert.equal(watchQuitAfterTrayFailure({ outcome: "quit" }, quits, async () => { closed += 1; }), false);
+});
