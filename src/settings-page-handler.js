@@ -114,6 +114,35 @@ const buildPage = (startupCopy) => `<!doctype html>
 <p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="10" inputmode="numeric"> <span class="unit">px, 280 to 800</span></p>
 <p class="row"><label for="card-padding">Padding</label><input type="range" id="card-padding" min="12" max="48" step="1"> <output id="card-padding-value" for="card-padding"></output></p>
 <p class="row"><label for="card-radius">Corners</label><input type="range" id="card-radius" min="0" max="24" step="1"> <output id="card-radius-value" for="card-radius"></output></p>
+<p class="row"><label for="card-fontFamily">Font</label>
+<select id="card-fontFamily">
+<option value="system">System sans</option>
+<option value="humanist">Humanist sans</option>
+<option value="serif">Serif</option>
+<option value="mono">Monospace</option>
+</select></p>
+<p class="row"><label for="card-statusStyle">Status line</label>
+<select id="card-statusStyle">
+<option value="plain">Plain text</option>
+<option value="caps">Capitals</option>
+<option value="dot">Plain with a dot</option>
+</select></p>
+<p class="row"><label for="card-border">Border</label>
+<select id="card-border">
+<option value="thin">Thin line</option>
+<option value="none">None</option>
+</select></p>
+<p class="row"><label for="card-progressStyle">Bar ends</label>
+<select id="card-progressStyle">
+<option value="square">Square</option>
+<option value="rounded">Rounded</option>
+</select></p>
+<p class="row"><label for="card-artShape">Artwork shape</label>
+<select id="card-artShape">
+<option value="square">Square</option>
+<option value="rounded">Rounded corners</option>
+<option value="circle">Circle</option>
+</select></p>
 <p class="row"><label><input type="checkbox" id="card-showProgress"> Show progress bar</label></p>
 <p class="row"><label for="card-progressHeight">Bar thickness</label><input type="range" id="card-progressHeight" min="2" max="12" step="1"> <output id="card-progressHeight-value" for="card-progressHeight"></output></p>
 <p class="row"><label for="card-progressPosition">Bar position</label>
@@ -503,7 +532,8 @@ privacy.form.addEventListener("submit", async (event) => {
     privacy.save.disabled = false;
   }
 });
-const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr" };
+const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin" };
+const LOOK_KEYS = ["fontFamily", "statusStyle", "artShape", "progressStyle", "border"];
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
 const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note"), scaleNote: document.getElementById("card-artwork-scale-note") };
 const cardField = (key) => document.getElementById("card-" + key);
@@ -512,7 +542,7 @@ const ART_AUTO = { artworkWidth: true, artworkHeight: true };
 const ART_SHOWN = { artworkWidth: 100, artworkHeight: 100 };
 function cardSay(text, tone) { const el = document.getElementById("card-result"); el.textContent = text; el.className = tone || ""; }
 function cardValues() {
-  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value, progressPosition: cardField("progressPosition").value, progressWidth: cardField("progressWidth").value, direction: cardField("direction").value };
+  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value, progressPosition: cardField("progressPosition").value, progressWidth: cardField("progressWidth").value, direction: cardField("direction").value, fontFamily: cardField("fontFamily").value, statusStyle: cardField("statusStyle").value, artShape: cardField("artShape").value, progressStyle: cardField("progressStyle").value, border: cardField("border").value };
   for (const key of Object.keys(CARD_NUMBERS)) values[key] = ART_AUTO[key] ? null : Number(cardField(key).value);
   return values;
 }
@@ -594,6 +624,7 @@ function showCard(c) {
   cardField("progressPosition").value = c.progressPosition;
   cardField("progressWidth").value = c.progressWidth;
   cardField("direction").value = c.direction;
+  for (const key of LOOK_KEYS) cardField(key).value = c[key];
   for (const key of Object.keys(CARD_NUMBERS)) {
     if (Object.hasOwn(ART_AUTO, key)) ART_AUTO[key] = c[key] === null;
     cardField(key).value = c[key] ?? ART_SHOWN[key];
@@ -603,7 +634,7 @@ function showCard(c) {
 // Registered before cardChanged so a single click or arrow key leaves Auto
 // before the size is read, without relying on capture order (#480 review).
 for (const key of Object.keys(ART_AUTO)) cardField(key).addEventListener("input", () => { ART_AUTO[key] = false; });
-for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction"]) cardField(key).addEventListener("input", cardChanged);
+for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", ...LOOK_KEYS]) cardField(key).addEventListener("input", cardChanged);
 cardField("theme").addEventListener("change", () => {
   // Compact hides the bar by default; the others show it.
   cardField("showProgress").checked = cardField("theme").value !== "compact";
@@ -732,6 +763,9 @@ function hostedLink(base) {
   if (progressShown && savedCard.progressPosition && savedCard.progressPosition !== "bottom") query.set("progressPosition", savedCard.progressPosition);
   if (progressShown && savedCard.progressWidth && savedCard.progressWidth !== "content") query.set("progressWidth", savedCard.progressWidth);
   if (savedCard.direction && savedCard.direction !== "ltr") query.set("direction", savedCard.direction);
+  // artShape is left out: the hosted card never draws artwork.
+  const LOOK_DEFAULTS = { fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin" };
+  for (const [key, fallback] of Object.entries(LOOK_DEFAULTS)) if (savedCard[key] && savedCard[key] !== fallback) query.set(key, savedCard[key]);
   const text = query.toString().replace(/%2C/g, ",");
   return text ? base + (base.includes("?") ? "&" : "?") + text : base;
 }

@@ -117,7 +117,7 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-progressWidth", "card-direction", "card-preview", "card-artwork-scale-note", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-fontFamily", "card-statusStyle", "card-artShape", "card-progressStyle", "card-border", "card-progressWidth", "card-direction", "card-preview", "card-artwork-scale-note", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
   assert.equal(page.match(/<option value="(?:state|title|subtitle),(?:state|title|subtitle),(?:state|title|subtitle)">/g).length, 6);
@@ -205,4 +205,12 @@ test("Hide progress and timer removes the bar from the live card and Settings pr
     assert.match(restored, /<rect[^>]*height="4"/);
     assert.equal(parseAppConfig(await readFile(file, "utf8")).card.showProgress, true);
   } finally { await app.close(); }
+});
+
+test("applyCardChanges saves the look options and the card view shows them", () => {
+  const before = parseAppConfig(serializeSetupConfig(BASE));
+  const { config } = applyCardChanges(before, { fontFamily: "serif", statusStyle: "dot", artShape: "rounded", progressStyle: "rounded", border: "none" });
+  const view = cardSettingsView(config);
+  assert.deepEqual([view.fontFamily, view.statusStyle, view.artShape, view.progressStyle, view.border], ["serif", "dot", "rounded", "rounded", "none"]);
+  for (const bad of [{ fontFamily: "comic" }, { statusStyle: "big" }, { artShape: "star" }, { border: "thick" }]) assert.throws(() => applyCardChanges(before, bad), TypeError);
 });
