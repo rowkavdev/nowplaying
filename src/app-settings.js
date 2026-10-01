@@ -40,7 +40,7 @@ export function privacySettingsView(config) {
 
 // Card appearance (#94). Defaults are the renderer's own, so a page that
 // shows them draws the same card as a config without a card section.
-const CARD_KEYS = new Set(["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "artworkTint", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"]);
+const CARD_KEYS = new Set(["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "artworkTint", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background", "fontStack"]);
 const AUTO_CARD_KEYS = ["artworkWidth", "artworkHeight"];
 export function cardSettingsView(config) {
   const card = config.card ?? {};
@@ -70,6 +70,7 @@ export function cardSettingsView(config) {
     progressStyle: card.progressStyle ?? "square",
     border: card.border ?? "thin",
     background: card.background ?? "solid",
+    fontStack: card.fontStack ?? "",
   });
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { renderCard, cardThemes } from "../../src/card.js";
+import { renderCard, cardThemes, isFontStack } from "../../src/card.js";
 import { MAX_INGEST_BYTES, ServiceError } from "./service.js";
 
 const SHOW_FIELDS = new Set(["artwork", "mediaType", "progress", "state", "subtitle"]);
@@ -87,6 +87,11 @@ function parseLayoutOptions(searchParams) {
     if (raw === null) continue;
     if (!allowed.includes(raw)) throw new ServiceError(400, "invalid_layout");
     layout[key] = raw;
+  }
+  const stack = single(searchParams, "fontStack");
+  if (stack !== null) {
+    if (!isFontStack(stack)) throw new ServiceError(400, "invalid_layout");
+    layout.fontStack = stack;
   }
   const order = single(searchParams, "fieldOrder");
   if (order !== null) {

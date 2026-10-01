@@ -210,7 +210,7 @@ test("hosted card links accept the flat look options and reject bad values", asy
     assert.match(styled.body, /ui-monospace/);
     assert.match(styled.body, />PAUSED<\/text>/);
     assert.doesNotMatch(styled.body, /stroke=/);
-    for (const query of ["background=blur", "fontFamily=comic", "statusStyle=x", "progressStyle=line", "border=thick"]) {
+    for (const query of ["fontStack=a%3Bb", "background=blur", "fontFamily=comic", "statusStyle=x", "progressStyle=line", "border=thick"]) {
       const bad = await call(app.port, "GET", `/card/${cardId}.svg?${query}`);
       assert.equal(bad.status, 400, query);
     }

@@ -107,3 +107,13 @@ test("layout.background transparent leaves the card body unfilled", async () => 
   assert.match(clear, /<rect x="0.5" y="0.5"[^>]* fill="none"/);
   assert.throws(() => renderCard(presence, { layout: { background: "blur" } }), TypeError);
 });
+
+test("layout.fontStack sets a custom font list and rejects anything unsafe", async () => {
+  const { renderCard, isFontStack } = await import("../src/card.js");
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
+  assert.match(renderCard(presence, { layout: { fontStack: "Inter, Segoe UI" } }), /font-family="Inter,Segoe UI,ui-sans-serif/);
+  for (const bad of ['Inter"', "a;b", "url(x)", "", "<x>", "a,b,c,d,e,f", "x".repeat(81)]) {
+    assert.equal(isFontStack(bad), false, bad);
+    assert.throws(() => renderCard(presence, { layout: { fontStack: bad } }), TypeError);
+  }
+});
