@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { runInNewContext } from 'node:vm';
+import { createSettingsPageHandler } from '../src/settings-page-handler.js';
+test('Info dialog tabs use one tab stop, arrow wrapping and Home/End navigation', async () => {
+  const h=createSettingsPageHandler({settings:{read:()=>({discord:{}}),updateDiscord:async()=>{}},fallback:async()=>null});
+  const source=(await h({url:'/settings.js'})).body;
+  const start=source.indexOf('// DRPP InfoModal:');const end=source.indexOf('refreshVersion(); refreshLogs();',start);
+  const nodes=new Map();let focused;
+  const get=id=>{if(!nodes.has(id))nodes.set(id,{id,textContent:'',attrs:{},dataset:{},listeners:{},setAttribute(key,value){this.attrs[key]=value;},addEventListener(key,fn){this.listeners[key]=fn;},focus(){focused=id;},showModal(){},close(){}});return nodes.get(id);};
+  const tabs=['attribution','readme','license'].map((name,index)=>{const n=get('drpp-info-'+name);n.dataset.file=['NOTICE','README.md','LICENSE'][index];return n;});
+  runInNewContext(source.slice(start,end),{document:{getElementById:get,querySelectorAll:()=>tabs},fetch:async()=>({ok:true,text:async()=>''})});
+  get('drpp-info-open').listeners.click();
+  assert.deepEqual(tabs.map(t=>t.attrs.tabindex),['0','-1','-1']);
+  const key=(tab,value)=>{let prevented=false;tab.listeners.keydown({key:value,preventDefault(){prevented=true;}});assert.equal(prevented,true);};
+  key(tabs[0],'ArrowLeft');assert.equal(focused,tabs[2].id);assert.equal(tabs[2].attrs['aria-selected'],'true');
+  key(tabs[2],'Home');assert.equal(focused,tabs[0].id);
+  key(tabs[0],'End');assert.equal(focused,tabs[2].id);
+  key(tabs[2],'ArrowRight');assert.equal(focused,tabs[0].id);
+  assert.equal(get('drpp-info-content').attrs['aria-labelledby'],tabs[0].id);
+});
