@@ -99,7 +99,7 @@ let cardTick = 0;
 function publicCardUrl(value) {
   try {
     const u = new URL(value);
-    if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash || !/^\\/(u\\/[A-Za-z0-9-]+|card\\/[A-Za-z0-9_-]+)\\.svg$/.test(u.pathname)) return null;
+    if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash || !/^(?:\\/[A-Za-z0-9._~-]+)*\\/(?:u\\/[A-Za-z0-9-]+|card\\/[A-Za-z0-9_-]+)\\.svg$/.test(u.pathname)) return null;
     return u.href;
   } catch { return null; }
 }
