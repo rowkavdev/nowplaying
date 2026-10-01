@@ -126,3 +126,11 @@ test('hung refresh times out, releases single flight and preserves primary playb
     assert.equal(result.title, 'Local track');
   }
 });
+
+test("a JSON null token response is reported as token_failed, not a TypeError", async () => {
+  const fetchImpl = async () => new Response("null", { status: 200 });
+  await assert.rejects(
+    refreshAccessToken({ clientId: "a".repeat(32), refreshToken: "r", fetchImpl }),
+    (error) => error.name === "SpotifyAuthError" && error.code === "token_failed",
+  );
+});
