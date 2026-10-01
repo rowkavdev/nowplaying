@@ -8,7 +8,7 @@ import { readBoundedJson } from "../bounded-response.js";
 
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear, playbackTimes, pickSession } from "./fields.js";
+import { imageRef, optionalCount, optionalText, optionalYear, playbackTimes, pickSession } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
 
@@ -59,7 +59,7 @@ function sameId(actual, expected) {
 
 function matchesUser(session, username) {
   if (!username) return true;
-  const actual = session?.User?.username || session?.User?.title || "";
+  const actual = optionalText(session?.User?.username) || optionalText(session?.User?.title) || "";
   return actual.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
 }
 
@@ -67,11 +67,11 @@ function mapSession(session) {
   const state = session?.Player?.state === "paused" ? "paused" : "playing";
   const type = session.type;
   const kind = type === "track" ? "track" : type === "episode" ? "episode" : type === "movie" ? "movie" : "unknown";
-  const subtitle = kind === "episode" ? session.grandparentTitle || session.parentTitle : kind === "track" ? session.grandparentTitle || session.originalTitle : session.year ? String(session.year) : null;
-  const imageId = session.thumb || session.grandparentThumb;
+  const year = optionalYear(session.year);
+  const subtitle = kind === "episode" ? optionalText(session.grandparentTitle) || optionalText(session.parentTitle) : kind === "track" ? optionalText(session.grandparentTitle) || optionalText(session.originalTitle) : year !== null ? String(year) : null;
   return {
-    state, kind, title: session.title, subtitle,
-    artwork: imageId ? { provider: "plex", imageId, type: "thumb" } : null,
+    state, kind, title: optionalText(session.title), subtitle,
+    artwork: imageRef("plex", optionalText(session.thumb) || session.grandparentThumb, "thumb"),
     artworkUrl: null,
     ...playbackTimes(session.viewOffset, session.duration),
     // Episode and movie details (#143). Plex sends parentIndex/index for the

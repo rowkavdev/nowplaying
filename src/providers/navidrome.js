@@ -1,6 +1,7 @@
 import { readBoundedJson } from "../bounded-response.js";
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
+import { imageRef, optionalText, playbackTimes } from "./fields.js";
 
 export function createNavidromeProvider({ baseUrl, username, token, salt, fetchImpl = fetch }) {
   const origin = normalizeBaseUrl(baseUrl);
@@ -17,13 +18,13 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getNowPlaying.view?${auth}`);
       if (!response.ok) throw Object.assign(new Error(`Navidrome now-playing request failed: ${response.status} ${response.statusText}`), { status: response.status });
       const payload = await readBoundedJson(response);
-      const root = payload["subsonic-response"];
+      const root = payload?.["subsonic-response"];
       if (root?.status === "failed") throw Object.assign(new Error(`Navidrome API error: ${root.error?.message || "unknown error"}`), { status: Number(root.error?.code) === 40 ? 401 : undefined });
       // Subsonic servers send a single entry as an object rather than a
       // one-item list; anything else counts as nothing playing.
       const listed = root?.nowPlaying?.entry ?? [];
       const entries = (Array.isArray(listed) ? listed : [listed]).filter((item) => item && typeof item === "object");
-      const entry = entries.find((item) => !playingUser || item.username?.localeCompare(playingUser, undefined, { sensitivity: "accent" }) === 0);
+      const entry = entries.find((item) => !playingUser || typeof item.username === "string" && item.username.localeCompare(playingUser, undefined, { sensitivity: "accent" }) === 0);
       return entry ? mapEntry(entry) : { state: "idle" };
     },
     async whoami() {
@@ -31,7 +32,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       query.set("username", username);
       const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getUser.view?${query}`);
       if (!response.ok) throw Object.assign(new Error(`Navidrome user request failed: ${response.status} ${response.statusText}`), { status: response.status });
-      const root = (await readBoundedJson(response))["subsonic-response"];
+      const root = (await readBoundedJson(response))?.["subsonic-response"];
       if (root?.status === "failed") throw Object.assign(new Error(`Navidrome API error: ${root.error?.code === 40 ? "request failed: 401" : "user lookup failed"}`), { status: Number(root.error?.code) === 40 ? 401 : undefined });
       const name = typeof root?.user?.username === "string" ? root.user.username : null;
       return { id: name, displayName: name };
@@ -46,10 +47,9 @@ function normalizeBaseUrl(value) {
 
 function mapEntry(entry) {
   return {
-    state: "playing", kind: "track", title: entry.title, subtitle: entry.artist || entry.album,
-    artwork: entry.coverArt ? { provider: "navidrome", imageId: entry.coverArt, type: "cover" } : null,
+    state: "playing", kind: "track", title: optionalText(entry.title), subtitle: optionalText(entry.artist) || optionalText(entry.album),
+    artwork: imageRef("navidrome", entry.coverArt, "cover"),
     artworkUrl: null,
-    positionMs: null,
-    durationMs: Number.isFinite(entry.duration) ? entry.duration * 1000 : null,
+    ...playbackTimes(null, Number.isFinite(entry.duration) ? entry.duration * 1000 : null),
   };
 }
