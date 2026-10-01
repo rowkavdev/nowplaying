@@ -4,7 +4,7 @@ Every image below is generated from the shipped renderer by `node scripts/render
 
 ## Music
 
-![Card showing NOW PLAYING with the track Holocene by Bon Iver and a progress bar, on a dark background](assets/cards/music-playing.svg)
+![Card showing Now playing with the track Holocene by Bon Iver and a progress bar, on a dark background](assets/cards/music-playing.svg)
 
 ## Music, paper theme
 

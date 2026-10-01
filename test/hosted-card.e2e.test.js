@@ -68,7 +68,7 @@ test("hidden subtitle never enters raw local SVG or accessible description", asy
       const result = await get(address.port, path);
       assert.equal(result.status, 200);
       assert.match(result.body, /aria-labelledby="title desc"/);
-      assert.match(result.body, /<desc id="desc">NOW PLAYING<\/desc>/);
+      assert.match(result.body, /<desc id="desc">Now playing<\/desc>/);
       assert.doesNotMatch(result.body, /Hidden Artist/);
       assert.match(result.body, /Visible Song/);
     }

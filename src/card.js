@@ -30,13 +30,20 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
   const titleSize = bounded(layout.titleSize, 20, 14, 30, "layout.titleSize");
   const subtitleSize = bounded(layout.subtitleSize, 14, 10, 20, "layout.subtitleSize");
   const progressHeight = bounded(layout.progressHeight, 4, 2, 12, "layout.progressHeight");
+  const FONTS = { system: "ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif", serif: "ui-serif,Georgia,Cambria,Times New Roman,serif", mono: "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace", humanist: "Segoe UI,Helvetica Neue,Arial,sans-serif" };
+  const oneOf = (value, fallback, choices, path) => { const v = value ?? fallback; if (!choices.includes(v)) throw new TypeError(`${path}: expected ${choices.join(", ")}`); return v; };
+  const fontFamily = oneOf(layout.fontFamily, "system", Object.keys(FONTS), "layout.fontFamily");
+  const statusStyle = oneOf(layout.statusStyle, "plain", ["plain", "caps", "dot"], "layout.statusStyle");
+  const artShape = oneOf(layout.artShape, "square", ["square", "rounded", "circle"], "layout.artShape");
+  const progressStyle = oneOf(layout.progressStyle, "square", ["square", "rounded"], "layout.progressStyle");
+  const borderStyle = oneOf(layout.border, "thin", ["none", "thin"], "layout.border");
   const directionSetting = layout.direction ?? "ltr";
   if (!new Set(["ltr", "rtl", "auto"]).has(directionSetting)) throw new TypeError("layout.direction: expected ltr, rtl or auto");
   const presetShow = theme === "compact" ? COMPACT_SHOW : {};
@@ -76,7 +83,8 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const artworkX = artworkPosition === "right" ? width - padding - artworkWidth : padding;
   const contentX = hasArtwork && artworkPosition === "left" ? padding + artworkWidth + 24 : padding;
   const contentWidth = width - contentX - padding - (hasArtwork && artworkPosition === "right" ? artworkWidth + 24 : 0);
-  const status = presence.state === "playing" ? "NOW PLAYING" : presence.state === "paused" ? "PAUSED" : "NOT PLAYING";
+  const statusWords = presence.state === "playing" ? "Now playing" : presence.state === "paused" ? "Paused" : "Not playing";
+  const status = statusStyle === "caps" ? statusWords.toUpperCase() : statusWords;
   const text = cardText(presence);
   const title = text.title || "Nothing playing";
   const subtitle = text.subtitle || (visibility.mediaType ? providerLabel(presence.kind) : "");
@@ -117,9 +125,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   // Elapsed / total sits across from the status line when the layout is the
   // plain default, so it never collides with reordered or centred text.
   // It's left out when the two wouldn't both fit (narrow cards, long films).
-  const dot = visibility.state && presence.state === "playing" && edge !== "middle";
+  const dot = statusStyle !== "plain" && visibility.state && presence.state === "playing" && edge !== "middle";
   const timeCandidate = presence.durationMs > 0 && Number.isFinite(presence.positionMs) ? `${clock(Math.min(Math.max(0, presence.positionMs), presence.durationMs))} / ${clock(presence.durationMs)}` : "";
-  const timeFits = (dot ? 14 : 0) + estimateWidth(status, 11, 0.64, 1.1) + 16 + estimateWidth(timeCandidate, 11, 0.6, 0) <= contentWidth;
+  const timeFits = (dot ? 14 : 0) + estimateWidth(status, 11, 0.64, statusStyle === "caps" ? 1.1 : 0) + 16 + estimateWidth(timeCandidate, 11, 0.6, 0) <= contentWidth;
   const showTime = Boolean(timeCandidate) && timeFits && visibility.progress && visibility.state && !customOrder && textAlign === "start";
   const timeX = rtl ? contentX : contentX + contentWidth;
   const timeAnchor = rtl ? "start" : "end";
@@ -130,27 +138,28 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   // Any tint is pulled into a safe lightness range first, so a white or black
   // cover can't wash out the text.
   const tintStop = tint ? mix(palette.background, clampLightness(tint, light ? 0.6 : 0.12, light ? 0.9 : 0.45), light ? 0.12 : 0.34) : null;
-  const background = tintStop ? "url(#bg)" : palette.background;
+  const background = tintStop ?? palette.background;
+  const artRx = artShape === "circle" ? Math.min(artworkWidth, artworkHeight) / 2 : artShape === "rounded" ? Math.min(radius, 8) : 0;
+  const barRx = progressStyle === "rounded" ? progressHeight / 2 : 0;
   const defs = [
-    tintStop ? `<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${tintStop}"/><stop offset="0.75" stop-color="${palette.background}"/></linearGradient>` : "",
     `<clipPath id="txt"><rect x="${contentX - 2}" y="0" width="${contentWidth + 4}" height="${height}"/></clipPath>`,
-    hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${Math.min(radius, 8)}"/></clipPath>` : "",
+    hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${artRx}"/></clipPath>` : "",
   ].join("");
-  const font = 'font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif"';
+  const font = `font-family="${FONTS[fontFamily]}"`;
 
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title><desc id="desc">${escapeXml(description)}</desc>
   ${defs ? `<defs>${defs}</defs>` : ""}
-  <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" fill="${background}" stroke="${palette.border}"/>
-  ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/><rect x="${artworkX + 0.5}" y="${padding + 0.5}" width="${artworkWidth - 1}" height="${artworkHeight - 1}" rx="${Math.min(radius, 8)}" fill="none" stroke="${light ? "#000000" : "#ffffff"}" stroke-opacity="0.12"/>` : ""}
+  <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" fill="${background}"${borderStyle === "thin" ? ` stroke="${palette.border}"` : ""}/>
+  ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
   ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
-  ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="1.1">${status}</text>` : ""}
+  ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="${statusStyle === "caps" ? 1.1 : 0}">${status}</text>` : ""}
   ${showTime ? `<text x="${timeX}" y="${stateY}" text-anchor="${timeAnchor}" fill="${palette.secondary}" ${font} font-size="11" font-variant-numeric="tabular-nums">${timeLabel}</text>` : ""}
   <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">${escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
   ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="500" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
-  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${progressHeight / 2}" fill="${palette.accent}"/>` : ""}
+  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${barRx}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${barRx}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }
 

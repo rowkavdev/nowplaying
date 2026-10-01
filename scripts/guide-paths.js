@@ -202,7 +202,7 @@ async function discordRichPresence() {
 // privacy-filtered presence, serve the card, cache, reject bad writes, delete.
 const HOSTED_FIXTURES = [
   { state: "playing", kind: "track", title: "Holocene", subtitle: "Bon Iver" },
-  { state: "paused", kind: "track", title: "Re: Stacks", subtitle: "Bon Iver", marker: "PAUSED" },
+  { state: "paused", kind: "track", title: "Re: Stacks", subtitle: "Bon Iver", marker: "Paused" },
   { state: "playing", kind: "episode", title: "The Constant", subtitle: "Lost S4E5" },
   { state: "playing", kind: "movie", title: "Spirited Away", subtitle: "2001" },
 ];

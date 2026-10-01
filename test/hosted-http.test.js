@@ -116,7 +116,7 @@ test("card rejects bad options and unknown ids never leak detail", async () => {
     assert.deepEqual(JSON.parse(bad.body), { error: "invalid_theme" });
     const idle = await call(app.port, "GET", "/api/card?id=AAAAAAAAAAAAAAAAAAAAAA");
     assert.equal(idle.status, 200);
-    assert.match(idle.body, /NOT PLAYING/);
+    assert.match(idle.body, /Not playing/);
     assert.equal((await call(app.port, "GET", "/api/health")).body, "ok");
   } finally { await app.close(); }
 });
