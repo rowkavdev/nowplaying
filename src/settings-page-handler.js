@@ -567,7 +567,7 @@ let previewObjectUrl;
 let previewGeneration = 0;
 function cardChanged() {
   for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = ART_AUTO[key] ? "Auto" : cardField(key).value + " px";
-  for (const key of ["progressHeight", "progressPosition", "progressWidth"]) cardField(key).disabled = !cardField("showProgress").checked;
+  for (const key of ["progressHeight", "progressPosition", "progressWidth", "progressStyle"]) cardField(key).disabled = !cardField("showProgress").checked;
   clearTimeout(previewTimer);
   previewGeneration++;
   if (previewRequest) previewRequest.abort();
