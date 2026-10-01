@@ -59,6 +59,7 @@ export async function writeSetupConfig(file, draft) {
     discordEnabled: draft.discordEnabled,
     discordIdleBehavior: draft.discordIdleBehavior,
     discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
+    discordArtworkUpload: true,
     ...(draft.spotify ? { spotify: { clientId: draft.spotify.clientId, identity: draft.spotify.identity } } : {}),
     ...keptSettings(await readCurrentConfig(file)),
     // A hosting choice made in setup replaces the installed one.
@@ -73,6 +74,7 @@ export async function writeSetupConfig(file, draft) {
 function keptSettings(current) {
   if (!current) return {};
   return {
+    ...(typeof current.discord?.artworkUpload === "boolean" ? { discordArtworkUpload: current.discord.artworkUpload } : {}),
     ...(current.discord?.timestamps !== undefined ? { discordTimestamps: current.discord.timestamps } : {}),
     ...(current.hosted ? { hostedEnabled: current.hosted.enabled, ...(current.hosted.url ? { hostedUrl: current.hosted.url } : {}) } : {}),
     ...(current.privacy ? { privacy: current.privacy } : {}),

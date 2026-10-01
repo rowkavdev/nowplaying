@@ -139,9 +139,10 @@ export function createSetupConfig(input = {}) {
       // Configs written before this field existed stay off: nothing new is
       // sent until the user runs setup again or turns it on.
       artworkLookup: input.discordArtworkLookup ?? "off",
-      // Copying the server's own cover to a temporary public host is on
-      // unless this is false, so a missing field means on.
-      ...(input.discordArtworkUpload === false ? { artworkUpload: false } : {}),
+      // Whether the server's own cover is copied to a temporary public host. New
+      // setups write true; a file without the field is read as off unless it chose
+      // "upload" (see parseAppConfig), so an upgrade never starts sending covers.
+      ...(typeof input.discordArtworkUpload === "boolean" ? { artworkUpload: input.discordArtworkUpload } : {}),
       // Discord timer (set from the settings page): elapsed, remaining, both
       // or none. Left out means "both", so setup's own output is unchanged.
       ...(input.discordTimestamps !== undefined ? { timestamps: input.discordTimestamps } : {}),
