@@ -16,16 +16,19 @@ out="${4:?missing output directory}"
 maintainer="${NOWPLAYING_DEB_MAINTAINER:-rowkav09 <rowkav09@users.noreply.github.com>}"
 
 case "$arch" in amd64|arm64) ;; *) echo "build-deb.sh: unsupported architecture: $arch" >&2; exit 2 ;; esac
-# Debian versions allow [0-9A-Za-z.+~-] and must start with a digit; reject
-# anything else before it reaches the control file.
-if ! printf '%s' "$version" | grep -Eq '^[0-9][0-9A-Za-z.+~-]*$'; then
-  echo "build-deb.sh: invalid version: $version" >&2; exit 2
-fi
+# Debian versions allow [0-9A-Za-z.+~-] and must start with a digit. A case
+# pattern checks the whole string, newlines included (grep checks per line, so
+# "0.2.0<newline>Package: x" would pass it); reject before it reaches the
+# control file.
+case "$version" in
+  ''|[!0-9]*|*[!0-9A-Za-z.+~-]*) echo "build-deb.sh: invalid version" >&2; exit 2 ;;
+esac
 [ -x "$bundle/nowplaying" ] && [ -x "$bundle/runtime/node" ] || { echo "build-deb.sh: not a built bundle: $bundle" >&2; exit 2; }
 
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/opt" "$stage/usr/bin" "$stage/DEBIAN" "$out"
+chmod 755 "$stage" "$stage/opt" "$stage/usr" "$stage/usr/bin"
 cp -a "$bundle" "$stage/opt/nowplaying"
 cat > "$stage/usr/bin/nowplaying" <<'WRAP'
 #!/bin/sh
@@ -40,7 +43,7 @@ Version: $version
 Architecture: $arch
 Maintainer: $maintainer
 Installed-Size: $size_kb
-Depends: libc6
+Depends: libc6, libstdc++6, libgcc-s1
 Section: sound
 Priority: optional
 Homepage: https://github.com/rowkavdev/nowplaying
