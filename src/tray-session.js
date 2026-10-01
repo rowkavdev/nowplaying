@@ -18,10 +18,15 @@ export async function runTraySession({ app, runTray, restartApp, onRestart = () 
   }
   let current = app;
   let tray = null;
+  // A waiter taken from a request queue stays subscribed until its signal is
+  // handled. Re-subscribing each loop would leave the old waiter to swallow a
+  // quit that arrives while a restart is in progress.
+  let quitWait = null;
   for (;;) {
     if (!tray) tray = Promise.resolve().then(() => runTray(current)).then((code) => ({ code }), () => ({ failed: true }));
     const page = restartRequests ? restartRequests.next().then(() => ({ page: true })) : new Promise(() => {});
-    const quit = quitRequests ? quitRequests.next().then(() => ({ quit: true })) : new Promise(() => {});
+    if (quitRequests && !quitWait) quitWait = quitRequests.next().then(() => ({ quit: true }));
+    const quit = quitWait ?? new Promise(() => {});
     const event = await Promise.race([tray, page, quit]);
     if (event.quit) {
       // A quit from outside the tray (the installer's stop request, #780):
