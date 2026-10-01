@@ -45,3 +45,14 @@ export async function runTraySession({ app, runTray, restartApp, onRestart = () 
     return Object.freeze({ outcome: "quit", app: null });
   }
 }
+
+// Maps a tray session outcome to a log event the app logger accepts. Outcome
+// strings are not log statuses, and arbitrary error messages stay out of logs.
+export function trayLogEvent(session) {
+  if (session?.outcome === "restart-failed") {
+    const code = typeof session.error?.startupCode === "string" && /^[A-Z][A-Z0-9_]{0,47}$/.test(session.error.startupCode) ? session.error.startupCode : "START_FAILED";
+    return Object.freeze({ status: "failed", options: Object.freeze({ level: "error", code }) });
+  }
+  if (session?.outcome === "tray-failed") return Object.freeze({ status: "failed", options: Object.freeze({ level: "error", code: "TRAY_FAILED" }) });
+  return Object.freeze({ status: "stopped", options: Object.freeze({}) });
+}

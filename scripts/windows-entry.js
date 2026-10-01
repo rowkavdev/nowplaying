@@ -10,7 +10,7 @@ import { loadOrCreateDeviceId, openLocalSettingsUrl, windowsConfigPath } from ".
 import { createWindowsCredentialAdapter } from "../src/windows-credential-adapter.js";
 import { createWindowsStartup } from "../src/windows-startup.js";
 import { parseStartArgs } from "../src/first-run.js";
-import { createRestartRequests, runTraySession } from "../src/tray-session.js";
+import { createRestartRequests, runTraySession, trayLogEvent } from "../src/tray-session.js";
 import { requestLocalShutdown, SHUTDOWN_SECRET_PATTERN, STOP_EXIT } from "../src/windows-shutdown.js";
 import { createStartupRecoveryStore, guardStartup } from "../src/startup-recovery-store.js";
 import { spawn } from "node:child_process";
@@ -89,7 +89,8 @@ if (command === "--version" || command === "version") {
       onRestart: (current) => { app = current; },
       restartRequests,
     });
-    await logger.event("tray", session.outcome, session.outcome === "restart-failed" ? { level: "error", code: session.error?.startupCode ?? "START_FAILED" } : {});
+    const trayEvent = trayLogEvent(session);
+    await logger.event("tray", trayEvent.status, trayEvent.options);
     if (session.outcome === "quit") { await recovery?.cleanShutdown?.(); await logger.event("startup", "stopped"); process.exit(0); }
     if (session.outcome === "restart-failed") { console.error(session.error?.message ?? "NowPlaying couldn't restart."); process.exit(1); }
   } else if (!legacyModule) {
