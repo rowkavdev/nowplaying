@@ -186,11 +186,12 @@ export function createDiscordArtworkResolver({
 }
 
 
+// The server's own cover is copied to a temporary public host unless the user
+// turned that off (discord.artworkUpload: false), then MusicBrainz if chosen.
 export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup, coverSource, fetchImpl, createUpload = createLitterboxUploader } = {}) {
   const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
-  if (discordSettings.artworkLookup === "upload" && typeof coverSource === "function") {
-    return Object.freeze({ publicProxyBase: proxy, metadataLookup: false, upload: createUpload({ coverSource, ...(fetchImpl ? { fetchImpl } : {}) }) });
-  }
-  if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false });
-  return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup() });
+  const upload = discordSettings.artworkUpload !== false && typeof coverSource === "function"
+    ? { upload: createUpload({ coverSource, ...(fetchImpl ? { fetchImpl } : {}) }) } : {};
+  if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false, ...upload });
+  return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup(), ...upload });
 }

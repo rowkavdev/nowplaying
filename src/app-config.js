@@ -75,7 +75,8 @@ export function parseAppConfig(text) {
       credentialStored: true,
       discordEnabled: parsed.discord?.enabled,
       discordIdleBehavior: parsed.discord?.idleBehavior,
-      discordArtworkLookup: parsed.discord?.artworkLookup,
+      discordArtworkLookup: parsed.discord?.artworkLookup === "upload" ? "off" : parsed.discord?.artworkLookup,
+      discordArtworkUpload: parsed.discord?.artworkUpload,
       discordTimestamps: parsed.discord?.timestamps,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
@@ -216,7 +217,7 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   const client = createDiscordClient({ transport: createTransport(clientId), ...(now ? { now, elapsedNow: now } : {}) });
   // Hidden titles or album art: never look covers up by title.
   const policy = privacyPolicyFromConfig(config);
-  const artwork = createArtwork(policy.redactTitles || policy.hideArtwork ? { ...config.discord, artworkLookup: "off" } : config.discord);
+  const artwork = createArtwork(policy.redactTitles || policy.hideArtwork ? { ...config.discord, artworkLookup: "off", artworkUpload: false } : config.discord);
   const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(stuckAfterMs ? { stuckAfterMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.

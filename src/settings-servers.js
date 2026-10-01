@@ -44,6 +44,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       discordEnabled: existing?.discord?.enabled ?? true,
       discordIdleBehavior: existing?.discord?.idleBehavior ?? "clear",
       discordArtworkLookup: existing?.discord?.artworkLookup ?? "off",
+      ...(existing?.discord?.artworkUpload === false ? { discordArtworkUpload: false } : {}),
       ...(existing?.discord?.timestamps ? { discordTimestamps: existing.discord.timestamps } : {}),
       ...(existing?.hosted ? { hostedEnabled: existing.hosted.enabled, ...(existing.hosted.url ? { hostedUrl: existing.hosted.url } : {}) } : {}),
       ...(existing?.privacy ? { privacy: existing.privacy } : {}),

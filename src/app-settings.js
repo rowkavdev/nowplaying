@@ -8,7 +8,7 @@ import { IDLE_BEHAVIORS } from "./discord-presence.js";
 // checked against the same rules as setup, then config.json is replaced in one
 // step (temp file + rename) so a crash never leaves half a file.
 
-const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "idleBehavior"]);
+const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior"]);
 const HOSTED_KEYS = new Set(["enabled"]);
 const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
@@ -18,6 +18,7 @@ export function discordSettingsView(config) {
     enabled: config.discord?.enabled !== false,
     timestamps: config.discord?.timestamps ?? "both",
     artworkLookup: config.discord?.artworkLookup ?? "off",
+    artworkUpload: config.discord?.artworkUpload !== false,
     idleBehavior: config.discord?.idleBehavior ?? "clear",
   });
 }
@@ -86,6 +87,7 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     discordEnabled: discord.enabled,
     discordIdleBehavior: discord.idleBehavior,
     discordArtworkLookup: discord.artworkLookup,
+    discordArtworkUpload: discord.artworkUpload,
     discordTimestamps: discord.timestamps,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
@@ -99,6 +101,7 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
 export function applyDiscordChanges(config, changes) {
   checkChanges(changes, DISCORD_KEYS, "discord");
   if (changes.idleBehavior !== undefined && !IDLE_BEHAVIORS.includes(changes.idleBehavior)) throw new TypeError("discord settings: idleBehavior is invalid");
+  if (changes.artworkUpload !== undefined && typeof changes.artworkUpload !== "boolean") throw new TypeError("discord settings: artworkUpload must be true or false");
   return rewrite(config, { discord: { ...discordSettingsView(config), ...changes } });
 }
 

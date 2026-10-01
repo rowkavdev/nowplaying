@@ -71,13 +71,15 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="show">Show that nothing is playing</option>
 <option value="recent">Show what I played last</option>
 </select></p>
-<p class="row"><label for="discord-artwork">Album art</label>
+<p class="row"><label for="discord-upload">Show my server's cover</label>
+<input type="checkbox" id="discord-upload" name="artworkUpload"></p>
+<p class="hint">Discord can only show a picture from a public address, so this uploads just the cover image to litterbox.catbox.moe, where it is kept for 72 hours. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
+<p class="row"><label for="discord-artwork">If that fails</label>
 <select id="discord-artwork" name="artworkLookup">
-<option value="upload">Show my server's cover (copied to a temporary public host)</option>
-<option value="musicbrainz">Look up covers on MusicBrainz</option>
-<option value="off">Only use art from my server</option>
+<option value="musicbrainz">Look up the cover on MusicBrainz</option>
+<option value="off">Show the NowPlaying icon</option>
 </select></p>
-<p class="hint">Showing your server's cover uploads just that image to litterbox.catbox.moe for up to 72 hours, the way Discord Rich Presence for Plex does. MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org. With "Only use art from my server", a private server's art is never sent to Discord.</p>
+<p class="hint">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
 <p><button type="submit" id="discord-save">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
 <p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
@@ -424,11 +426,11 @@ refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(ref
 
 const buildScript = (startupCopy) => `"use strict";
 const form = document.getElementById("discord-form");
-const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), idleBehavior: document.getElementById("discord-idle") };
+const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), artworkUpload: document.getElementById("discord-upload"), idleBehavior: document.getElementById("discord-idle") };
 const save = document.getElementById("discord-save");
 function say(text, tone) { const el = document.getElementById("discord-result"); el.textContent = text; el.className = tone || ""; }
-function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; fields.idleBehavior.value = d.idleBehavior || "clear"; toggle(); }
-function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = fields.idleBehavior.disabled = !fields.enabled.checked; }
+function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; fields.artworkUpload.checked = d.artworkUpload !== false; fields.idleBehavior.value = d.idleBehavior || "clear"; toggle(); }
+function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = fields.artworkUpload.disabled = fields.idleBehavior.disabled = !fields.enabled.checked; }
 fields.enabled.addEventListener("change", toggle);
 async function load() {
   try {
@@ -452,7 +454,7 @@ form.addEventListener("submit", async (event) => {
   save.disabled = true;
   say("Saving...", "warn");
   try {
-    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value, idleBehavior: fields.idleBehavior.value } };
+    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value, artworkUpload: fields.artworkUpload.checked, idleBehavior: fields.idleBehavior.value } };
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(String(res.status));
     show((await res.json()).discord);
