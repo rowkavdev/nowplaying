@@ -165,7 +165,7 @@ async function call(body) {
   for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
   return JSON.parse(new TextDecoder().decode(bytes));
 }
-function button(text, onClick) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.addEventListener("click", onClick); return b; }
+function button(text, target, onClick) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.ariaLabel = text === "Rename" ? "Rename " + target : "Sign out " + target; b.addEventListener("click", onClick); return b; }
 function render(data) {
   list.replaceChildren();
   root.hidden = !data.signedIn;
@@ -179,8 +179,8 @@ function render(data) {
     seen.className = "hint";
     seen.textContent = " last seen " + when(d.lastSeen) + " ";
     li.append(name, seen,
-      button("Rename", () => { const next = prompt("New name for " + d.name, d.name); if (next && next.trim()) act({ action: "rename", deviceId: d.deviceId, name: next.trim().slice(0, 40) }, "Renamed."); }),
-      button(d.current ? "Sign out this PC" : "Sign out", () => { if (confirm("Sign out " + d.name + "? It stops updating your card.")) act({ action: "remove", deviceId: d.deviceId }, "Signed out " + d.name + "."); }));
+      button("Rename", d.name, () => { const next = prompt("New name for " + d.name, d.name); if (next && next.trim()) act({ action: "rename", deviceId: d.deviceId, name: next.trim().slice(0, 40) }, "Renamed."); }),
+      button(d.current ? "Sign out this PC" : "Sign out", d.name + (d.current ? " (this PC)" : ""), () => { if (confirm("Sign out " + d.name + "? It stops updating your card.")) act({ action: "remove", deviceId: d.deviceId }, "Signed out " + d.name + "."); }));
     list.append(li);
   }
 }
