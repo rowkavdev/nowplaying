@@ -176,6 +176,18 @@ test("a failing stats write never fails the card, ingest or registration", async
   assert.equal((await service.readCardState(cardId)).state, "playing");
 });
 
+test("a failing total counter never fails a card read or a registration", async () => {
+  const { redis, now } = setup();
+  const failing = { command: async (args) => {
+    if (args[0] === "INCR" && String(args[1]).startsWith("np:stats:")) throw new Error("ERR value is not an integer or out of range");
+    return redis.command(args);
+  } };
+  const service = createService({ redis: failing, now });
+  const { token, cardId } = await service.register();
+  assert.equal((await service.ingest({ token, payload: update(now()) })).accepted, true);
+  assert.equal((await service.readCardState(cardId)).state, "playing");
+});
+
 test("upstash client posts commands with bearer auth and hides error bodies", async () => {
   const calls = [];
   const redis = createUpstashRedis({ url: "https://example.upstash.io/", token: "t0k", fetchImpl: async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => ({ result: "OK" }) }; } });
