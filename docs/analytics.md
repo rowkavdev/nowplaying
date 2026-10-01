@@ -18,7 +18,7 @@ Create a long random `salt` and a separate stats bearer token. Keep both in a se
 
 `GET /stats` returns aggregate JSON only with `Authorization: Bearer <token>` and always uses `Cache-Control: no-store`.
 
-Card counting wraps the successful card resolver with `withCardAnalytics`. Failed renders are not counted.
+Card counting wraps the successful card resolver with `withCardAnalytics`. Failed renders are not counted, and a failed counter write never fails the card.
 
 ## Discord consent
 
