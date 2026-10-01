@@ -189,7 +189,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="rtl">Right to left</option>
 <option value="auto">Match the title</option>
 </select></p>
-<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings"><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
+<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings" hidden><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
 <p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
@@ -245,7 +245,7 @@ select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;back
 fieldset{border:0;padding:0;margin:0 0 4px}legend{padding:0;margin:0 0 8px;color:#555}
 input[type=number]{font:inherit;width:6em;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
 input[type=range]{width:180px;accent-color:#0b5cad}output{min-width:3.5em;font-variant-numeric:tabular-nums;color:#555}.unit{color:#555;font-size:13px}
-.preview{margin:4px 0 12px;padding:12px;border:1px dashed #bbb;border-radius:6px;overflow-x:auto}.preview-label{margin:0 0 8px;color:#555;font-size:13px}.preview img{display:block;max-width:100%;height:auto}
+.preview{margin:4px 0 12px;padding:12px;border:1px dashed #bbb;border-radius:6px;overflow-x:auto}.preview-label{margin:0 0 8px;color:#555;font-size:13px}.preview img{display:block;max-width:100%;height:auto}.preview img[hidden]{display:none}
 code.secret{letter-spacing:.05em}
 dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}button[disabled]{opacity:.6;cursor:default}
 @media (max-width:520px){.row label[for]{flex-basis:100%;min-width:0}}
