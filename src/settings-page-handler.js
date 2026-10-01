@@ -111,7 +111,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="paper">Light</option>
 <option value="compact">Compact (title only)</option>
 </select></p>
-<p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="10" inputmode="numeric"> <span class="unit">px, 280 to 800</span></p>
+<p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="1" inputmode="numeric"> <span class="unit">px, 280 to 800</span></p>
 <p class="row"><label for="card-padding">Padding</label><input type="range" id="card-padding" min="12" max="48" step="1"> <output id="card-padding-value" for="card-padding"></output></p>
 <p class="row"><label for="card-radius">Corners</label><input type="range" id="card-radius" min="0" max="24" step="1"> <output id="card-radius-value" for="card-radius"></output></p>
 <p class="row"><label for="card-fontFamily">Font</label>
