@@ -74,3 +74,13 @@ test("retries a recovered 404 cover after negative TTL despite a backward PC clo
   assert.equal(calls, 2, "image is fetched again after the negative TTL");
   assert.equal(wall, 1_799_996_400_000);
 });
+
+test("a sanitizer that rejects a blank cover yields no artwork and is cached briefly", async () => {
+  let calls = 0;
+  const service = createArtworkService({ cache: createArtworkCache(), fetchImpl: async () => response(200), sanitizer: async () => { calls += 1; return null; } });
+  const ref = { provider: "navidrome", imageId: "blank-1", type: "cover" };
+  const cfg = { baseUrl: "http://nav.local", username: "u", token: "t", salt: "s" };
+  assert.equal(await service.resolve(ref, cfg), null);
+  assert.equal(await service.resolve(ref, cfg), null);
+  assert.equal(calls, 1);
+});
