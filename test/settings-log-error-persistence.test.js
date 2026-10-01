@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {runInNewContext} from 'node:vm';
+import {createSettingsPageHandler} from '../src/settings-page-handler.js';
+test('changing a log filter cannot hide a lost Settings log connection',async()=>{
+ const h=createSettingsPageHandler({settings:{read:()=>({discord:{}}),updateDiscord:async()=>{}},fallback:async()=>null});
+ const script=(await h({url:'/settings.js'})).body;
+ const start=script.indexOf('const lines = document.getElementById("drpp-log-lines")');
+ const end=script.indexOf('// DRPP AutostartSwitch:',start);
+ assert.ok(start>=0&&end>start);
+ const nodes=new Map();const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,hidden:false,textContent:'',className:'',listeners:{},classList:{toggle(){}},setAttribute(){},addEventListener(e,fn){this.listeners[e]=fn;},replaceChildren(){}});return nodes.get(id);};
+ let connected=false;
+ const ctx={document:{getElementById:get,createElement:()=>({append(){}})},localStorage:{getItem(){return null},setItem(){}},fetch:async()=>{if(!connected)throw Error('offline');return {ok:true,json:async()=>({events:[]})};}};
+ runInNewContext(script.slice(start,end)+';globalThis.reloadLogs=refreshLogs;',ctx);
+ await ctx.reloadLogs();assert.equal(get('drpp-log-error').hidden,false);
+ get('drpp-search').value='provider';get('drpp-search').listeners.input();
+ assert.equal(get('drpp-log-error').hidden,false,'filtering cached rows must not claim recovery');
+ assert.match(get('drpp-log-error').textContent,/out of date/);
+ connected=true;await ctx.reloadLogs();assert.equal(get('drpp-log-error').hidden,true);
+});
