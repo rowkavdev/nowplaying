@@ -11,6 +11,7 @@ const PAGE = `<!doctype html>
 <p class="row"><label for="level">Show</label>
 <select id="level"><option value="info">Everything</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
 <button type="button" id="copy-log">Copy</button> <span id="log-result" role="status" aria-live="polite"></span></p>
+<p id="log-error" class="bad" role="status" aria-live="polite" hidden></p>
 <p id="log-empty" role="status" aria-live="polite" hidden>Nothing logged yet.</p>
 <div class="log-table" tabindex="0" role="region" aria-label="Recent log events"><table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table></div>
 <p class="hint">The log never includes your server address, user name, what you're playing or sign-in details. Use Copy diagnostics on the Status page for bug reports.</p>
@@ -57,9 +58,11 @@ async function load() {
     if (!res.ok) throw new Error(String(res.status));
     events = (await res.json()).events;
     render();
-    say("", "");
+    document.getElementById("log-error").hidden = true;
   } catch {
-    say("Can't reach NowPlaying. Displayed events may be out of date.", "bad");
+    const error = document.getElementById("log-error");
+    error.textContent = "Can't reach NowPlaying. Displayed events may be out of date.";
+    error.hidden = false;
   }
 }
 level.addEventListener("change", render);
