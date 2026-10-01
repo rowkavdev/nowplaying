@@ -76,3 +76,9 @@ test("user lookup: sign-in rejection fails, other lookup errors are ignored", as
 test("skips the user check when there is no identity or no whoami", async () => {
   assert.equal((await checkProviderConnection({ createProvider: whoProvider({ id: "u2" }), config: {} })).status, "connected");
 });
+
+test("a structured 401 on the error is an authentication failure even when the message is not HTTP-shaped", async () => {
+  const error = Object.assign(new Error("Navidrome API error: Wrong username or password"), { status: 401 });
+  const result = await checkProviderConnection({ createProvider: failingProvider(error), config: {} });
+  assert.deepEqual(result, { ok: false, status: "authentication_failed", activity: null });
+});
