@@ -246,3 +246,25 @@ test('ingest rejects JSON-prefix lookalike media types but permits MIME paramete
     assert.equal(reply.status, 202);
   } finally { await app.close(); }
 });
+
+test("an unexpected service failure answers 500 internal_error and leaks nothing", async () => {
+  const handlers = createHandlers({ getService: () => ({ revoke: async () => { throw new Error("redis password hunter2 at 10.0.0.5"); } }) });
+  const server = createServer((req, res) => handlers.revoke(req, res));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const res = await call(server.address().port, "POST", "/api/revoke", { headers: json("t".repeat(43)) });
+    assert.equal(res.status, 500);
+    assert.deepEqual(JSON.parse(res.body), { error: "internal_error" });
+    assert.equal(res.headers["cache-control"], "no-store");
+    assert.doesNotMatch(res.body, /hunter2|10\.0\.0\.5/);
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+});
+
+test("revoke without a valid bearer token is a 401, and other methods are refused", async () => {
+  const app = await start();
+  try {
+    assert.equal((await call(app.port, "POST", "/api/revoke")).status, 401);
+    assert.equal((await call(app.port, "POST", "/api/revoke", { headers: json("x".repeat(43)) })).status, 401);
+    assert.equal((await call(app.port, "GET", "/api/revoke")).status, 405);
+  } finally { await app.close(); }
+});
