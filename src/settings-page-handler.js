@@ -285,6 +285,7 @@ autoScroll.checked = storedLogPreference("logs-auto-scroll", true);
 wrap.checked = storedLogPreference("logs-wrap-text", false);
 lines.classList.toggle("wrap", wrap.checked);
 let entries = [];
+let logConnectionError = "";
 function renderLogs() {
   let match;
   try {
@@ -293,7 +294,7 @@ function renderLogs() {
     match = !text ? null : text.startsWith("/") && lastSlash > 0
       ? new RegExp(text.slice(1, lastSlash), text.slice(lastSlash + 1))
       : new RegExp(text);
-    error.hidden = true;
+    error.textContent = logConnectionError; error.hidden = !logConnectionError;
   } catch { error.textContent = "[Search] Invalid search expression"; error.hidden = false; return; }
   const shown = entries.filter((e) => {
     if (!match) return true;
@@ -314,11 +315,11 @@ async function refreshLogs() {
   try {
     const res = await fetch("/api/logs", { cache: "no-store", headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error();
-    const data = await res.json(); entries = Array.isArray(data.events) ? data.events.slice(-1000) : [];
+    const data = await res.json(); logConnectionError = ""; entries = Array.isArray(data.events) ? data.events.slice(-1000) : [];
     indicator.className = "drpp-indicator connected"; indicator.setAttribute("aria-label", "Log connection active"); renderLogs();
   } catch {
     indicator.className = "drpp-indicator disconnected"; indicator.setAttribute("aria-label", "Log connection unavailable");
-    error.textContent = "Can't reach the log. The app may have stopped."; error.hidden = false;
+    logConnectionError = "Can't reach the log. Displayed events may be out of date."; error.textContent = logConnectionError; error.hidden = false;
   }
 }
 search.addEventListener("input", renderLogs);
