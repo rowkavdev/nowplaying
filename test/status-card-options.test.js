@@ -47,6 +47,16 @@ test('app status exposes only a public card address, not credential-bearing URLs
     assert.equal(status.snapshot().hosted.cardUrl, undefined);
   }
 });
+test('app status keeps a hosted address that lives under a base path', () => {
+  const status = createAppStatus({ config: { provider: 'plex' } });
+  const url = 'https://cards.example/service/u/fixture.svg';
+  status.setHosted(() => ({ enabled: true, state: 'connected', cardUrl: url }));
+  assert.equal(status.snapshot().hosted.cardUrl, url);
+  for (const bad of ['https://cards.example/service/u/fixture.svg#x', 'https://cards.example/a b/u/fixture.svg', 'https://cards.example/service/other.svg']) {
+    status.setHosted(() => ({ enabled: true, state: 'connected', cardUrl: bad }));
+    assert.equal(status.snapshot().hosted.cardUrl, undefined);
+  }
+});
 test('reading uploader status does not register; after upload it exposes the public card URL', async () => {
   let calls = 0;
   const uploader = createHostedUploader({ credentials: {
