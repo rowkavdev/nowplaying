@@ -197,7 +197,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
 <div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
 <p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" tabindex="0" aria-label="Recent app events" class="drpp-log-lines" role="log" aria-live="off"></div>
-</aside></div><dialog id="drpp-info" aria-labelledby="drpp-info-title"><div class="drpp-info-heading"><h2 id="drpp-info-title">Info</h2><button type="button" id="drpp-info-close" aria-label="Close Info">×</button></div><div class="drpp-info-tabs" role="tablist" aria-label="Project information"><button type="button" role="tab" id="drpp-info-attribution" aria-controls="drpp-info-content" data-file="NOTICE" aria-selected="true">OSS Attribution</button><button type="button" role="tab" id="drpp-info-readme" aria-controls="drpp-info-content" data-file="README.md" aria-selected="false">Readme</button><button type="button" role="tab" id="drpp-info-license" aria-controls="drpp-info-content" data-file="LICENSE" aria-selected="false">License</button></div><pre id="drpp-info-content" role="tabpanel" aria-live="polite">Loading...</pre></dialog><script src="/settings.js"></script></body></html>
+</aside></div><dialog id="drpp-info" aria-labelledby="drpp-info-title"><div class="drpp-info-heading"><h2 id="drpp-info-title">Info</h2><button type="button" id="drpp-info-close" aria-label="Close Info">×</button></div><div class="drpp-info-tabs" role="tablist" aria-label="Project information"><button type="button" role="tab" id="drpp-info-attribution" aria-controls="drpp-info-content" data-file="NOTICE" tabindex="0" aria-selected="true">OSS Attribution</button><button type="button" role="tab" id="drpp-info-readme" aria-controls="drpp-info-content" data-file="README.md" tabindex="-1" aria-selected="false">Readme</button><button type="button" role="tab" id="drpp-info-license" aria-controls="drpp-info-content" data-file="LICENSE" tabindex="-1" aria-selected="false">License</button></div><pre id="drpp-info-content" role="tabpanel" aria-live="polite">Loading...</pre></dialog><script src="/settings.js"></script></body></html>
 `;
 
 const CSS = `${SERVER_CSS}
@@ -392,7 +392,8 @@ const infoTabs = Array.from(document.querySelectorAll("#drpp-info [role=tab]"));
 const infoCache = new Map();
 let infoRequest = 0;
 async function selectInfoTab(tab) {
-  for (const item of infoTabs) item.setAttribute("aria-selected", String(item === tab));
+  for (const item of infoTabs) { item.setAttribute("aria-selected", String(item === tab)); item.setAttribute("tabindex", item === tab ? "0" : "-1"); }
+  infoContent.setAttribute("aria-labelledby", tab.id);
   const filename = tab.dataset.file;
   const request = ++infoRequest;
   if (infoCache.has(filename)) { infoContent.textContent = infoCache.get(filename); return; }
@@ -407,7 +408,17 @@ async function selectInfoTab(tab) {
 }
 document.getElementById("drpp-info-open").addEventListener("click", () => { infoDialog.showModal(); selectInfoTab(infoTabs[0]); });
 document.getElementById("drpp-info-close").addEventListener("click", () => infoDialog.close());
-for (const tab of infoTabs) tab.addEventListener("click", () => selectInfoTab(tab));
+for (const tab of infoTabs) {
+  tab.addEventListener("click", () => selectInfoTab(tab));
+  tab.addEventListener("keydown", (event) => {
+    const index = infoTabs.indexOf(tab);
+    const next = event.key === "ArrowRight" ? (index + 1) % infoTabs.length : event.key === "ArrowLeft" ? (index + infoTabs.length - 1) % infoTabs.length : event.key === "Home" ? 0 : event.key === "End" ? infoTabs.length - 1 : null;
+    if (next === null) return;
+    event.preventDefault();
+    infoTabs[next].focus();
+    selectInfoTab(infoTabs[next]);
+  });
+}
 refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(refreshVersion, 15000);
 `;
 
