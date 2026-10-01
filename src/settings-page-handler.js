@@ -38,7 +38,7 @@ function startupCopyFor(platform) {
 }
 
 const buildPage = (startupCopy) => `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en" class="drpp-root"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
 <body class="drpp-shell"><a class="drpp-skip" href="#settings-content">Skip to configuration</a><header class="drpp-header">
   <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
@@ -255,7 +255,8 @@ dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}
 // DRPP v3.4.0 layout port: full-height header, 50/50 editor/log panels,
 // separated accordions and a log toolbar. Keep all settings writes on the
 // existing NowPlaying forms; no Plex-only controls are presented as working.
-const DRPP_SHELL_CSS = `.drpp-shell .drpp-skip{position:fixed;top:-60px;left:12px;background:#242424;color:#f1f3f5;padding:8px 12px;border:2px solid #bda0f8;z-index:20}.drpp-shell .drpp-skip:focus{top:12px}
+const DRPP_SHELL_CSS = `html.drpp-root{color-scheme:dark}
+.drpp-shell .drpp-skip{position:fixed;top:-60px;left:12px;background:#242424;color:#f1f3f5;padding:8px 12px;border:2px solid #bda0f8;z-index:20}.drpp-shell .drpp-skip:focus{top:12px}
 .drpp-shell :focus-visible{outline:2px solid #bda0f8;outline-offset:3px}.drpp-shell .drpp-config-scroll:focus-visible,.drpp-shell .drpp-log-lines:focus-visible{outline-offset:-3px}
 body.drpp-shell{color-scheme:dark;margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
 .drpp-shell *{box-sizing:border-box}.drpp-shell .drpp-header{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px;border-bottom:1px solid #373a40}
