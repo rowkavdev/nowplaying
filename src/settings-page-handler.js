@@ -132,6 +132,11 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="thin">Thin line</option>
 <option value="none">None</option>
 </select></p>
+<p class="row"><label for="card-background">Background</label>
+<select id="card-background">
+<option value="solid">Solid colour</option>
+<option value="transparent">Transparent</option>
+</select></p>
 <p class="row"><label for="card-progressStyle">Bar ends</label>
 <select id="card-progressStyle">
 <option value="square">Square</option>
@@ -533,8 +538,8 @@ privacy.form.addEventListener("submit", async (event) => {
     privacy.save.disabled = false;
   }
 });
-const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin" };
-const LOOK_KEYS = ["fontFamily", "statusStyle", "artShape", "progressStyle", "border"];
+const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin", background: "solid" };
+const LOOK_KEYS = ["fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"];
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
 const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note"), scaleNote: document.getElementById("card-artwork-scale-note") };
 const cardField = (key) => document.getElementById("card-" + key);
@@ -543,7 +548,7 @@ const ART_AUTO = { artworkWidth: true, artworkHeight: true };
 const ART_SHOWN = { artworkWidth: 100, artworkHeight: 100 };
 function cardSay(text, tone) { const el = document.getElementById("card-result"); el.textContent = text; el.className = tone || ""; }
 function cardValues() {
-  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value, progressPosition: cardField("progressPosition").value, progressWidth: cardField("progressWidth").value, direction: cardField("direction").value, fontFamily: cardField("fontFamily").value, statusStyle: cardField("statusStyle").value, artShape: cardField("artShape").value, progressStyle: cardField("progressStyle").value, border: cardField("border").value };
+  const values = { theme: cardField("theme").value, showProgress: cardField("showProgress").checked, artworkPosition: cardField("artworkPosition").value, fieldOrder: cardField("fieldOrder").value.split(","), textAlign: cardField("textAlign").value, progressPosition: cardField("progressPosition").value, progressWidth: cardField("progressWidth").value, direction: cardField("direction").value, fontFamily: cardField("fontFamily").value, statusStyle: cardField("statusStyle").value, artShape: cardField("artShape").value, progressStyle: cardField("progressStyle").value, border: cardField("border").value, background: cardField("background").value };
   for (const key of Object.keys(CARD_NUMBERS)) values[key] = ART_AUTO[key] ? null : Number(cardField(key).value);
   return values;
 }
@@ -765,7 +770,7 @@ function hostedLink(base) {
   if (progressShown && savedCard.progressWidth && savedCard.progressWidth !== "content") query.set("progressWidth", savedCard.progressWidth);
   if (savedCard.direction && savedCard.direction !== "ltr") query.set("direction", savedCard.direction);
   // artShape is left out: the hosted card never draws artwork.
-  const LOOK_DEFAULTS = { fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin" };
+  const LOOK_DEFAULTS = { fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin", background: "solid" };
   for (const [key, fallback] of Object.entries(LOOK_DEFAULTS)) if (savedCard[key] && savedCard[key] !== fallback) query.set(key, savedCard[key]);
   const text = query.toString().replace(/%2C/g, ",");
   return text ? base + (base.includes("?") ? "&" : "?") + text : base;
@@ -844,7 +849,7 @@ function parsePreviewQuery(searchParams) {
     if (key === "theme") card.theme = value;
     else if (key === "showProgress" && (value === "1" || value === "0")) card.showProgress = value === "1";
     else if (key === "artworkPosition") card.artworkPosition = value;
-    else if (["textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border"].includes(key)) card[key] = value;
+    else if (["textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"].includes(key)) card[key] = value;
     else if (key === "fieldOrder") card.fieldOrder = value.split(",");
     else if (PREVIEW_NUMBERS.has(key) && /^\d{1,3}$/.test(value)) card[key] = Number(value);
     else throw new TypeError("bad preview query");

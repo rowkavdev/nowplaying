@@ -30,7 +30,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
@@ -43,6 +43,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const statusStyle = oneOf(layout.statusStyle, "plain", ["plain", "caps", "dot"], "layout.statusStyle");
   const artShape = oneOf(layout.artShape, "square", ["square", "rounded", "circle"], "layout.artShape");
   const progressStyle = oneOf(layout.progressStyle, "square", ["square", "rounded"], "layout.progressStyle");
+  const backgroundStyle = oneOf(layout.background, "solid", ["solid", "transparent"], "layout.background");
   const borderStyle = oneOf(layout.border, "thin", ["none", "thin"], "layout.border");
   const directionSetting = layout.direction ?? "ltr";
   if (!new Set(["ltr", "rtl", "auto"]).has(directionSetting)) throw new TypeError("layout.direction: expected ltr, rtl or auto");
@@ -141,6 +142,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   // cover can't wash out the text.
   const tintStop = tint ? mix(palette.background, clampLightness(tint, light ? 0.6 : 0.12, light ? 0.9 : 0.45), light ? 0.12 : 0.34) : null;
   const background = tintStop ?? palette.background;
+  const fillAttr = backgroundStyle === "transparent" ? 'fill="none"' : `fill="${background}"`;
   const artRx = artShape === "circle" ? Math.min(artworkWidth, artworkHeight) / 2 : artShape === "rounded" ? Math.min(radius, 8) : 0;
   const barRx = progressStyle === "rounded" ? progressHeight / 2 : 0;
   const defs = [
@@ -154,7 +156,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title><desc id="desc">${escapeXml(description)}</desc>
   ${defs ? `<defs>${defs}</defs>` : ""}
-  <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" fill="${background}"${borderStyle === "thin" ? ` stroke="${palette.border}"` : ""}/>
+  <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" ${fillAttr}${borderStyle === "thin" ? ` stroke="${palette.border}"` : ""}/>
   ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
   ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
   ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="${statusStyle === "caps" ? 1.1 : 0}">${status}</text>` : ""}
