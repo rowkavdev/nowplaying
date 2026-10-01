@@ -794,7 +794,7 @@ function parsePreviewQuery(searchParams) {
     if (key === "theme") card.theme = value;
     else if (key === "showProgress" && (value === "1" || value === "0")) card.showProgress = value === "1";
     else if (key === "artworkPosition") card.artworkPosition = value;
-    else if (key === "textAlign" || key === "progressPosition" || key === "progressWidth" || key === "direction") card[key] = value;
+    else if (["textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border"].includes(key)) card[key] = value;
     else if (key === "fieldOrder") card.fieldOrder = value.split(",");
     else if (PREVIEW_NUMBERS.has(key) && /^\d{1,3}$/.test(value)) card[key] = Number(value);
     else throw new TypeError("bad preview query");

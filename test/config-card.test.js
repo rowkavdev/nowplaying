@@ -85,3 +85,13 @@ test("the card pipeline uses saved options and lets the query win", async () => 
   ]);
   assert.throws(() => createCardPipeline({ provider: { getPresence: async () => ({}) }, defaults: {} }), TypeError);
 });
+
+test("flat look settings are saved, checked, and reach the renderer", () => {
+  const card = { fontFamily: "mono", statusStyle: "caps", artShape: "circle", progressStyle: "rounded", border: "none" };
+  const config = parseAppConfig(serializeSetupConfig({ ...BASE, card }));
+  assert.deepEqual({ ...config.card }, card);
+  assert.deepEqual(JSON.parse(JSON.stringify(cardRenderOptions(config.card))), { layout: card });
+  for (const bad of [{ fontFamily: "comic" }, { statusStyle: "x" }, { artShape: "star" }, { progressStyle: "line" }, { border: "thick" }]) {
+    assert.throws(() => serializeSetupConfig({ ...BASE, card: bad }), TypeError);
+  }
+});
