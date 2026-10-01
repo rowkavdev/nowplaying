@@ -243,7 +243,14 @@ export function createHostedUploader({
         }
       }
     }
-    await credentials.clear();
+    // Remote revocation can overlap a new sign-in. Delete only the exact
+    // revoked key under the credential store's save lock, never a replacement.
+    if (validRegistration(stored)) {
+      if (typeof credentials.clearIfToken !== "function") {
+        throw new HostedUploadError("credential_cleanup_unavailable");
+      }
+      await credentials.clearIfToken(stored.token);
+    }
     registration = null;
     status = { state: "idle", lastError: null, lastSuccessAt: null };
     return { disconnected: true };
