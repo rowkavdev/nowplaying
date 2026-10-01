@@ -30,6 +30,9 @@ export function createSetupSignInHandler({
   const writeChains = new Map();
   const completing = new Set();
   let generation = 0;
+  // Starts that passed the capacity check but have no flow yet. They count
+  // against maxFlows, or concurrent starts would all see the same free slot.
+  let starting = 0;
 
   function prune() {
     const time = elapsedNow();
@@ -109,7 +112,12 @@ export function createSetupSignInHandler({
     if (!onlyKeys(input, ["action", "provider", "baseUrl"]) || !FLOW_PROVIDERS.has(input.provider)) return json(400, { error: "invalid_request" });
     const epoch = generation;
     prune();
-    if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
+    if (flows.size + starting >= maxFlows) return json(429, { error: "too_many_signins" });
+    starting += 1;
+    try { return await startFlow(input, epoch); } finally { starting -= 1; }
+  }
+
+  async function startFlow(input, epoch) {
     const flowId = newFlowId();
     if (input.provider === "plex") {
       // Plex signs in through plex.tv; baseUrl is only the local server the
