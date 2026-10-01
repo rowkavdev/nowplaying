@@ -212,6 +212,10 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   // Aggregate-only, best effort: a stats write failing must never fail a card,
   // an ingest or a registration. The key gets its TTL before the first INCR,
   // so it can't be left without one.
+  async function bump(key) {
+    try { await cmd("INCR", key); } catch { /* optional analytics */ }
+  }
+
   async function countToday(metric) {
     try {
       const key = dayKey(metric);
@@ -242,7 +246,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const deviceId = randomId(16);
     const token = randomId(32);
     await cmd("SET", `np:tok:${hashToken(token)}`, JSON.stringify({ cardId, deviceId }));
-    await cmd("INCR", "np:stats:registrations");
+    await bump("np:stats:registrations");
     await countToday("registrations");
     return { cardId, deviceId, token };
   }
@@ -330,7 +334,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
 
     const rawUser = await cmd("GET", `np:user:${userId}`);
     const user = rawUser ? JSON.parse(rawUser) : null;
-    if (!user) { await cmd("INCR", "np:stats:users"); await countToday("users"); }
+    if (!user) { await bump("np:stats:users"); await countToday("users"); }
     if (user?.login && user.login.toLowerCase() !== login.toLowerCase()) {
       const oldKey = `np:login:${user.login.toLowerCase()}`;
       if (await cmd("GET", oldKey) === userId) await cmd("DEL", oldKey);
@@ -406,7 +410,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   const shown = (stored) => ({ state: stored.state, kind: stored.kind, title: stored.title, subtitle: stored.subtitle, positionMs: currentPosition(stored, now()), durationMs: stored.durationMs });
 
   async function countRender() {
-    await cmd("INCR", "np:stats:cards_rendered");
+    await bump("np:stats:cards_rendered");
     await countToday("renders");
   }
 
