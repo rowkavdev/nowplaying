@@ -115,7 +115,16 @@ export function sendCard(req, res, presence, options) {
   res.setHeader("cache-control", "public, max-age=30, s-maxage=30");
   res.setHeader("etag", etag);
   res.setHeader("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
-  if (req.headers["if-none-match"] === etag) { res.statusCode = 304; return res.end(); }
+  if (etagMatches(req.headers["if-none-match"], etag)) { res.statusCode = 304; return res.end(); }
   res.statusCode = 200;
   res.end(req.method === "HEAD" ? undefined : svg);
+}
+
+// RFC 9110 weak comparison: CDNs rewrite etags to W/"..." and clients send lists.
+function etagMatches(header, etag) {
+  if (typeof header !== "string") return false;
+  return header.split(",").some((part) => {
+    const tag = part.trim();
+    return tag === "*" || tag.replace(/^W\//, "") === etag;
+  });
 }

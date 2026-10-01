@@ -48,6 +48,12 @@ test("register, ingest and render a card over HTTP", async () => {
     assert.ok(!card.body.includes(token) && !card.body.includes(cardId));
     const again = await call(app.port, "GET", `/api/card?id=${cardId}&theme=paper&width=320`, { headers: { "if-none-match": card.headers.etag } });
     assert.equal(again.status, 304);
+    const weak = await call(app.port, "GET", `/api/card?id=${cardId}&theme=paper&width=320`, { headers: { "if-none-match": `W/${card.headers.etag}` } });
+    assert.equal(weak.status, 304);
+    const list = await call(app.port, "GET", `/api/card?id=${cardId}&theme=paper&width=320`, { headers: { "if-none-match": `"other", ${card.headers.etag}` } });
+    assert.equal(list.status, 304);
+    const star = await call(app.port, "GET", `/api/card?id=${cardId}&theme=paper&width=320`, { headers: { "if-none-match": "*" } });
+    assert.equal(star.status, 304);
   } finally { await app.close(); }
 });
 
