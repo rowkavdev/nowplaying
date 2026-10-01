@@ -78,3 +78,30 @@ test("service errors map to safe statuses", async () => {
   const handle = createHostedDevicesHandler({ getClient: () => createHostedDevicesClient({ baseUrl: "https://x.example", credentials: creds({ ...signedIn, baseUrl: "https://x.example" }), fetchImpl: svc.fetchImpl }), fallback });
   assert.equal((await handle(post({ action: "list" }))).status, 502);
 });
+
+// Runs the page script against a minimal DOM and a fake fetch (#804).
+async function runPage(chunks) {
+  const els = {};
+  const el = (id) => (els[id] ??= { id, hidden: false, textContent: "", className: "", children: [], replaceChildren() { this.children = []; }, append(...c) { this.children.push(...c); }, addEventListener() {} });
+  const state = { cancelled: false, read: 0 };
+  const fetchFake = async () => ({ ok: true, body: { getReader: () => ({ read: async () => (state.read < chunks.length ? { done: false, value: chunks[state.read++] } : { done: true }), cancel: async () => { state.cancelled = true; } }) } });
+  const document = { getElementById: el, createElement: () => ({ ...el("x" + Math.random()), set type(v) {}, children: [] }) };
+  new Function("document", "fetch", "TextDecoder", "Uint8Array", HOSTED_DEVICES_SCRIPT)(document, fetchFake, TextDecoder, Uint8Array);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  return { root: el("hosted-devices"), state };
+}
+
+test("the devices page script stops reading an oversized reply and hides the block (#804)", async () => {
+  const big = new TextEncoder().encode(JSON.stringify({ signedIn: true, login: "x", devices: [] }) + " ".repeat(70000));
+  const { root, state } = await runPage([big.subarray(0, 40000), big.subarray(40000), new Uint8Array(10)]);
+  assert.equal(state.cancelled, true);
+  assert.equal(state.read, 2, "must not read past the cap");
+  assert.equal(root.hidden, true);
+});
+
+test("the devices page script still renders a normal reply read in several chunks (#804)", async () => {
+  const body = new TextEncoder().encode(JSON.stringify({ signedIn: true, login: "rowkavdev", devices: [] }));
+  const { root, state } = await runPage([body.subarray(0, 10), body.subarray(10)]);
+  assert.equal(state.cancelled, false);
+  assert.equal(root.hidden, false);
+});
