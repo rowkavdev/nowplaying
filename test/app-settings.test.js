@@ -121,7 +121,7 @@ function fakeHostedService() {
     return Response.json([]);
   };
   let stored = null;
-  const credentials = { load: async () => stored, save: async (value) => { stored = value; }, clear: async () => { stored = null; } };
+  const credentials = { load: async () => stored, save: async (value) => { stored = value; }, clear: async () => { stored = null; }, clearIfToken: async token => { if (stored?.token !== token) return false; stored = null; return true; } };
   return { calls, fetchImpl, credentials, stored: () => stored };
 }
 

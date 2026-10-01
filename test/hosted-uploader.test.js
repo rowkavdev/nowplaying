@@ -443,3 +443,32 @@ test('#834 401 recovery does not adopt a replacement key issued by another servi
   assert.equal((await up.push(track({ title: 'Next' }))).reason, 'unauthorized');
   assert.deepEqual(sent, ['Bearer ' + old.token]); assert.equal(stored, next);
 });
+
+test('disconnect never clears a replacement credential saved during revocation', async () => {
+  for (const status of [200, 401]) {
+    const old = { login: 'old', deviceId: 'a'.repeat(22), token: 'a'.repeat(24), baseUrl: BASE };
+    const fresh = { login: 'fresh', deviceId: 'b'.repeat(22), token: 'b'.repeat(24), baseUrl: BASE };
+    let stored = old, enter, release;
+    const entered = new Promise(resolve => { enter = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const credentials = { load: async () => stored, save: async value => { stored = value; }, clear: async () => { stored = null; }, clearIfToken: async token => { if (stored?.token !== token) return false; stored = null; return true; } };
+    const sent = [];
+    const up = createHostedUploader({ baseUrl: BASE, credentials, fetchImpl: async (url, init) => {
+      sent.push({ url, token: init.headers.authorization }); enter(); await gate;
+      return Response.json(status === 401 ? { error: 'unauthorized' } : {}, { status });
+    } });
+    const disconnect = up.disconnect(); await entered;
+    await credentials.save(fresh); release();
+    assert.deepEqual(await disconnect, { disconnected: true });
+    assert.equal(stored, fresh);
+    assert.deepEqual(sent, [{ url: BASE + '/api/revoke', token: 'Bearer ' + old.token }]);
+  }
+});
+
+test('disconnect does not use an unsafe clear when conditional cleanup is unavailable', async () => {
+  const device = { login: 'fixture', deviceId: 'a'.repeat(22), token: 'a'.repeat(24), baseUrl: BASE };
+  let clears = 0;
+  const up = createHostedUploader({ baseUrl: BASE, credentials: { load: async () => device, save: async () => {}, clear: async () => { clears++; } }, fetchImpl: async () => Response.json({}) });
+  await assert.rejects(up.disconnect(), { code: 'credential_cleanup_unavailable' });
+  assert.equal(clears, 0);
+});
