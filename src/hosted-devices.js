@@ -166,7 +166,9 @@ async function call(body) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 function button(text, target, onClick) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.ariaLabel = text === "Rename" ? "Rename " + target : "Sign out " + target; b.addEventListener("click", onClick); return b; }
+const deviceActions = new Map();
 function render(data) {
+  deviceActions.clear();
   list.replaceChildren();
   root.hidden = !data.signedIn;
   if (!data.signedIn) return;
@@ -178,15 +180,27 @@ function render(data) {
     const seen = document.createElement("span");
     seen.className = "hint";
     seen.textContent = " last seen " + when(d.lastSeen) + " ";
-    li.append(name, seen,
-      button("Rename", d.name, () => { const next = prompt("New name for " + d.name, d.name); if (next && next.trim()) act({ action: "rename", deviceId: d.deviceId, name: next.trim().slice(0, 40) }, "Renamed."); }),
-      button(d.current ? "Sign out this PC" : "Sign out", d.name + (d.current ? " (this PC)" : ""), () => { if (confirm("Sign out " + d.name + "? It stops updating your card.")) act({ action: "remove", deviceId: d.deviceId }, "Signed out " + d.name + "."); }));
+    const rename = button("Rename", d.name, () => { const next = prompt("New name for " + d.name, d.name); if (next && next.trim()) act({ action: "rename", deviceId: d.deviceId, name: next.trim().slice(0, 40) }, "Renamed."); });
+    const remove = button(d.current ? "Sign out this PC" : "Sign out", d.name + (d.current ? " (this PC)" : ""), () => { if (confirm("Sign out " + d.name + "? It stops updating your card.")) act({ action: "remove", deviceId: d.deviceId }, "Signed out " + d.name + "."); });
+    deviceActions.set(d.deviceId, { rename, remove });
+    li.append(name, seen, rename, remove);
     list.append(li);
   }
 }
 async function act(body, done) {
+  const focused = document.activeElement;
+  const restore = list.contains(focused);
   say("Working...", "warn");
-  try { render(await call(body)); say(done, "ok"); }
+  try {
+    const data = await call(body);
+    const keepFocus = restore && document.activeElement === focused;
+    render(data);
+    say(done, "ok");
+    if (keepFocus) {
+      const target = deviceActions.get(body.deviceId)?.[body.action === "rename" ? "rename" : "remove"] || (data.signedIn ? everywhere : document.querySelector(".drpp-config-scroll"));
+      target?.focus();
+    }
+  }
   catch { say("Couldn't reach the hosted service. Try again.", "bad"); }
 }
 everywhere.addEventListener("click", () => { if (confirm("Sign out every PC? Your card stops updating until you sign in again.")) act({ action: "remove-all" }, "Signed out everywhere."); });
