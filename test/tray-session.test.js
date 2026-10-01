@@ -83,3 +83,34 @@ test("an outside quit without a stopTray hook still closes the app", async () =>
   assert.equal(result.outcome, "quit");
   assert.deepEqual(events, ["close a"]);
 });
+
+test("every real tray session outcome is written to the app log with a privacy-safe status and code", async () => {
+  const { createAppLogger } = await import("../src/app-log.js");
+  const { trayLogEvent } = await import("../src/tray-session.js");
+  const noEvents = [];
+  const startupError = Object.assign(new Error("failed at C:\\Users\\rowan\\secret"), { startupCode: "CONFIG_INVALID" });
+  const requests = () => { const r = createRestartRequests(); r.request(); return r; };
+  const sessions = [
+    await runTraySession({ app: fakeApp("a", noEvents), runTray: async () => TRAY_EXIT.quit, restartApp: async () => { throw new Error("no"); } }),
+    await runTraySession({ app: fakeApp("a", noEvents), runTray: async () => { throw new Error("spawn failed"); }, restartApp: async () => { throw new Error("no"); } }),
+    await runTraySession({ app: fakeApp("a", noEvents), runTray: () => new Promise(() => {}), restartApp: async () => { throw startupError; }, restartRequests: requests() }),
+    await runTraySession({ app: fakeApp("a", noEvents), runTray: () => new Promise(() => {}), restartApp: async () => { throw new Error("odd"); }, restartRequests: requests() }),
+  ];
+  assert.deepEqual(sessions.map((s) => s.outcome), ["quit", "tray-failed", "restart-failed", "restart-failed"]);
+  const { serializeLogEvent } = await import("../src/app-log.js");
+  const written = [];
+  const logger = createAppLogger({ env: { LOCALAPPDATA: "C:\\L" }, platform: "win32", createLog: () => ({ write: async (event) => { written.push(serializeLogEvent(event)); } }) });
+  for (const session of sessions) {
+    const mapped = trayLogEvent(session);
+    assert.equal(await logger.event("tray", mapped.status, mapped.options), true);
+  }
+  assert.equal(logger.failures(), 0);
+  const lines = written.map((line) => JSON.parse(line));
+  assert.deepEqual(lines.map(({ level, component, status, code }) => ({ level, component, status, code })), [
+    { level: "info", component: "tray", status: "stopped", code: undefined },
+    { level: "error", component: "tray", status: "failed", code: "TRAY_FAILED" },
+    { level: "error", component: "tray", status: "failed", code: "CONFIG_INVALID" },
+    { level: "error", component: "tray", status: "failed", code: "START_FAILED" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(lines), /rowan|secret|odd|spawn/);
+});
