@@ -59,3 +59,47 @@ test("decodes simple lossy (VP8) WebP dimensions", () => {
   const noStartCode = lossyWebp(300,200); noStartCode[23] = 0;
   assert.throws(() => validateRasterDimensions(noStartCode, "image/webp"), /could not be decoded/);
 });
+
+function fillBefore(buffer, markerOffset, count) {
+  return Buffer.concat([buffer.subarray(0, markerOffset), Buffer.alloc(count, 0xff), buffer.subarray(markerOffset)]);
+}
+async function sharpJpeg(width = 16, height = 16) {
+  const { default: sharp } = await import("sharp");
+  return sharp({ create: { width, height, channels: 3, background: "#123456" } }).jpeg().toBuffer();
+}
+function markerOffset(buffer, marker) {
+  for (let i = 2; i + 1 < buffer.length; i++) if (buffer[i] === 0xff && buffer[i + 1] === marker) return i;
+  throw new Error("marker not found");
+}
+
+test("JPEG marker fill bytes before SOI successors, APP and SOF still decode dimensions", async () => {
+  const { default: sharp } = await import("sharp");
+  const plain = await sharpJpeg(16, 12);
+  // Add an APP15 segment so there is an APP marker to pad as well.
+  const original = Buffer.concat([plain.subarray(0, 2), Buffer.from([0xff, 0xef, 0x00, 0x04, 0xaa, 0xbb]), plain.subarray(2)]);
+  for (const offset of [2, markerOffset(original, 0xef), markerOffset(original, 0xc0)]) {
+    for (const count of [1, 3, 40]) {
+      const padded = fillBefore(original, offset, count);
+      await sharp(padded, { failOn: "warning" }).raw().toBuffer();
+      assert.deepEqual(validateRasterDimensions(padded, "image/jpeg"), { width: 16, height: 12 });
+    }
+  }
+});
+
+test("JPEG fill-byte parsing stays bounded and rejects truncation and the pixel cap", async () => {
+  const original = await sharpJpeg(16, 16);
+  const sof = markerOffset(original, 0xc0);
+  assert.throws(() => validateRasterDimensions(Buffer.concat([original.subarray(0, 2), Buffer.alloc(100000, 0xff)]), "image/jpeg"), /could not be decoded/);
+  assert.throws(() => validateRasterDimensions(fillBefore(original, sof, 5).subarray(0, sof + 5), "image/jpeg"), /could not be decoded/);
+  assert.throws(() => validateRasterDimensions(fillBefore(jpeg(5000, 5000), 2, 4), "image/jpeg"), /maximum pixel dimensions/);
+});
+
+test("fetchArtwork passes padded JPEG artwork to the sanitizer", async () => {
+  const { fetchArtwork } = await import("../src/artwork-fetch.js");
+  const original = await sharpJpeg(16, 16);
+  const padded = fillBefore(original, 2, 1);
+  const result = await fetchArtwork({ url: "https://media.example/art", headers: {} }, {
+    fetchImpl: async () => new Response(padded, { status: 200, headers: { "Content-Type": "image/jpeg", "Content-Length": String(padded.length) } }),
+  });
+  assert.ok(result);
+});

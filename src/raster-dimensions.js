@@ -37,8 +37,13 @@ function jpegDimensions(bytes) {
   let offset = 2;
   while (offset + 8 < bytes.length) {
     if (bytes[offset] !== 0xff) return null;
+    // A marker may be preceded by any number of 0xff fill bytes. Walk to the
+    // last one so the marker type and length are read from the right place.
+    while (offset + 8 < bytes.length && bytes[offset + 1] === 0xff) offset += 1;
+    if (offset + 8 >= bytes.length) return null;
     const marker = bytes[offset + 1];
-    if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue; }
+    // Markers without a length field.
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) { offset += 2; continue; }
     const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
     if (length < 2 || offset + length + 2 > bytes.length) return null;
     if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
