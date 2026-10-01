@@ -4,27 +4,25 @@
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NowPlaying logs</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/logs.css"></head>
-<body><main>
-<nav><a href="/">Status</a> <a href="/settings">Settings</a> <span aria-current="page">Logs</span></nav>
-<h1>Logs</h1>
+<title>NowPlaying logs</title><link rel="stylesheet" href="/status-ui.css"><link rel="stylesheet" href="/logs.css"></head>
+<body class="status-ui"><div class="app-shell"><aside class="sidebar"><a class="app-name" href="/">nowplaying</a><nav aria-label="Main"><a href="/">Status</a><a href="/settings">Settings</a><span aria-current="page">Logs</span></nav><p class="sidebar-note">On this device</p></aside>
+<main><header class="page-heading"><h1>Logs</h1></header><p class="hint logs-intro">Newest first. Updates while the app is running.</p>
 <section aria-labelledby="h-log"><h2 id="h-log">Recent events</h2>
 <p class="row"><label for="level">Show</label>
 <select id="level"><option value="info">Everything</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
 <button type="button" id="copy-log">Copy</button> <span id="log-result" role="status" aria-live="polite"></span></p>
 <p id="log-empty" hidden>Nothing logged yet.</p>
-<table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table>
+<div class="log-table"><table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table></div>
 <p class="hint">The log never includes your server address, user name, what you're playing or sign-in details. Use Copy diagnostics on the Status page for bug reports.</p>
 </section>
-</main><script src="/logs.js"></script></body></html>
+</main></div><script src="/logs.js"></script></body></html>
 `;
 
-const CSS = `.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 12px}.row label{color:#555}
-select{font:inherit;padding:4px 8px;border:1px solid #888;border-radius:6px;background:#fff;color:inherit}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid #e4e4e8;vertical-align:top}
-th{color:#555;font-weight:600}td:first-child{white-space:nowrap;font-variant-numeric:tabular-nums}
-.hint{color:#555;font-size:13px;margin:12px 0 0}
-@media (prefers-color-scheme:dark){select{background:#2c2c31;border-color:#555}th,.row label,.hint{color:#aaa}th,td{border-color:#333}}
+const CSS = `.status-ui .logs-intro{margin:0 0 26px}.status-ui .log-table{border:1px solid var(--line);border-radius:4px}.status-ui thead{background:var(--sidebar)}.status-ui #h-log{display:none}
+.status-ui .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 20px}.status-ui .row label{color:var(--muted)}
+.status-ui .log-table{overflow-x:auto}.status-ui table{width:100%;border-collapse:collapse;font-size:13px}.status-ui th,.status-ui td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.status-ui th{color:var(--muted);font-weight:500;font-size:12px}.status-ui td:first-child{white-space:nowrap;font-variant-numeric:tabular-nums}.status-ui .hint{margin-top:14px;max-width:650px}
+@media(prefers-color-scheme:dark){.status-ui th,.status-ui .row label{color:#b1aab9}.status-ui th,.status-ui td{border-color:#3a373f}}
 `;
 
 const SCRIPT = `"use strict";
