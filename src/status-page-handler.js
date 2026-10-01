@@ -213,20 +213,36 @@ export function createStatusPageHandler({ status, fallback, shutdown = null } = 
     "/status-ui.css": { body: CSS, type: "text/css; charset=utf-8" },
     "/status.js": { body: SCRIPT, type: "text/javascript; charset=utf-8" },
   };
+  function handleShutdown(request, method) {
+    if (shutdown === null) return fallback(request);
+    if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
+    const presented = bearer(request?.headers);
+    if (presented === undefined || !tokensEqual(presented, shutdown.token)) return response(401, "Unauthorized");
+    // Answer first; the app quits once the reply is out.
+    setTimeout(() => {
+      void shutdown.request();
+    }, 25);
+    return response(202, "");
+  }
+  async function serveApi(pathname, method, request) {
+    // Status JSON is for this app's own page: refuse other sites' requests.
+    const site = header(request?.headers, "sec-fetch-site");
+    if (site !== undefined && !SAFE_FETCH_SITES.has(site)) return response(403, "Forbidden");
+    await status.refresh();
+    if (pathname === "/api/tray") {
+      if (typeof status.tray !== "function") return response(404, "Not Found");
+      return response(200, method === "HEAD" ? "" : JSON.stringify(status.tray()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    }
+    if (pathname === "/api/diagnostics") {
+      if (typeof status.diagnostics !== "function") return response(404, "Not Found");
+      return response(200, method === "HEAD" ? "" : `${JSON.stringify(status.diagnostics(), null, 2)}\n`, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="nowplaying-diagnostics.json"' });
+    }
+    return response(200, method === "HEAD" ? "" : JSON.stringify(status.snapshot()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+  }
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
-    if (url.pathname === SHUTDOWN_PATH) {
-      if (shutdown === null) return fallback(request);
-      if (method !== "POST") return response(405, "Method Not Allowed", { Allow: "POST" });
-      const presented = bearer(request?.headers);
-      if (presented === undefined || !tokensEqual(presented, shutdown.token)) return response(401, "Unauthorized");
-      // Answer first; the app quits once the reply is out.
-      setTimeout(() => {
-        void shutdown.request();
-      }, 25);
-      return response(202, "");
-    }
+    if (url.pathname === SHUTDOWN_PATH) return handleShutdown(request, method);
     const asset = assets[url.pathname];
     const api = url.pathname === "/api/status" || url.pathname === "/api/diagnostics" || url.pathname === "/api/tray";
     if (!asset && !api) return fallback(request);
@@ -235,19 +251,7 @@ export function createStatusPageHandler({ status, fallback, shutdown = null } = 
       const result = response(200, method === "HEAD" ? "" : asset.body, { "Content-Type": asset.type, "Cache-Control": "no-store" });
       return asset.page ? { ...result, page: true, hostedCardPreview: true } : result;
     }
-    // Status JSON is for this app's own page: refuse other sites' requests.
-    const site = header(request?.headers, "sec-fetch-site");
-    if (site !== undefined && !SAFE_FETCH_SITES.has(site)) return response(403, "Forbidden");
-    await status.refresh();
-    if (url.pathname === "/api/tray") {
-      if (typeof status.tray !== "function") return response(404, "Not Found");
-      return response(200, method === "HEAD" ? "" : JSON.stringify(status.tray()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
-    }
-    if (url.pathname === "/api/diagnostics") {
-      if (typeof status.diagnostics !== "function") return response(404, "Not Found");
-      return response(200, method === "HEAD" ? "" : `${JSON.stringify(status.diagnostics(), null, 2)}\n`, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": 'attachment; filename="nowplaying-diagnostics.json"' });
-    }
-    return response(200, method === "HEAD" ? "" : JSON.stringify(status.snapshot()), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    return serveApi(url.pathname, method, request);
   };
 }
 
