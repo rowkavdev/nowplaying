@@ -8,10 +8,10 @@ import { timingSafeEqual } from "node:crypto";
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying status</title><link rel="stylesheet" href="/status-ui.css"></head>
-<body class="status-ui"><div class="app-shell">
+<body class="status-ui"><a class="skip-link" href="#main-content">Skip to content</a><div class="app-shell">
 <aside class="sidebar"><a class="app-name" href="/">nowplaying</a><nav aria-label="Main"><span aria-current="page">Status</span><a href="/settings">Settings</a><a href="/logs">Logs</a></nav><p class="sidebar-note">On this device</p></aside>
-<main><header class="page-heading"><h1>Status</h1><a class="settings-link" href="/settings">Edit settings</a></header>
-<p id="summary" role="status" aria-live="polite">Loading status...</p>
+<main id="main-content" tabindex="-1"><header class="page-heading"><h1>Status</h1><a class="settings-link" href="/settings">Edit settings</a></header>
+<p id="summary" role="status" aria-live="polite" aria-atomic="true">Loading status...</p>
 <section class="playing-section" aria-labelledby="h-playing"><h2 id="h-playing">Now playing</h2><p id="playing">-</p><p id="playing-subtitle"></p></section>
 <div class="connection-grid"><section aria-labelledby="h-server"><h2 id="h-server">Media server</h2>
 <dl><dt>Server</dt><dd id="server-type">-</dd><dt>Address</dt><dd id="server-address">-</dd><dt>Signed in as</dt><dd id="server-user">-</dd><dt>Connection</dt><dd id="server-state">-</dd><dt>Last checked</dt><dd id="server-poll">-</dd></dl>
@@ -51,8 +51,9 @@ button{font:inherit;padding:6px 12px;border:1px solid #888;border-radius:6px;bac
 `;
 
 const CSS = `@font-face{font-family:Inter;src:url('/inter.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
-.status-ui{--bg:#fff;--sidebar:#f7f7f8;--panel:#fff;--line:#e5e5e8;--ink:#242429;--muted:#74747e;--accent:#7C3AED;--selected:#ede7fb;font:13px/1.5 Inter,system-ui,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+.status-ui{--bg:#fff;--sidebar:#f7f7f8;--panel:#fff;--line:#e5e5e8;--ink:#242429;--muted:#686873;--accent:#7C3AED;--selected:#ede7fb;font:13px/1.5 Inter,system-ui,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
 .status-ui *{box-sizing:border-box}.status-ui [hidden]{display:none!important}
+.status-ui .skip-link{position:absolute;left:12px;top:-60px;padding:8px 12px;background:var(--panel);border:2px solid var(--accent);z-index:10;color:var(--ink)}.status-ui .skip-link:focus{top:12px}
 .status-ui .app-shell{display:grid;grid-template-columns:184px minmax(0,1fr);min-height:100vh}
 .status-ui .sidebar{background:var(--sidebar);border-right:1px solid var(--line);padding:28px 14px;display:flex;flex-direction:column}
 .status-ui .app-name{font-weight:700;letter-spacing:-.5px;font-size:18px;text-decoration:none;color:var(--ink);margin:0 12px 30px}
@@ -114,9 +115,11 @@ function showCards(hosted) {
   link.hidden = !url; address.hidden = Boolean(url);
   if (url) { link.href = url; link.textContent = url; }
   const preview = url && url.startsWith("https://nowplaying-hosted.vercel.app/");
-  image.hidden = !preview; note.hidden = Boolean(preview);
+  const alreadyFailed = image.hidden && image.src && image.src.split("?")[0] === url;
+  image.hidden = !preview || Boolean(alreadyFailed); note.hidden = !(!preview || alreadyFailed);
   if (preview) {
     if (cardTick % 3 === 0 || !image.src || image.src.split("?")[0] !== url) image.src = url + "?t=" + Date.now();
+    image.onload = () => { image.hidden = false; note.hidden = true; };
     image.onerror = () => { image.hidden = true; note.hidden = false; note.textContent = "Hosted preview unavailable. Open the address to check it."; };
   } else {
     if (image.removeAttribute) image.removeAttribute("src"); else image.src = "";
@@ -165,7 +168,7 @@ async function load() {
     set("build", b ? " - build " + b.commit + ", " + b.channel + ", " + (b.signed ? "signed" : "unsigned") + ", built " + new Date(b.builtAt).toLocaleString() : "");
     if (++cardTick % 3 === 0) document.getElementById("card").src = "/card.svg?t=" + Date.now();
   } catch {
-    set("summary", "Can't reach NowPlaying. It may have been closed.", "bad");
+    set("summary", "Can't reach NowPlaying. Displayed values may be out of date.", "bad");
   }
 }
 document.getElementById("copy-diagnostics").addEventListener("click", async () => {
