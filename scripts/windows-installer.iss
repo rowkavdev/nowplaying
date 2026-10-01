@@ -27,6 +27,8 @@ DisableProgramGroupPage=yes
 AppPublisher=rowkavdev
 AppPublisherURL=https://github.com/rowkavdev/nowplaying
 SetupIconFile={#BundleDir}\assets\nowplaying.ico
+WizardImageFile={#BundleDir}\assets\brand\installer\wizard-side.bmp
+WizardSmallImageFile={#BundleDir}\assets\brand\installer\wizard-small.bmp
 UninstallDisplayIcon={app}\nowplaying.exe
 
 [Tasks]
