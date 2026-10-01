@@ -68,7 +68,7 @@ export function parseCardOptions(searchParams) {
 // match what the renderer accepts. Artwork options are left out because the
 // hosted card never draws artwork.
 const LAYOUT_NUMBERS = Object.freeze({ padding: [12, 48], radius: [0, 24], titleSize: [14, 30], subtitleSize: [10, 20], progressHeight: [2, 12] });
-const LAYOUT_CHOICES = Object.freeze({ textAlign: ["start", "middle", "end"], progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"] });
+const LAYOUT_CHOICES = Object.freeze({ textAlign: ["start", "middle", "end"], progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"], fontFamily: ["system", "serif", "mono", "humanist"], statusStyle: ["plain", "caps", "dot"], progressStyle: ["square", "rounded"], border: ["none", "thin"] });
 const CARD_FIELDS = Object.freeze(["state", "title", "subtitle"]);
 function parseLayoutOptions(searchParams) {
   const layout = {};

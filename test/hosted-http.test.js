@@ -198,3 +198,21 @@ test("GitHub sign-in, device list and the /u/<login>.svg card over HTTP", async 
     assert.equal((await call(app.port, "GET", "/api/devices", { headers: json(me.token) })).status, 401);
   } finally { await app.close(); }
 });
+
+test("hosted card links accept the flat look options and reject bad values", async () => {
+  const app = await start();
+  try {
+    const { cardId, token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "paused", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 1000, durationMs: 4000 });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
+    const styled = await call(app.port, "GET", `/card/${cardId}.svg?fontFamily=mono&statusStyle=caps&progressStyle=rounded&border=none`);
+    assert.equal(styled.status, 200);
+    assert.match(styled.body, /ui-monospace/);
+    assert.match(styled.body, />PAUSED<\/text>/);
+    assert.doesNotMatch(styled.body, /stroke=/);
+    for (const query of ["fontFamily=comic", "statusStyle=x", "progressStyle=line", "border=thick"]) {
+      const bad = await call(app.port, "GET", `/card/${cardId}.svg?${query}`);
+      assert.equal(bad.status, 400, query);
+    }
+  } finally { await app.close(); }
+});
