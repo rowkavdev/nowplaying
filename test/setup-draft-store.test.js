@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { advanceSetupDraft, createSetupDraft } from "../src/setup.js";
+import { advanceSetupDraft, createSetupDraft, serializeSetupDraft } from "../src/setup.js";
 import { createSetupDraftStore } from "../src/setup-draft-store.js";
 
 async function store() {
@@ -53,4 +53,21 @@ test("clear removes the draft so a completed or cancelled setup starts over", as
   await drafts.clear();
   assert.equal((await drafts.load()).resumed, false);
   assert.throws(() => createSetupDraftStore(), /file is required/);
+});
+
+test("a draft saved at the size cap loads back; one byte over is rejected on save", async () => {
+  const make = (n) => createSetupDraft({ step: "signin", provider: "jellyfin",
+    account: { provider: "jellyfin", id: "u1", displayName: "Test", serverUrl: "https://media.example/" + "a".repeat(n) },
+    servers: [{ provider: "emby", id: "u2", displayName: "Test", serverUrl: "https://other.example/" + "b".repeat(1800) }] });
+  const base = Buffer.byteLength(serializeSetupDraft(make(0)));
+  for (const size of [4095, 4096]) {
+    const drafts = await store();
+    const draft = make(size - base);
+    assert.equal(Buffer.byteLength(serializeSetupDraft(draft)), size);
+    await drafts.save(draft);
+    const loaded = await createSetupDraftStore({ file: drafts.file }).load();
+    assert.equal(loaded.discarded, false, String(size));
+    assert.equal(loaded.draft.step, "signin");
+  }
+  await assert.rejects((await store()).save(make(4097 - base)), RangeError);
 });
