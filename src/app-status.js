@@ -17,6 +17,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   let provider = null;
   let discord = () => ({ enabled: false, state: "off" });
   let hosted = () => ({ enabled: false, state: "off" });
+  let cardArtwork = () => null;
   // Per-server rows when several servers are signed in (#252).
   let servers = () => [];
   let lastPollAt = null;
@@ -77,6 +78,11 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     })));
   }
 
+  function setCardArtwork(read) {
+    if (typeof read !== "function") throw new TypeError("cardArtwork: expected a function");
+    cardArtwork = read;
+  }
+
   function setHosted(read) {
     if (typeof read !== "function") throw new TypeError("hosted: expected a function");
     hosted = read;
@@ -93,6 +99,8 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
   function snapshot() {
     let discordState;
     try { discordState = discord(); } catch { discordState = { enabled: true, state: "unknown" }; }
+    let cardArtworkState = null;
+    try { cardArtworkState = cardArtwork(); } catch { cardArtworkState = null; }
     let hostedState;
     try { hostedState = hosted(); } catch { hostedState = { enabled: true, state: "unknown" }; }
     return Object.freeze({
@@ -109,6 +117,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       }),
       playing: failure ? null : playing,
       servers: serverRows(),
+      cardArtwork: cardArtworkState && typeof cardArtworkState === "object" ? Object.freeze({ state: word(cardArtworkState.state), reason: cardArtworkState.reason == null ? null : word(cardArtworkState.reason) }) : null,
       discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError), ...artworkStatus(discordState?.artwork) }),
       hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: safeHostedState(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedError(hostedState?.lastError), ...publicHostedCard(hostedState?.cardUrl) }),
     });
@@ -156,7 +165,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     return Object.freeze({ status: health.status, action: health.action, text: trayText(health, { ...s, server: { ...s.server, state: provider } }) });
   }
 
-  return Object.freeze({ wrapProvider, setDiscord, setHosted, setServers, refresh, snapshot, diagnostics, tray });
+  return Object.freeze({ wrapProvider, setDiscord, setHosted, setCardArtwork, setServers, refresh, snapshot, diagnostics, tray });
 }
 
 // A successful playback source does not make another signed-in server healthy.

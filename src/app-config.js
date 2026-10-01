@@ -310,6 +310,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   const status = createAppStatus({ config, version, build, packageType, safeMode });
   const tracked = safeMode ? provider0 : status.wrapProvider(provider0);
   if (multi) status.setServers(() => multi.servers());
+  if (multi) status.setCardArtwork(() => multi.artwork.status());
   let current = config;
   // The status page (local only) sees what's really playing; the card,
   // Discord and hosted uploads get the privacy-filtered version.
@@ -519,6 +520,18 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   return Object.freeze({ config, servers: () => (multi ? multi.servers() : Object.freeze([])), url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }
 
+export function classifyArtworkFailure(error) {
+  const message = String(error?.message ?? "");
+  if (error?.name === "AbortError" || /timed out|timeout/i.test(message)) return "timeout";
+  if (/exceeds maximum byte size/i.test(message)) return "too_large";
+  if (/content type is not allowed|do not match the declared/i.test(message)) return "bad_type";
+  if (/failed: 40[13]/.test(message)) return "unauthorized";
+  if (/redirected/i.test(message)) return "redirected";
+  if (/pixel|dimension/i.test(message)) return "bad_size";
+  if (/Artwork request failed/.test(message)) return "server_error";
+  return "error";
+}
+
 const PREVIEW_ARTWORK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC";
 const PREVIEW_SAMPLE = Object.freeze({ state: "playing", kind: "track", title: "Sample track", subtitle: "Sample artist", positionMs: 83_000, durationMs: 214_000 });
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
@@ -550,13 +563,24 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
     }
   }
   const multi = createMultiServerProvider(entries);
+  let lastCard = { state: "none", reason: "not_requested" };
   const artwork = Object.freeze({
     // Artwork is a nice-to-have: any failure shows the card without it.
     async resolve(ref) {
       const source = ref && typeof ref === "object" && Number.isInteger(ref.sourceIndex) ? artworkSources.get(ref.sourceIndex) : null;
-      if (!source) return null;
-      try { return await source.resolve(ref); } catch { return null; }
+      if (!source) { lastCard = { state: "none", reason: "no_source" }; return null; }
+      try {
+        const value = await source.resolve(ref);
+        lastCard = value ? { state: "ok", reason: null } : { state: "none", reason: "no_image" };
+        return value;
+      } catch (error) {
+        lastCard = { state: "failed", reason: classifyArtworkFailure(error) };
+        return null;
+      }
     },
+    // Why the card's last cover is missing: a short allow-listed word, never
+    // a URL, token or error text.
+    status() { return Object.freeze({ ...lastCard }); },
   });
   return Object.freeze({ ...multi, artwork });
 }
