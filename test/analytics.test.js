@@ -22,3 +22,20 @@ test("Discord analytics is opt-in and sends once per process", async () => {
 test("enabled Discord analytics requires HTTPS", () => {
   assert.throws(() => createDiscordAnalytics({ enabled: true, endpoint: "http://localhost", installationId: "anonymous-install-01" }), /HTTPS/);
 });
+
+test("overlapping Discord pings send one request and a failed ping can be retried", async () => {
+  let calls = 0; let release; let ok = true;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const analytics = createDiscordAnalytics({ enabled: true, endpoint: "https://stats.example.test", installationId: "anonymous-install-01", fetchImpl: async () => { calls += 1; await gate; return { ok, status: ok ? 200 : 503 }; } });
+  ok = false;
+  const first = analytics.ping(); const second = analytics.ping();
+  assert.equal(calls, 1);
+  release();
+  assert.deepEqual(await second, { sent: false });
+  await assert.rejects(first, /503/);
+  ok = true;
+  assert.deepEqual(await analytics.ping(), { sent: true });
+  assert.equal(calls, 2);
+  assert.deepEqual(await analytics.ping(), { sent: false });
+  assert.equal(calls, 2);
+});
