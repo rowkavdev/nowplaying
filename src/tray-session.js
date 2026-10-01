@@ -56,3 +56,12 @@ export function trayLogEvent(session) {
   if (session?.outcome === "tray-failed") return Object.freeze({ status: "failed", options: Object.freeze({ level: "error", code: "TRAY_FAILED" }) });
   return Object.freeze({ status: "stopped", options: Object.freeze({}) });
 }
+
+// After a tray failure the app keeps running without a tray. The finished
+// session's quit waiter is still subscribed and would swallow the next stop
+// request, so take a fresh waiter that closes the app (#880).
+export function watchQuitAfterTrayFailure(session, quitRequests, close) {
+  if (session?.outcome !== "tray-failed") return false;
+  void quitRequests.next().then(close);
+  return true;
+}
