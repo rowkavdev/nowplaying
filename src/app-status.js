@@ -110,7 +110,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       playing: failure ? null : playing,
       servers: serverRows(),
       discord: Object.freeze({ enabled: Boolean(discordState?.enabled), state: word(discordState?.state), lastPublishedAt: iso(discordState?.lastPublishedAt ?? null), error: code(discordState?.lastError), ...artworkStatus(discordState?.artwork) }),
-      hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: safeHostedState(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedError(hostedState?.lastError) }),
+      hosted: Object.freeze({ enabled: Boolean(hostedState?.enabled), state: safeHostedState(hostedState?.state), lastSuccessAt: iso(hostedState?.lastSuccessAt ?? null), error: hostedError(hostedState?.lastError), ...publicHostedCard(hostedState?.cardUrl) }),
     });
   }
 
@@ -215,4 +215,12 @@ function code(value) { return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,47
 function iso(value) {
   const time = value instanceof Date ? value.getTime() : value;
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+function publicHostedCard(value) {
+  try {
+    const u = new URL(value);
+    if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash || !/^\/(u\/[A-Za-z0-9-]+|card\/[A-Za-z0-9_-]+)\.svg$/.test(u.pathname)) return {};
+    return { cardUrl: u.href };
+  } catch { return {}; }
 }

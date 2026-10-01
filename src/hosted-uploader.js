@@ -255,5 +255,5 @@ export function createHostedUploader({
     return device.login ? `${origin}/u/${device.login}.svg` : `${origin}/card/${device.cardId}.svg`;
   }
 
-  return Object.freeze({ push, disconnect, cardUrl, status: () => ({ ...status, pending: pending !== null }) });
+  return Object.freeze({ push, disconnect, cardUrl, status: () => ({ ...status, pending: pending !== null, cardUrl: registration && status.state !== "disconnect_pending" ? (registration.login ? `${origin}/u/${registration.login}.svg` : `${origin}/card/${registration.cardId}.svg`) : null }) });
 }
