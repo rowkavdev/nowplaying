@@ -60,3 +60,29 @@ test("upload is an accepted album art setting", () => {
   assert.doesNotThrow(() => validateSettings({ discord: { artworkLookup: "upload" } }));
   assert.throws(() => validateSettings({ discord: { artworkLookup: "imgur" } }), /off, musicbrainz or upload/);
 });
+
+test("Discord upload cache isolates colliding cover refs from different servers", async () => {
+  const seen = [];
+  const resolver = createDiscordArtworkResolver({ upload: async (artwork) => {
+    seen.push(artwork.sourceIndex);
+    return `https://litter.catbox.moe/server${artwork.sourceIndex}.png`;
+  } });
+  const presence = { kind: "track", title: "Same song", artist: "Same artist", artwork: { provider: "plex", imageId: "common", type: "thumb", sourceIndex: 0 } };
+  const first = await resolver.resolve(presence);
+  const second = await resolver.resolve({ ...presence, artwork: { ...presence.artwork, sourceIndex: 1 } });
+  assert.equal(first.image, "https://litter.catbox.moe/server0.png");
+  assert.equal(second.image, "https://litter.catbox.moe/server1.png");
+  assert.equal(second.cached, false);
+  assert.deepEqual(seen, [0, 1]);
+  assert.equal((await resolver.resolve(presence)).cached, true);
+});
+
+
+test("source-isolated cache does not change existing opaque proxy paths", async () => {
+  const { createHash } = await import("node:crypto");
+  const artwork = { provider: "plex", imageId: "common", type: "thumb", sourceIndex: 0 };
+  const opaque = createHash("sha256").update(JSON.stringify([artwork.provider, artwork.itemId, artwork.imageId, artwork.imageTag])).digest("hex").slice(0,32);
+  const resolver = createDiscordArtworkResolver({ publicProxyBase: "https://covers.example" });
+  const result = await resolver.resolve({ artwork });
+  assert.equal(result.image, `https://covers.example/${opaque}`);
+});
