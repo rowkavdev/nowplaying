@@ -47,6 +47,13 @@ test('app status exposes only a public card address, not credential-bearing URLs
     assert.equal(status.snapshot().hosted.cardUrl, undefined);
   }
 });
+test('Status page links a base-path hosted address but only previews the official origin', async () => {
+  const url = 'https://cards.example/service/u/fixture.svg';
+  const get = await view({ enabled: true, state: 'connected', cardUrl: url });
+  assert.equal(get('hosted-card-link').href, url);
+  assert.equal(get('hosted-card-link').hidden, false);
+  assert.equal(get('hosted-card').hidden, true);
+});
 test('app status keeps a hosted address that lives under a base path', () => {
   const status = createAppStatus({ config: { provider: 'plex' } });
   const url = 'https://cards.example/service/u/fixture.svg';
