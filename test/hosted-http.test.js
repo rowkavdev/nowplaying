@@ -216,3 +216,19 @@ test("hosted card links accept the flat look options and reject bad values", asy
     }
   } finally { await app.close(); }
 });
+
+test("hosted card links hide the clock with notime and keep it otherwise", async () => {
+  const app = await start();
+  try {
+    const { cardId, token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
+    const payload = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: "paused", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 1000, durationMs: 4000 });
+    assert.equal((await call(app.port, "POST", "/api/ingest", { body: payload, headers: json(token) })).status, 202);
+    const shown = await call(app.port, "GET", `/card/${cardId}.svg?show=state,subtitle,progress`);
+    assert.match(shown.body, /0:01 \/ 0:04/);
+    const hidden = await call(app.port, "GET", `/card/${cardId}.svg?show=state,subtitle,progress,notime`);
+    assert.equal(hidden.status, 200);
+    assert.doesNotMatch(hidden.body, /0:01 \/ 0:04/);
+    assert.match(hidden.body, /height="4"/);
+    assert.notEqual(hidden.headers.etag, shown.headers.etag);
+  } finally { await app.close(); }
+});
