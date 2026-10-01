@@ -14,7 +14,8 @@ export function createArtworkService({ cache, sanitizer, fetchImpl, timeoutMs, m
       if (cached !== undefined) return cached;
       const request = createArtworkRequest(artwork, providerConfig, rendition);
       const fetched = await fetchArtwork(request, { fetchImpl, timeoutMs, maxBytes });
-      const sanitized = fetched === null ? null : sanitizer ? validateSanitized(await sanitizer(fetched, rendition)) : fetched;
+      const cleaned = fetched === null ? null : sanitizer ? await sanitizer(fetched, rendition) : fetched;
+      const sanitized = cleaned === null ? null : sanitizer ? validateSanitized(cleaned) : cleaned;
       const value = artworkDataUri(sanitized);
       cache.set(key, value);
       return value;

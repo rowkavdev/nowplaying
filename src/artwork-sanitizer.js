@@ -1,4 +1,6 @@
 
+const MATTE = "#2b2b2b";
+
 export function createSharpArtworkSanitizer({ sharpFactory, quality = 85, maxOutputBytes = 1_000_000 } = {}) {
   if (typeof sharpFactory !== "function") throw new TypeError("sharpFactory: expected a function");
   if (!Number.isInteger(maxOutputBytes) || maxOutputBytes < 1 || maxOutputBytes > 5_000_000) throw new RangeError("maxOutputBytes: must be between 1 and 5000000");
@@ -10,7 +12,14 @@ export function createSharpArtworkSanitizer({ sharpFactory, quality = 85, maxOut
       if (!Number.isInteger(value) || value < 1 || value > 1024) throw new RangeError(`${name}: must be between 1 and 1024`);
     }
     const image = sharpFactory(Buffer.from(artwork.bytes), { animated: false, failOn: "warning", limitInputPixels: 16_000_000 });
+    // A cover with no visible pixels would still be embedded and show as an
+    // empty outlined box on the card. Treat it as no artwork. Partly
+    // transparent covers are flattened onto a neutral matte so the card never
+    // shows the page behind them.
+    const stats = await image.clone().stats();
+    if (stats.channels.length === 4 && stats.channels[3].max === 0) return null;
     const { data, info } = await image
+      .flatten({ background: MATTE })
       .rotate()
       .resize({ width, height, fit: "cover", withoutEnlargement: true })
       .png({ compressionLevel: 9, quality, force: true })
