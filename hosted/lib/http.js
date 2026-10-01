@@ -55,9 +55,12 @@ export function parseCardOptions(searchParams) {
   const showRaw = searchParams.get("show");
   let show = {};
   if (showRaw !== null) {
-    const picked = showRaw.split(",").filter(Boolean);
+    const all = showRaw.split(",").filter(Boolean);
+    // "notime" hides the elapsed/total clock; without it the clock follows the bar.
+    const picked = all.filter((field) => field !== "notime");
     for (const field of picked) if (!SHOW_FIELDS.has(field)) throw new ServiceError(400, "invalid_show");
     show = Object.fromEntries([...SHOW_FIELDS].map((field) => [field, picked.includes(field)]));
+    if (all.includes("notime")) show.time = false;
   }
   const layout = parseLayoutOptions(searchParams);
   return { theme, width, show, ...(Object.keys(layout).length ? { layout } : {}) };

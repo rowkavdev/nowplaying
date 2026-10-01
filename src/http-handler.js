@@ -24,9 +24,13 @@ export function parseCardQuery(searchParams) {
     options.width = width;
   }
   if (searchParams.has("show")) {
-    const values = searchParams.get("show").split(",").filter(Boolean);
-    if (new Set(values).size !== values.length || values.some((value) => !VISIBILITY.has(value))) throw new TypeError("invalid card query");
+    const all = searchParams.get("show").split(",").filter(Boolean);
+    // "notime" hides the elapsed/total clock. Without it the clock follows
+    // the progress bar, so existing show= links render as before.
+    const values = all.filter((value) => value !== "notime");
+    if (new Set(all).size !== all.length || values.some((value) => !VISIBILITY.has(value))) throw new TypeError("invalid card query");
     options.show = Object.fromEntries([...VISIBILITY].map((key) => [key, values.includes(key)]));
+    if (all.includes("notime")) options.show.time = false;
   }
   return Object.freeze(options);
 }
