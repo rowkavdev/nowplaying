@@ -97,6 +97,7 @@ function ago(iso) {
   return m < 90 ? m + " minutes ago" : Math.round(m / 60) + " hours ago";
 }
 let cardTick = 0;
+let hostedPreviewUrl = null;
 function publicCardUrl(value) {
   try {
     const u = new URL(value);
@@ -115,12 +116,13 @@ function showCards(hosted) {
   link.hidden = !url; address.hidden = Boolean(url);
   if (url) { link.href = url; link.textContent = url; }
   const preview = url && url.startsWith("https://nowplaying-hosted.vercel.app/");
+  hostedPreviewUrl = preview ? url : null;
   const alreadyFailed = image.hidden && image.src && image.src.split("?")[0] === url;
   image.hidden = !preview || Boolean(alreadyFailed); note.hidden = !(!preview || alreadyFailed);
   if (preview) {
     if (cardTick % 3 === 0 || !image.src || image.src.split("?")[0] !== url) image.src = url + "?t=" + Date.now();
-    image.onload = () => { image.hidden = false; note.hidden = true; };
-    image.onerror = () => { image.hidden = true; note.hidden = false; note.textContent = "Hosted preview unavailable. Open the address to check it."; };
+    image.onload = () => { if (hostedPreviewUrl !== url) return; image.hidden = false; note.hidden = true; };
+    image.onerror = () => { if (hostedPreviewUrl !== url) return; image.hidden = true; note.hidden = false; note.textContent = "Hosted preview unavailable. Open the address to check it."; };
   } else {
     if (image.removeAttribute) image.removeAttribute("src"); else image.src = "";
     note.textContent = !hosted?.enabled ? "Hosted upload is off. Enable it in Settings to get a public card link." : hosted.state === "disconnect_pending" ? "Remote deletion is pending. Reconnect in Settings once it finishes." : url ? "Open the address to view this card on your own hosted service." : "No hosted card address yet. Connect in Settings and wait for the first upload.";
