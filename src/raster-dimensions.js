@@ -37,6 +37,8 @@ function jpegDimensions(bytes) {
   let offset = 2;
   while (offset + 8 < bytes.length) {
     if (bytes[offset] !== 0xff) return null;
+    // Extra 0xff bytes may pad the front of any marker (ITU T.81 B.1.1.2).
+    if (bytes[offset + 1] === 0xff) { offset += 1; continue; }
     const marker = bytes[offset + 1];
     if (marker === 0xd8 || marker === 0xd9) { offset += 2; continue; }
     const length = (bytes[offset + 2] << 8) | bytes[offset + 3];

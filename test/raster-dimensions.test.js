@@ -59,3 +59,13 @@ test("decodes simple lossy (VP8) WebP dimensions", () => {
   const noStartCode = lossyWebp(300,200); noStartCode[23] = 0;
   assert.throws(() => validateRasterDimensions(noStartCode, "image/webp"), /could not be decoded/);
 });
+
+test("JPEG marker fill bytes before a marker do not hide the dimensions (#841)", () => {
+  const jpeg = (fill) => Uint8Array.from([
+    0xff, 0xd8, ...fill, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x10, 0x00, 0x20, 0x01, 0x01, 0x11, 0x00,
+    0xff, 0xd9, 0x00, 0x00,
+  ]);
+  assert.deepEqual({ ...validateRasterDimensions(jpeg([]), "image/jpeg") }, { width: 32, height: 16 });
+  assert.deepEqual({ ...validateRasterDimensions(jpeg([0xff]), "image/jpeg") }, { width: 32, height: 16 });
+  assert.deepEqual({ ...validateRasterDimensions(jpeg([0xff, 0xff, 0xff]), "image/jpeg") }, { width: 32, height: 16 });
+});
