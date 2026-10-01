@@ -265,6 +265,7 @@ body.drpp-shell{color-scheme:dark;margin:0;background:#242424;color:#c1c2c5;font
 .drpp-shell h1{font-size:20px;line-height:1.3;margin:0;color:#f1f3f5}.drpp-shell h2{font-size:18px;line-height:1.3;margin:0;color:#f1f3f5}
 .drpp-divider{height:26px;width:1px;background:#373a40;flex:none}.drpp-actions a{padding:8px 12px;border:1px solid #373a40;border-radius:4px;text-decoration:none;color:inherit}.drpp-actions a:hover{background:#2e2e2e}
 .drpp-shell button,.drpp-shell select,.drpp-shell input[type=number],.drpp-shell input[type=search],.drpp-shell input[type=text],.drpp-shell input[type=url],.drpp-shell input[type=password],.drpp-shell input:not([type]){font:inherit;background:#2e2e2e;color:#c1c2c5;border:1px solid #373a40;border-radius:4px;padding:7px 12px}
+.drpp-shell .ok{color:#7ab8ff}.drpp-shell .bad{color:#ffa552;font-weight:600}.drpp-shell .warn{color:#e0d070}
 .drpp-shell #card-font-error{color:#ffa552;margin:0 0 12px}.drpp-shell #card-font-help{color:#a8a9ae}.drpp-shell #card-fontStack{max-width:100%}
 .drpp-shell button:not(:disabled){cursor:pointer}.drpp-shell button:disabled{opacity:.55}.drpp-shell button[type=submit]{background:#1971c2;color:white;border-color:#1971c2}
 .drpp-columns{display:flex;height:calc(100vh - 79px);min-height:0}.drpp-config,.drpp-logs{width:50%;min-width:0;display:flex;flex-direction:column}
