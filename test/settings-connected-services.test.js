@@ -400,3 +400,13 @@ test('#834 failed destination rename keeps B credentials off A and permits confi
   assert.equal((await createHostedUploader({ baseUrl: b, credentials, fetchImpl }).push(createPresence({ state: 'playing', kind: 'track', title: 'Fixture' }))).sent, true);
   assert.deepEqual(requests.filter(r => r.auth), [{ url: b + '/api/ingest', auth: 'Bearer ' + 'b'.repeat(24), body: requests.find(r => r.url === b + '/api/ingest').body }]);
 });
+
+test("a hosted sign-in body of null is a 400, not an exception", async () => {
+  const file = await configFile();
+  const h = createSettingsConnectedServices({ file, credentialStore: { read: async () => null, save: async () => {}, remove: async () => {} }, hostedSignIn: async () => ({}), spotifySignIn: async () => ({}) }).handler;
+  for (const body of ["null", "7", '"x"', "[]", "{"]) {
+    const response = await h({ url: "/api/setup/hosted/signin", method: "POST", body, headers: { "sec-fetch-site": "same-origin" } });
+    assert.equal(response.status, 400, body);
+    assert.equal(JSON.parse(response.body).error, "invalid_request", body);
+  }
+});
