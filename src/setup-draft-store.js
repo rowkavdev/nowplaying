@@ -42,7 +42,9 @@ export function createSetupDraftStore({ file } = {}) {
       throw error;
     }
     try {
-      if (Buffer.byteLength(text) > MAX_DRAFT_BYTES) throw new RangeError("too large");
+      // save() limits the serialized body and then appends one newline, so the
+      // cap applies to the body here too.
+      if (Buffer.byteLength(text.endsWith("\n") ? text.slice(0, -1) : text) > MAX_DRAFT_BYTES) throw new RangeError("too large");
       const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== 1) throw new TypeError("unsupported draft");
       const { version, ...fields } = parsed;
