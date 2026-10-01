@@ -31,7 +31,7 @@ test("reads the wizard's config back exactly", async () => {
   assert.deepEqual(config, {
     version: 2,
     servers: [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" } }],
-    discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
+    discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off", artworkUpload: false },
   });
   // The rest of the app still reads the first server directly (#252).
   assert.equal(config.provider, "jellyfin");
@@ -283,7 +283,7 @@ test("a v1 single-server config is migrated to a v2 servers list, with a backup 
   const v1 = {
     version: 1, provider: "jellyfin", serverUrl: "http://127.0.0.1:8096",
     identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" },
-    discord: { enabled: false, idleBehavior: "show", artworkLookup: "musicbrainz", timestamps: "elapsed" },
+    discord: { enabled: false, idleBehavior: "show", artworkLookup: "musicbrainz", artworkUpload: false, timestamps: "elapsed" },
     hosted: { enabled: true }, privacy: { hideArtwork: true },
   };
   await writeFile(file, JSON.stringify(v1));
