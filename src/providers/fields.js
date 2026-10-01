@@ -47,3 +47,19 @@ export function sessionList(value, provider) {
   if (!Array.isArray(value)) throw new Error(`${provider} sessions response was not a list`);
   return value;
 }
+
+// "Artists" is a list on every server, but a plugin or an old version can send
+// one string, or a list with blanks and numbers in it. Keep the usable names
+// and fall back to the album artist; never throw (#143 lenient-fields rule).
+export function artistLine(artists, albumArtist) {
+  const names = (Array.isArray(artists) ? artists : [artists]).map(optionalText).filter(Boolean);
+  return names.length ? names.join(", ") : optionalText(albumArtist);
+}
+
+// Artwork needs a string item id and a short string tag; anything else means
+// no artwork, not a failed poll.
+export function artworkRef(provider, itemId, imageTag) {
+  const id = optionalText(itemId);
+  const tag = optionalText(imageTag);
+  return id && tag && tag.length <= 512 ? { provider, itemId: id, imageTag: tag, type: "primary" } : null;
+}

@@ -1,7 +1,7 @@
 import { readBoundedJson } from "../bounded-response.js";
 import { defineProvider } from "../provider.js";
 import { fetchWithTimeout } from "./request.js";
-import { optionalCount, optionalText, optionalYear, playbackTimes, pickSession, sessionList } from "./fields.js";
+import { artistLine, artworkRef, optionalCount, optionalText, optionalYear, playbackTimes, pickSession, sessionList } from "./fields.js";
 
 const TICKS_PER_MILLISECOND = 10_000;
 
@@ -38,7 +38,7 @@ function matchesSession(session, { username, userId } = {}) {
   if (!session?.NowPlayingItem) return false;
   if (userId) return sameUserId(session.UserId, userId);
   if (!username) return true;
-  return session.UserName?.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
+  return typeof session.UserName === "string" && session.UserName.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
 }
 
 function sameUserId(actual, expected) {
@@ -50,11 +50,11 @@ function sameUserId(actual, expected) {
 function mapSession(session) {
   const item = session.NowPlayingItem;
   const kind = item.Type === "Audio" ? "track" : item.Type === "Episode" ? "episode" : item.Type === "Movie" ? "movie" : "unknown";
-  const subtitle = kind === "episode" ? item.SeriesName || item.SeasonName : kind === "track" ? item.Artists?.join(", ") || item.AlbumArtist : item.ProductionYear ? String(item.ProductionYear) : null;
-  const imageTag = item.ImageTags?.Primary;
+  const year = optionalYear(item.ProductionYear);
+  const subtitle = kind === "episode" ? optionalText(item.SeriesName) || optionalText(item.SeasonName) : kind === "track" ? artistLine(item.Artists, item.AlbumArtist) : year !== null ? String(year) : null;
   return {
-    state: session.PlayState?.IsPaused ? "paused" : "playing", kind, title: item.Name, subtitle,
-    artwork: imageTag ? { provider: "emby", itemId: item.Id, imageTag, type: "primary" } : null,
+    state: session.PlayState?.IsPaused ? "paused" : "playing", kind, title: optionalText(item.Name), subtitle,
+    artwork: artworkRef("emby", item.Id, item.ImageTags?.Primary),
     artworkUrl: null,
     ...playbackTimes(ticksToMilliseconds(session.PlayState?.PositionTicks), ticksToMilliseconds(item.RunTimeTicks)),
     // Episode and movie details (#143): ParentIndexNumber is the season,
