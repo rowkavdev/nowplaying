@@ -200,6 +200,18 @@ test("upstash client posts commands with bearer auth and hides error bodies", as
   assert.throws(() => createUpstashRedis({ url: "http://insecure", token: "t" }), TypeError);
 });
 
+test("an ingest 429 says how many seconds are left in the minute window", async () => {
+  const { service, now } = setup(1_800_000_000_000 + 20_000);
+  const device = await service.register({ clientKey: "one" });
+  let seq = 0;
+  for (let i = 0; i < INGESTS_PER_MINUTE; i += 1) await service.ingest({ token: device.token, payload: update(now(), { seq: ++seq }) });
+  await assert.rejects(service.ingest({ token: device.token, payload: update(now(), { seq: ++seq }) }), (error) => {
+    assert.equal(error.status, 429);
+    assert.deepEqual(error.headers, { "retry-after": "40" });
+    return true;
+  });
+});
+
 test("ingest is rate limited per device and resets each minute", async () => {
   const alignToMinute = (ts) => ts - (ts % 60_000);
   const { service, redis, now, advance } = setup(alignToMinute(1_800_000_000_000));

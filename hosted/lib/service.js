@@ -140,7 +140,7 @@ save(); return {1, 1}
 `;
 
 export class ServiceError extends Error {
-  constructor(status, code, details = {}) { super(code); this.status = status; this.code = code; this.details = details; }
+  constructor(status, code, details = {}, headers = {}) { super(code); this.status = status; this.code = code; this.details = details; this.headers = headers; }
 }
 
 export function hashToken(token) { return createHash("sha256").update(token).digest("hex"); }
@@ -266,11 +266,13 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     // even if the function dies between commands; INCR keeps the TTL.
     await cmd("SET", bucket, "0", "EX", 120, "NX");
     const count = await cmd("INCR", bucket);
-    if (count > INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited");
+    // The bucket is keyed by the clock minute, so the window ends at the next minute boundary.
+    const retryAfter = { "retry-after": String(60 - Math.floor((now() % 60_000) / 1000)) };
+    if (count > INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited", {}, retryAfter);
     if (device.userId) {
       const userBucket = `np:rl:uingest:${device.userId}:${minute}`;
       await cmd("SET", userBucket, "0", "EX", 120, "NX");
-      if (await cmd("INCR", userBucket) > USER_INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited");
+      if (await cmd("INCR", userBucket) > USER_INGESTS_PER_MINUTE) throw new ServiceError(429, "rate_limited", {}, retryAfter);
     }
     let update;
     const serverTime = now();
