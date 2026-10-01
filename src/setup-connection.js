@@ -17,7 +17,7 @@ export async function checkProviderConnection({ createProvider, config, context 
     if (user !== "ok") return connectionResult(user);
     return connectionResult("connected", presence?.state ?? "idle");
   } catch (error) {
-    if (AUTHENTICATION_STATUS.test(String(error?.message))) {
+    if (isAuthenticationFailure(error)) {
       return connectionResult("authentication_failed");
     }
     if (isNetworkError(error)) return connectionResult(networkFailure(error));
@@ -36,7 +36,7 @@ async function checkUser(provider, identity) {
   } catch (error) {
     // A rejected sign-in is a real failure; anything else just means this
     // server can't answer the question, which isn't the user's problem.
-    if (AUTHENTICATION_STATUS.test(String(error?.message))) throw error;
+    if (isAuthenticationFailure(error)) throw error;
     return "ok";
   }
   if (!user?.id && !user?.displayName) return "ok";
@@ -47,6 +47,14 @@ async function checkUser(provider, identity) {
 
 function sameName(a, b) {
   return typeof a === "string" && typeof b === "string" && a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
+}
+
+// Providers that parse an API-level failure (Navidrome's HTTP 200 Subsonic
+// error code 40) set a numeric status on the error; others only put it in the
+// message. Accept either, and never read any other text from the error.
+function isAuthenticationFailure(error) {
+  if (error?.status === 401 || error?.status === 403) return true;
+  return AUTHENTICATION_STATUS.test(String(error?.message));
 }
 
 function connectionResult(status, activity = null) {
