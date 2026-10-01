@@ -232,7 +232,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </details>
 <!-- /Hosted card devices -->
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
-<div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
+<div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" aria-describedby="drpp-log-error" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
 <p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" tabindex="0" aria-label="Recent app events" class="drpp-log-lines" role="log" aria-live="off"></div>
 </aside></div><dialog id="drpp-info" aria-labelledby="drpp-info-title"><div class="drpp-info-heading"><h2 id="drpp-info-title">Info</h2><button type="button" id="drpp-info-close" aria-label="Close Info">×</button></div><div class="drpp-info-tabs" role="tablist" aria-label="Project information"><button type="button" role="tab" id="drpp-info-attribution" aria-controls="drpp-info-content" data-file="NOTICE" tabindex="0" aria-selected="true">OSS Attribution</button><button type="button" role="tab" id="drpp-info-readme" aria-controls="drpp-info-content" data-file="README.md" tabindex="-1" aria-selected="false">Readme</button><button type="button" role="tab" id="drpp-info-license" aria-controls="drpp-info-content" data-file="LICENSE" tabindex="-1" aria-selected="false">License</button></div><pre id="drpp-info-content" role="tabpanel" tabindex="0" aria-live="polite">Loading...</pre></dialog><script src="/settings.js"></script></body></html>
 `;
@@ -335,8 +335,8 @@ function renderLogs() {
     match = !text ? null : text.startsWith("/") && lastSlash > 0
       ? new RegExp(text.slice(1, lastSlash), text.slice(lastSlash + 1))
       : new RegExp(text);
-    error.textContent = logConnectionError; error.hidden = !logConnectionError;
-  } catch { error.textContent = "[Search] Invalid search expression"; error.hidden = false; return; }
+    search.removeAttribute("aria-invalid"); error.textContent = logConnectionError; error.hidden = !logConnectionError;
+  } catch { search.setAttribute("aria-invalid", "true"); error.textContent = "[Search] Invalid search expression"; error.hidden = false; return; }
   const shown = entries.filter((e) => {
     if (!match) return true;
     match.lastIndex = 0; // /g and /y patterns must start at the beginning for every log row.

@@ -8,7 +8,7 @@ test('changing a log filter cannot hide a lost Settings log connection',async()=
  const start=script.indexOf('const lines = document.getElementById("drpp-log-lines")');
  const end=script.indexOf('// DRPP AutostartSwitch:',start);
  assert.ok(start>=0&&end>start);
- const nodes=new Map();const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,hidden:false,textContent:'',className:'',listeners:{},classList:{toggle(){}},setAttribute(){},addEventListener(e,fn){this.listeners[e]=fn;},replaceChildren(){}});return nodes.get(id);};
+ const nodes=new Map();const get=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,hidden:false,textContent:'',className:'',listeners:{},classList:{toggle(){}},setAttribute(){},removeAttribute(){},addEventListener(e,fn){this.listeners[e]=fn;},replaceChildren(){}});return nodes.get(id);};
  let connected=false;
  const ctx={document:{getElementById:get,createElement:()=>({append(){}})},localStorage:{getItem(){return null},setItem(){}},fetch:async()=>{if(!connected)throw Error('offline');return {ok:true,json:async()=>({events:[]})};}};
  runInNewContext(script.slice(start,end)+';globalThis.reloadLogs=refreshLogs;',ctx);
