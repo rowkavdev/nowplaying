@@ -73,10 +73,11 @@ const buildPage = (startupCopy) => `<!doctype html>
 </select></p>
 <p class="row"><label for="discord-artwork">Album art</label>
 <select id="discord-artwork" name="artworkLookup">
+<option value="upload">Show my server's cover (copied to a temporary public host)</option>
 <option value="musicbrainz">Look up covers on MusicBrainz</option>
 <option value="off">Only use art from my server</option>
 </select></p>
-<p class="hint">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org. Art from a private server is never sent to Discord.</p>
+<p class="hint">Showing your server's cover uploads just that image to litterbox.catbox.moe for up to 72 hours, the way Discord Rich Presence for Plex does. MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org. With "Only use art from my server", a private server's art is never sent to Discord.</p>
 <p><button type="submit" id="discord-save">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
 <p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>

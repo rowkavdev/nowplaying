@@ -209,7 +209,7 @@ function defaultDiscordTransport(clientId) {
 // local server images fall back to the NowPlaying icon image. No title or artist
 // leaves the machine unless the config has artworkLookup "musicbrainz" (the
 // default for new setups, off for configs written before it existed).
-export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings)), intervalMs, stuckAfterMs, now } = {}) {
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, fetchImpl = fetch, coverSource, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings, { ...(coverSource ? { coverSource } : {}), fetchImpl })), intervalMs, stuckAfterMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
@@ -353,7 +353,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
-    try { return startDiscordFromConfig(settings, discordProvider, discordOptions); }
+    try { return startDiscordFromConfig(settings, discordProvider, { ...(multi?.artwork ? { coverSource: (ref) => multi.artwork.resolve(ref) } : {}), fetchImpl, ...discordOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, refreshArtwork: async () => 0 }); }
   };
   // Discord changes from the settings page are saved to config.json first,

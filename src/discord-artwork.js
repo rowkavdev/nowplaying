@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { createMusicBrainzLookup } from "./musicbrainz-lookup.js";
+import { createLitterboxUploader } from "./discord-artwork-upload.js";
 
 const ASSET_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 const SECRET_PARAM = /(^|[_-])(token|key|apikey|api_key|auth|sig|signature|secret|password|pass|session|s|t|u)$/i;
@@ -79,6 +80,7 @@ export function createDiscordArtworkResolver({
   publicProxyBase = "",
   metadataLookup = false,
   lookup,
+  upload,
   fallbackAsset = FALLBACK_ARTWORK_URL,
   ttlMs = 6 * 60 * 60_000,
   negativeTtlMs = 10 * 60_000,
@@ -132,6 +134,22 @@ export function createDiscordArtworkResolver({
       rememberCurrent(key, entry, ttlMs);
       return finish({ ...entry, cached: false });
     }
+    // Copy the server's own cover to a temporary public host (what Discord
+    // Rich Presence for Plex does), so a private server's art still shows.
+    if (typeof upload === "function" && presence.artwork) {
+      try {
+        const url = await upload(presence.artwork);
+        const checked = classifyArtworkUrl(url);
+        if (checked.ok) {
+          const entry = { image: checked.url, strategy: "upload", failure };
+          rememberCurrent(key, entry, ttlMs);
+          return finish({ ...entry, cached: false });
+        }
+        failure = failure ?? (url ? `upload_${checked.failure}` : "upload_miss");
+      } catch {
+        failure = failure ?? "upload_error";
+      }
+    }
     // MusicBrainz only knows music: a film or episode title would match a
     // random song and show a confidently wrong cover, so only tracks look up.
     const music = presence.kind === undefined || presence.kind === "track";
@@ -168,8 +186,11 @@ export function createDiscordArtworkResolver({
 }
 
 
-export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup } = {}) {
+export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup, coverSource, fetchImpl, createUpload = createLitterboxUploader } = {}) {
   const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
+  if (discordSettings.artworkLookup === "upload" && typeof coverSource === "function") {
+    return Object.freeze({ publicProxyBase: proxy, metadataLookup: false, upload: createUpload({ coverSource, ...(fetchImpl ? { fetchImpl } : {}) }) });
+  }
   if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false });
   return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup() });
 }
