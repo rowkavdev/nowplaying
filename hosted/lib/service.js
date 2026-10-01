@@ -200,7 +200,7 @@ export function createGitHubIdentity({ fetchImpl = globalThis.fetch, timeoutMs =
 
 function cleanDeviceName(value) {
   if (typeof value !== "string") return "PC";
-  const cleaned = value.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, DEVICE_NAME_LIMIT);
+  const cleaned = value.replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, DEVICE_NAME_LIMIT).replace(/[\uD800-\uDBFF]$/, "").trim();
   return cleaned || "PC";
 }
 
