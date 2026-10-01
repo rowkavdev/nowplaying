@@ -39,7 +39,13 @@ export async function discoverLanServers({ timeoutMs = 1500, broadcastAddress = 
   const abort = () => { for (const socket of sockets) { try { socket.close(); } catch { /* already closed */ } } };
   signal?.addEventListener("abort", abort, { once: true });
   try {
-    await Promise.all(probes.map(listen));
+    // Closing a socket mid-bind can suppress its callbacks, so a probe promise
+    // may never settle. Abort must release this stage on its own.
+    const cancelled = new Promise((resolve) => {
+      if (signal?.aborted) { resolve(); return; }
+      signal?.addEventListener("abort", resolve, { once: true });
+    });
+    await Promise.race([Promise.all(probes.map(listen)), cancelled]);
     if (!signal?.aborted) await new Promise((resolve) => {
       const timer = setTimeout(done, timeoutMs);
       function done() { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); }
