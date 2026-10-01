@@ -13,7 +13,7 @@ const SECURITY_HEADERS = Object.freeze({
 
 // Opt-in policy for the local setup page: same-origin script, style, images and
 // fetch only. No inline script, no framing, no third-party origins.
-export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+export const PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const SAFE_FETCH_SITES = new Set(["same-origin", "none"]);
@@ -66,7 +66,7 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
         return;
       }
       const page = isPage(result);
-      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(page ? { "Content-Security-Policy": PAGE_CSP } : {}), ...(page && sessionCookie ? { "Set-Cookie": sessionCookie } : {}) });
+      response.writeHead(result.status, { ...result.headers, ...SECURITY_HEADERS, ...(page ? { "Content-Security-Policy": result.hostedCardPreview === true ? PAGE_CSP.replace("img-src 'self' blob:", "img-src 'self' blob: https://nowplaying-hosted.vercel.app") : PAGE_CSP } : {}), ...(page && sessionCookie ? { "Set-Cookie": sessionCookie } : {}) });
       response.end(result.body);
     } catch {
       // Headers already set (the body failed to write): a 500 can't be sent

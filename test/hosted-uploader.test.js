@@ -398,7 +398,7 @@ test("offline disconnect keeps the revocation key, blocks uploads, then retry re
   env.setOffline(true);
   await assert.rejects(up.disconnect(), { code: "network_error" });
   assert.equal(env.stored().token, token, "protected revocation key must survive offline failure");
-  assert.deepEqual(up.status(), { state: "disconnect_pending", lastError: "network_error", lastSuccessAt: null, pending: false });
+  assert.deepEqual(up.status(), { state: "disconnect_pending", lastError: "network_error", lastSuccessAt: null, pending: false, cardUrl: null });
   assert.deepEqual(await up.push(track({ title: "New Track" })), { sent: false, reason: "disconnect_pending" });
   assert.equal(await up.cardUrl(), null, "must not register a replacement card during pending deletion");
   assert.equal((await env.service.readCardState(cardId)).title, "Sensitive Track", "remote deletion is not complete");
