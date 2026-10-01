@@ -96,6 +96,7 @@ async function tokenRequest(fields, fetchImpl, requestTimeoutMs = 10_000) {
   });
   let payload = {};
   try { payload = await response.json(); } catch { /* keep empty */ }
+  if (payload === null || typeof payload !== "object") payload = {};
   if (!response.ok) {
     // invalid_grant: the refresh token was revoked or expired, so the user must sign in again.
     const code = payload?.error === "invalid_grant" ? "reauth_needed" : "token_failed";
