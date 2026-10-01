@@ -22,7 +22,7 @@ export async function readJsonBody(req, limit = MAX_INGEST_BYTES) {
   const declared = Number(req.headers["content-length"] ?? 0);
   if (declared > limit) throw new ServiceError(413, "payload_too_large");
   const type = String(req.headers["content-type"] ?? "");
-  if (!type.toLowerCase().startsWith("application/json")) throw new ServiceError(415, "unsupported_media_type");
+  if (type.split(";", 1)[0].trim().toLowerCase() !== "application/json") throw new ServiceError(415, "unsupported_media_type");
   const chunks = []; let size = 0;
   for await (const chunk of req) {
     size += chunk.length;

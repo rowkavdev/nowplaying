@@ -232,3 +232,17 @@ test("hosted card links hide the clock with notime and keep it otherwise", async
     assert.notEqual(hidden.headers.etag, shown.headers.etag);
   } finally { await app.close(); }
 });
+
+test('ingest rejects JSON-prefix lookalike media types but permits MIME parameters', async () => {
+  const app = await start();
+  try {
+    const { token } = JSON.parse((await call(app.port, 'POST', '/api/register')).body);
+    const body = JSON.stringify({ v: 1, seq: 1, observedAt: Date.now(), state: 'idle' });
+    for (const type of ['application/jsonp', 'application/json-evil', 'application/json+xml']) {
+      const reply = await call(app.port, 'POST', '/api/ingest', { body, headers: { ...json(token), 'content-type': type } });
+      assert.equal(reply.status, 415, type);
+    }
+    const reply = await call(app.port, 'POST', '/api/ingest', { body, headers: { ...json(token), 'content-type': 'Application/JSON; charset=utf-8' } });
+    assert.equal(reply.status, 202);
+  } finally { await app.close(); }
+});
