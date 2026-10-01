@@ -3,7 +3,7 @@ import { isServerUrl } from "./setup.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
-const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
+const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz", "upload"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress"];
 const PRIVACY_KINDS = new Set(["movie", "episode", "track"]);
@@ -111,7 +111,7 @@ export function createSetupConfig(input = {}) {
     throw new TypeError("setup config.discordEnabled must be a boolean");
   }
   if (input.discordArtworkLookup !== undefined && !ARTWORK_LOOKUPS.has(input.discordArtworkLookup)) {
-    throw new TypeError("setup config.discordArtworkLookup must be off or musicbrainz");
+    throw new TypeError("setup config.discordArtworkLookup must be off, musicbrainz or upload");
   }
   if (input.discordTimestamps !== undefined && !TIMESTAMP_MODES.has(input.discordTimestamps)) {
     throw new TypeError("setup config.discordTimestamps must be elapsed, remaining, both or none");

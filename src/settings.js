@@ -138,8 +138,8 @@ function validateDiscord(value) {
   if (value.idleBehavior !== undefined && !IDLE_BEHAVIORS.has(value.idleBehavior)) {
     throw new TypeError("discord.idleBehavior: expected clear, grace, show or recent");
   }
-  if (value.artworkLookup !== undefined && !["off", "musicbrainz"].includes(value.artworkLookup)) {
-    throw new TypeError("discord.artworkLookup: expected off or musicbrainz");
+  if (value.artworkLookup !== undefined && !["off", "musicbrainz", "upload"].includes(value.artworkLookup)) {
+    throw new TypeError("discord.artworkLookup: expected off, musicbrainz or upload");
   }
   if (value.artworkProxy !== undefined && value.artworkProxy !== "") {
     const checked = typeof value.artworkProxy === "string" ? classifyArtworkUrl(value.artworkProxy) : { ok: false };
