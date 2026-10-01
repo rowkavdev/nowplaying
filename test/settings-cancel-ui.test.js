@@ -20,12 +20,13 @@ function page() {
     return elements.get(id);
   };
   const fetches = []; const pollTimers = [];
+  const document = { activeElement: null, getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", children: [], append(...children) { this.children.push(...children); }, addEventListener() {} }) };
   runInNewContext(SERVER_SCRIPT, {
-    document: { getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", children: [], append(...children) { this.children.push(...children); }, addEventListener() {} }) },
+    document,
     fetch: (path, options) => { const request = deferred(); fetches.push({ path, options, ...request }); return request.promise; },
     setTimeout: (fn, delay) => { if (delay === 2000) { pollTimers.push(fn); return pollTimers.length; } const timer = setTimeout(fn, delay); timer.unref(); return timer; }, clearTimeout, URL, confirm: () => true, window: { open: () => null },
   });
-  return { node, fetches, pollTimers };
+  return { node, fetches, pollTimers, document };
 }
 
 test("cancelling manual sign-in restores focus to the Connect button", async () => {
@@ -322,4 +323,16 @@ test("a failed server refresh after sign-in keeps its warning next to the succes
   fetches[2].resolve(json({error:"server_error"},false));await start;
   assert.match(node("discovery-state").textContent,/Connected as Fixture/);
   assert.match(node("discovery-state").textContent,/Could not load servers\. Reload this page\./);
+});
+
+
+test("scan completion restores keyboard focus before hiding Cancel scan", async () => {
+ const {node,fetches,document}=page();
+ fetches[0].resolve(json({servers:[]}));await tick();
+ const scan=node("discover-servers").click();
+ document.activeElement=node("cancel-discovery");let focused=false;
+ node("discover-servers").focus=()=>{focused=true;};
+ fetches[1].resolve(json({servers:[],cancelled:true}));await scan;
+ assert.equal(node("cancel-discovery").hidden,true);
+ assert.equal(focused,true,"hidden scan control must not retain keyboard focus");
 });
