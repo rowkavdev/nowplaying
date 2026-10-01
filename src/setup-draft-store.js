@@ -42,7 +42,9 @@ export function createSetupDraftStore({ file } = {}) {
       throw error;
     }
     try {
-      if (Buffer.byteLength(text) > MAX_DRAFT_BYTES) throw new RangeError("too large");
+      // save() caps the JSON body and then adds one newline; apply the cap to the
+      // body here so every accepted save loads back.
+      if (Buffer.byteLength(text.endsWith("\n") ? text.slice(0, -1) : text) > MAX_DRAFT_BYTES) throw new RangeError("too large");
       const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.version !== 1) throw new TypeError("unsupported draft");
       const { version, ...fields } = parsed;
