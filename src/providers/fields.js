@@ -63,3 +63,10 @@ export function artworkRef(provider, itemId, imageTag) {
   const tag = optionalText(imageTag);
   return id && tag && tag.length <= 512 ? { provider, itemId: id, imageTag: tag, type: "primary" } : null;
 }
+
+// Artwork that is addressed by one id (Plex thumb, Navidrome cover): a short
+// string, or no artwork.
+export function imageRef(provider, imageId, type) {
+  const id = optionalText(imageId);
+  return id && id.length <= 512 ? { provider, imageId: id, type } : null;
+}
