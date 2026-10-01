@@ -40,12 +40,12 @@ function startupCopyFor(platform) {
 const buildPage = (startupCopy) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
-<body class="drpp-shell"><header class="drpp-header">
+<body class="drpp-shell"><a class="drpp-skip" href="#settings-content">Skip to configuration</a><header class="drpp-header">
   <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
   <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" id="drpp-info-open" aria-haspopup="dialog" title="Info">Info</button></div>
-</header><div class="drpp-columns"><main class="drpp-config">
+</header><div class="drpp-columns"><main class="drpp-config" id="settings-content" tabindex="-1">
 <div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider" id="drpp-autostart-divider" hidden></span><label id="drpp-autostart-wrap" hidden><input type="checkbox" id="drpp-autostart"> Launch app on system startup</label><small id="drpp-autostart-result" role="status" aria-live="polite"></small></div>
-<div class="drpp-config-scroll">
+<div class="drpp-config-scroll" tabindex="0" aria-label="Configuration sections">
 <div class="drpp-setup" id="drpp-setup" role="status" aria-live="polite" hidden>
 <div class="drpp-setup-title"><span aria-hidden="true">⚠</span><strong id="drpp-setup-title">Setup Incomplete</strong></div>
 <p id="drpp-setup-message">Add a media server to finish setting up.</p>
@@ -196,7 +196,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <!-- /Hosted card devices -->
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
 <div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
-<p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" class="drpp-log-lines" role="log" aria-live="off"></div>
+<p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" tabindex="0" aria-label="Recent app events" class="drpp-log-lines" role="log" aria-live="off"></div>
 </aside></div><dialog id="drpp-info" aria-labelledby="drpp-info-title"><div class="drpp-info-heading"><h2 id="drpp-info-title">Info</h2><button type="button" id="drpp-info-close" aria-label="Close Info">×</button></div><div class="drpp-info-tabs" role="tablist" aria-label="Project information"><button type="button" role="tab" id="drpp-info-attribution" aria-controls="drpp-info-content" data-file="NOTICE" aria-selected="true">OSS Attribution</button><button type="button" role="tab" id="drpp-info-readme" aria-controls="drpp-info-content" data-file="README.md" aria-selected="false">Readme</button><button type="button" role="tab" id="drpp-info-license" aria-controls="drpp-info-content" data-file="LICENSE" aria-selected="false">License</button></div><pre id="drpp-info-content" role="tabpanel" aria-live="polite">Loading...</pre></dialog><script src="/settings.js"></script></body></html>
 `;
 
@@ -218,7 +218,9 @@ dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}
 // DRPP v3.4.0 layout port: full-height header, 50/50 editor/log panels,
 // separated accordions and a log toolbar. Keep all settings writes on the
 // existing NowPlaying forms; no Plex-only controls are presented as working.
-const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
+const DRPP_SHELL_CSS = `.drpp-shell .drpp-skip{position:fixed;top:-60px;left:12px;background:#242424;color:#f1f3f5;padding:8px 12px;border:2px solid #bda0f8;z-index:20}.drpp-shell .drpp-skip:focus{top:12px}
+.drpp-shell :focus-visible{outline:2px solid #bda0f8;outline-offset:3px}.drpp-shell .drpp-config-scroll:focus-visible,.drpp-shell .drpp-log-lines:focus-visible{outline-offset:-3px}
+body.drpp-shell{margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
 .drpp-shell *{box-sizing:border-box}.drpp-shell .drpp-header{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px;border-bottom:1px solid #373a40}
 .drpp-heading,.drpp-actions,.drpp-panel-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .drpp-shell h1{font-size:20px;line-height:1.3;margin:0;color:#f1f3f5}.drpp-shell h2{font-size:18px;line-height:1.3;margin:0;color:#f1f3f5}
@@ -235,10 +237,10 @@ const DRPP_SHELL_CSS = `body.drpp-shell{margin:0;background:#242424;color:#c1c2c
 .drpp-config .drpp-accordion>summary{cursor:pointer;list-style:none;padding:12px 16px;color:#f1f3f5;font-weight:500;display:flex;align-items:center;justify-content:space-between}
 .drpp-config .drpp-accordion>summary::-webkit-details-marker{display:none}.drpp-config .drpp-accordion>summary::after{content:"⌄";font-size:18px;line-height:1;color:#909296}.drpp-config .drpp-accordion[open]>summary::after{content:"⌃"}
 .drpp-config .drpp-accordion[open]>summary{border-bottom:1px solid #373a40}.drpp-config .drpp-accordion section>h2{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.drpp-config .drpp-accordion section{background:transparent;border:0;border-radius:0;margin:0;padding:16px}.drpp-config section h2{margin:0 0 8px}.drpp-config section[hidden],.drpp-config form[hidden]{display:none}
-.drpp-config .hint,.drpp-config legend,.drpp-config .row label[for],.drpp-config dt,.drpp-config output{color:#909296}.drpp-config a{color:#74c0fc}.drpp-config .preview{border-color:#373a40}
+.drpp-config .hint,.drpp-config legend,.drpp-config .row label[for],.drpp-config dt,.drpp-config output{color:#a8a9ae}.drpp-config a{color:#74c0fc}.drpp-config .preview{border-color:#373a40}
 .drpp-logs .drpp-panel-heading{gap:12px}.drpp-panel-heading label{white-space:nowrap}.drpp-panel-heading input[type=search]{flex:1;min-width:125px}.drpp-panel-heading small{color:#909296;white-space:nowrap}
 .drpp-indicator{width:9px;height:9px;background:#868e96;border-radius:50%;flex:none}.drpp-indicator.connected{background:#7ab8ff}.drpp-indicator.disconnected{background:#ffa552}
-.drpp-log-lines{font:13px/1.6 ui-monospace,Consolas,monospace}.drpp-log-line{padding:1px 8px;border-left:4px solid #7ab8ff;background:rgba(79,70,229,.05);white-space:pre;word-break:break-all}.drpp-log-line.warn{border-color:#f59e0b}.drpp-log-line.error{border-color:#ffa552}.drpp-log-line .timestamp{color:#6b7280}.drpp-log-line .level{color:#7ab8ff}.drpp-log-line.warn .level{color:#f59e0b}.drpp-log-line.error .level{color:#ffa552}.drpp-log-line .source{color:#60a5fa}
+.drpp-log-lines{font:13px/1.6 ui-monospace,Consolas,monospace}.drpp-log-line{padding:1px 8px;border-left:4px solid #7ab8ff;background:rgba(79,70,229,.05);white-space:pre;word-break:break-all}.drpp-log-line.warn{border-color:#f59e0b}.drpp-log-line.error{border-color:#ffa552}.drpp-log-line .timestamp{color:#a1a5af}.drpp-log-line .level{color:#7ab8ff}.drpp-log-line.warn .level{color:#f59e0b}.drpp-log-line.error .level{color:#ffa552}.drpp-log-line .source{color:#60a5fa}
 .drpp-log-lines.wrap .drpp-log-line{white-space:pre-wrap}.drpp-logs #drpp-log-error{padding:8px 16px;color:#ffa552}
 #drpp-info{width:75%;max-width:1100px;max-height:85vh;margin:auto;background:#242424;color:#c1c2c5;border:1px solid #373a40;border-radius:8px;padding:0;box-shadow:0 20px 60px #0009}
 #drpp-info::backdrop{background:#0009}.drpp-info-heading{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #373a40}.drpp-info-heading h2{margin:0}.drpp-info-tabs{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid #373a40;overflow-x:auto}.drpp-info-tabs button[aria-selected=true]{color:#f1f3f5;border-color:#1971c2;background:#263b50}#drpp-info-content{margin:0;padding:16px;max-height:60vh;overflow:auto;background:#242424;color:#c1c2c5;border:0;white-space:pre-wrap;word-break:break-word;font:13px/1.5 ui-monospace,Consolas,monospace}
