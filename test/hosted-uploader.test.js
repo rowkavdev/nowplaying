@@ -294,6 +294,27 @@ test("disabled card fields and artwork never reach the wire", async () => {
   for (const needle of ["New Order", "api_key", "secret", "10.0.0.2", "positionMs"]) assert.equal(wire.includes(needle), false, needle);
 });
 
+test("waits at least the Retry-After a 429 asks for, up to the retry cap", async () => {
+  const env = setup();
+  let limited = false;
+  const fetchImpl = async (url, init) => {
+    if (limited && url.endsWith("/api/ingest")) {
+      return streamJsonFixture({ ok: false, status: 429, headers: { get: (name) => (name.toLowerCase() === "retry-after" ? "45" : null) }, json: async () => ({ error: "rate_limited" }) });
+    }
+    return env.fetchImpl(url, init);
+  };
+  const up = env.uploader({ fetchImpl });
+  await up.push(track());
+  limited = true;
+  env.advance(1000);
+  assert.equal((await up.push(track({ title: "Ceremony" }))).reason, "rate_limited");
+  limited = false;
+  env.advance(30_000);
+  assert.equal((await up.push(track({ title: "Regret" }))).reason, "backoff");
+  env.advance(15_001);
+  assert.equal((await up.push(track({ title: "Regret" }))).sent, true);
+});
+
 test("backs off when offline and sends only the newest state after", async () => {
   const env = setup();
   const up = env.uploader();
