@@ -274,3 +274,13 @@ test("revoke without a valid bearer token is a 401, and other methods are refuse
     assert.equal((await call(app.port, "GET", "/api/revoke")).status, 405);
   } finally { await app.close(); }
 });
+
+test("sendError copies a ServiceError's headers, such as Retry-After on a 429", async () => {
+  const { sendError } = await import("../hosted/lib/http.js");
+  const { ServiceError } = await import("../hosted/lib/service.js");
+  const headers = new Map();
+  const res = { setHeader: (k, v) => headers.set(k, v), end() {} };
+  sendError(res, new ServiceError(429, "rate_limited", {}, { "retry-after": "7" }));
+  assert.equal(res.statusCode, 429);
+  assert.equal(headers.get("retry-after"), "7");
+});
