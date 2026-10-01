@@ -216,8 +216,8 @@ const buildPage = (startupCopy) => `<!doctype html>
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card</h2>
 <p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in, artwork or Discord details. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
 <p class="row"><label><input type="checkbox" id="hosted-enabled" name="enabled"> Upload my card to the hosted service</label></p>
-<dl id="hosted-details" hidden><dt>Upload</dt><dd id="hosted-state">-</dd><dt>Card link</dt><dd><a id="hosted-url" href="#">-</a> <button type="button" id="copy-url">Copy</button></dd>
-<dt>README</dt><dd><code id="hosted-markdown">-</code> <button type="button" id="copy-markdown">Copy</button></dd></dl>
+<dl id="hosted-details" hidden><dt>Upload</dt><dd id="hosted-state">-</dd><dt>Card link</dt><dd><a id="hosted-url" href="#">-</a> <button type="button" id="copy-url" aria-label="Copy hosted card address">Copy</button></dd>
+<dt>README</dt><dd><code id="hosted-markdown">-</code> <button type="button" id="copy-markdown" aria-label="Copy hosted card README Markdown">Copy</button></dd></dl>
 <p><button type="submit" id="hosted-save">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
