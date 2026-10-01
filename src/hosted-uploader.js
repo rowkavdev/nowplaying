@@ -40,7 +40,7 @@ function validRegistration(value) {
 }
 
 export class HostedUploadError extends Error {
-  constructor(code, status = null, details = {}) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; this.lastSeq = details.lastSeq; this.serverTime = details.serverTime; }
+  constructor(code, status = null, details = {}) { super(code); this.name = "HostedUploadError"; this.code = code; this.status = status; this.lastSeq = details.lastSeq; this.serverTime = details.serverTime; this.retryAfterMs = details.retryAfterMs; }
 }
 
 export function createHostedUploader({
@@ -80,7 +80,11 @@ export function createHostedUploader({
         if (!(error instanceof SyntaxError)) throw error;
         data = null;
       }
-      if (!res.ok) throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, data);
+      if (!res.ok) {
+        const seconds = Number(res.headers?.get?.("retry-after"));
+        const retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
+        throw new HostedUploadError(typeof data?.error === "string" ? data.error : "http_error", res.status, { ...data, retryAfterMs });
+      }
       return data;
     } catch (error) {
       if (error instanceof HostedUploadError) throw error;
@@ -221,7 +225,9 @@ export function createHostedUploader({
         return { sent: false, reason: "unauthorized" };
       }
       failures += 1;
-      retryAt = elapsedNow() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (failures - 1));
+      // A 429's Retry-After raises the wait, never lowers it, and stays under the retry cap.
+      const wait = Math.max(RETRY_BASE_MS * 2 ** (failures - 1), error?.retryAfterMs ?? 0);
+      retryAt = elapsedNow() + Math.min(RETRY_MAX_MS, wait);
       status = { ...status, state: "retrying", lastError: code };
       return { sent: false, reason: code };
     }
