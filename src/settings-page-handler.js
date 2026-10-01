@@ -257,7 +257,7 @@ dl{margin:0 0 12px}code{font:12px/1.4 Consolas,monospace;overflow-wrap:anywhere}
 // existing NowPlaying forms; no Plex-only controls are presented as working.
 const DRPP_SHELL_CSS = `.drpp-shell .drpp-skip{position:fixed;top:-60px;left:12px;background:#242424;color:#f1f3f5;padding:8px 12px;border:2px solid #bda0f8;z-index:20}.drpp-shell .drpp-skip:focus{top:12px}
 .drpp-shell :focus-visible{outline:2px solid #bda0f8;outline-offset:3px}.drpp-shell .drpp-config-scroll:focus-visible,.drpp-shell .drpp-log-lines:focus-visible{outline-offset:-3px}
-body.drpp-shell{margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
+body.drpp-shell{color-scheme:dark;margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
 .drpp-shell *{box-sizing:border-box}.drpp-shell .drpp-header{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px;border-bottom:1px solid #373a40}
 .drpp-heading,.drpp-actions,.drpp-panel-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .drpp-shell h1{font-size:20px;line-height:1.3;margin:0;color:#f1f3f5}.drpp-shell h2{font-size:18px;line-height:1.3;margin:0;color:#f1f3f5}
