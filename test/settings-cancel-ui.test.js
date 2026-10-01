@@ -297,3 +297,29 @@ test("capacity and config-save errors are explained in the Settings sign-in pane
     await signIn;
     assert.equal(node("signin-result").textContent, `Sign-in failed: ${message}`);
   }});
+
+test("successful manual sign-in announces completion outside the hidden panel and restores focus", async () => {
+  const {node,fetches}=page();
+  fetches[0].resolve(json({servers:[]}));await tick();
+  node("server-url").value="http://127.0.0.1:8096";node("server-provider").value="emby";
+  node("manual-connect").click({currentTarget:node("manual-connect")});
+  let focused=false;node("manual-connect").focus=()=>{focused=true;};
+  const start=node("signin-button").click();
+  fetches[1].resolve(json({status:"signed_in",identity:{displayName:"Fixture"}}));await tick();
+  fetches[2].resolve(json({servers:[{provider:"emby",name:"Fixture",baseUrl:"http://127.0.0.1:8096"}]}));await start;
+  assert.equal(node("signin-panel").hidden,true);
+  assert.equal(focused,true,"completed sign-in must not leave focus in the hidden panel");
+  assert.match(node("discovery-state").textContent,/Connected as Fixture/);
+});
+
+test("a failed server refresh after sign-in keeps its warning next to the success message", async () => {
+  const {node,fetches}=page();
+  fetches[0].resolve(json({servers:[]}));await tick();
+  node("server-url").value="http://127.0.0.1:8096";node("server-provider").value="emby";
+  node("manual-connect").click({currentTarget:node("manual-connect")});
+  const start=node("signin-button").click();
+  fetches[1].resolve(json({status:"signed_in",identity:{displayName:"Fixture"}}));await tick();
+  fetches[2].resolve(json({error:"server_error"},false));await start;
+  assert.match(node("discovery-state").textContent,/Connected as Fixture/);
+  assert.match(node("discovery-state").textContent,/Could not load servers\. Reload this page\./);
+});
