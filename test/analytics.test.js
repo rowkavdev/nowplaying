@@ -39,3 +39,8 @@ test("overlapping Discord pings send one request and a failed ping can be retrie
   assert.deepEqual(await analytics.ping(), { sent: false });
   assert.equal(calls, 2);
 });
+
+test("a failing analytics write does not fail the card", async () => {
+  const resolve = withCardAnalytics(async () => "<svg/>", { store: { recordCard: async () => { throw new Error("disk full"); } }, installationId: "anonymous-installation" });
+  assert.equal(await resolve({}), "<svg/>");
+});

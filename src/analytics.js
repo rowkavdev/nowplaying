@@ -6,7 +6,8 @@ export function withCardAnalytics(resolveCard, { store, installationId } = {}) {
   if (typeof installationId !== "string") throw new TypeError("installationId: expected a string");
   return async function resolve(options) {
     const card = await resolveCard(options);
-    await store.recordCard(installationId);
+    // Counting is best effort: a full disk or a damaged counter file must not turn a good card into an error.
+    try { await store.recordCard(installationId); } catch { /* the next call reloads the file */ }
     return card;
   };
 }
