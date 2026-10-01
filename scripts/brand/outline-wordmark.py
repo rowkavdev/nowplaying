@@ -2,18 +2,22 @@
 """One-off: outline the nowplaying wordmark from Inter Bold (SIL OFL 1.1) so the
 SVG masters render the same everywhere without the font installed.
 Usage: outline-wordmark.py path/to/Inter-Bold.ttf  -> prints JSON {now, playing, width}"""
-import json, sys
+import json
+import sys
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 
 font = TTFont(sys.argv[1])
-cmap = font.getBestCmap(); gs = font.getGlyphSet(); upm = font["head"].unitsPerEm
+cmap = font.getBestCmap()
+gs = font.getGlyphSet()
+upm = font["head"].unitsPerEm
 SIZE = 100.0  # cap-height-ish scale: 1 em = 100 units
 scale = SIZE / upm
 TRACK = -2.0  # tight tracking, in output units
 
 def outline(text, x0):
+    """Return the SVG path commands for text starting at x0, and the end x."""
     pen = SVGPathPen(gs, ntos=lambda v: f"{v:.2f}".rstrip("0").rstrip("."))
     x = x0
     for ch in text:
