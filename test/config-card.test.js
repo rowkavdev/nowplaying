@@ -95,3 +95,11 @@ test("flat look settings are saved, checked, and reach the renderer", () => {
     assert.throws(() => serializeSetupConfig({ ...BASE, card: bad }), TypeError);
   }
 });
+
+test("fontStack is saved, an empty one is dropped, and unsafe ones are refused", () => {
+  const config = parseAppConfig(serializeSetupConfig({ ...BASE, card: { fontStack: "Inter, Segoe UI" } }));
+  assert.equal(config.card.fontStack, "Inter, Segoe UI");
+  assert.deepEqual(JSON.parse(JSON.stringify(cardRenderOptions(config.card))), { layout: { fontStack: "Inter, Segoe UI" } });
+  assert.equal(JSON.parse(serializeSetupConfig({ ...BASE, card: { fontStack: "" } })).card, undefined);
+  assert.throws(() => serializeSetupConfig({ ...BASE, card: { fontStack: 'Inter"; x' } }), TypeError);
+});

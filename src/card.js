@@ -30,7 +30,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
-  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"]);
+  const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background", "fontStack"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
   const radius = bounded(layout.radius, 10, 0, 24, "layout.radius");
@@ -40,6 +40,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const FONTS = { system: "ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif", serif: "ui-serif,Georgia,Cambria,Times New Roman,serif", mono: "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace", humanist: "Segoe UI,Helvetica Neue,Arial,sans-serif" };
   const oneOf = (value, fallback, choices, path) => { const v = value ?? fallback; if (!choices.includes(v)) throw new TypeError(`${path}: expected ${choices.join(", ")}`); return v; };
   const fontFamily = oneOf(layout.fontFamily, "system", Object.keys(FONTS), "layout.fontFamily");
+  // A custom stack replaces the named font. Names only: letters, digits,
+  // spaces, dots and hyphens, up to five, so nothing can leave the attribute.
+  if (layout.fontStack !== undefined && !isFontStack(layout.fontStack)) throw new TypeError("layout.fontStack: expected up to 5 plain font names separated by commas");
   const statusStyle = oneOf(layout.statusStyle, "plain", ["plain", "caps", "dot"], "layout.statusStyle");
   const artShape = oneOf(layout.artShape, "square", ["square", "rounded", "circle"], "layout.artShape");
   const progressStyle = oneOf(layout.progressStyle, "square", ["square", "rounded"], "layout.progressStyle");
@@ -149,7 +152,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     `<clipPath id="txt"><rect x="${contentX - 2}" y="0" width="${contentWidth + 4}" height="${height}"/></clipPath>`,
     hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${artRx}"/></clipPath>` : "",
   ].join("");
-  const font = `font-family="${FONTS[fontFamily]}"`;
+  const font = `font-family="${layout.fontStack !== undefined ? `${layout.fontStack.split(",").map((name) => name.trim()).join(",")},${FONTS.system}` : FONTS[fontFamily]}"`;
 
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -168,6 +171,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
 }
 
 
+export function isFontStack(value) { return typeof value === "string" && value.length <= 80 && /^[A-Za-z0-9][A-Za-z0-9 .-]*(,\s*[A-Za-z0-9][A-Za-z0-9 .-]*){0,4}$/.test(value); }
 function bounded(value, fallback, min, max, path) { const resolved = value ?? fallback; if (!Number.isInteger(resolved) || resolved < min || resolved > max) throw new RangeError(`${path}: expected an integer from ${min} to ${max}`); return resolved; }
 function progressWidth(presence, available) { if (!(presence.durationMs > 0) || !Number.isFinite(presence.positionMs)) return 0; return Math.round(available * Math.min(1, Math.max(0, presence.positionMs / presence.durationMs))); }
 // TV and films (#143): an episode reads "Show Name" / "S02E05 · Episode

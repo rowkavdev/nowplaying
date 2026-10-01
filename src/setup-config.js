@@ -1,4 +1,5 @@
 import { createProviderIdentity } from "./provider-identity.js";
+import { isFontStack } from "./card.js";
 import { isServerUrl } from "./setup.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 
@@ -35,18 +36,22 @@ const ARTWORK_POSITIONS = new Set(["left", "right"]);
 const TEXT_ALIGNS = new Set(["start", "middle", "end"]);
 const CARD_CHOICES = Object.freeze({ progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"], fontFamily: ["system", "serif", "mono", "humanist"], statusStyle: ["plain", "caps", "dot"], artShape: ["square", "rounded", "circle"], progressStyle: ["square", "rounded"], border: ["none", "thin"], background: ["solid", "transparent"] });
 const CARD_FIELDS = Object.freeze(["state", "title", "subtitle"]);
-const LAYOUT_KEYS = Object.freeze(["padding", "radius", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background"]);
+const LAYOUT_KEYS = Object.freeze(["padding", "radius", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background", "fontStack"]);
 export function normalizeCard(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("setup config.card must be an object");
   const card = {};
   for (const key of Object.keys(value)) {
     const item = value[key];
+    // An empty custom font box means "use the named font": nothing is stored.
+    if (key === "fontStack" && item === "") continue;
     if (key === "theme") {
       if (!CARD_THEMES.has(item)) throw new TypeError("setup config.card.theme must be midnight-blue, paper or compact");
     } else if (key === "artworkPosition") {
       if (!ARTWORK_POSITIONS.has(item)) throw new TypeError("setup config.card.artworkPosition must be left or right");
     } else if (Object.hasOwn(CARD_CHOICES, key)) {
       if (!CARD_CHOICES[key].includes(item)) throw new TypeError(`setup config.card.${key} must be ${CARD_CHOICES[key].join(" or ")}`);
+    } else if (key === "fontStack") {
+      if (!isFontStack(item)) throw new TypeError("setup config.card.fontStack must be up to 5 plain font names separated by commas");
     } else if (key === "textAlign") {
       if (!TEXT_ALIGNS.has(item)) throw new TypeError("setup config.card.textAlign must be start, middle or end");
     } else if (key === "fieldOrder") {

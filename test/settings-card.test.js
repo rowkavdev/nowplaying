@@ -9,7 +9,7 @@ import { serializeSetupConfig } from "../src/setup-config.js";
 import { createSettingsPageHandler } from "../src/settings-page-handler.js";
 
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialStored: true };
-const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", artworkTint: true, fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin", background: "solid" };
+const DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", artworkTint: true, fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin", background: "solid", fontStack: "" };
 
 test("the card view shows renderer defaults for configs without a card section", () => {
   assert.deepEqual({ ...cardSettingsView(parseAppConfig(serializeSetupConfig(BASE))) }, DEFAULTS);
@@ -20,7 +20,7 @@ test("the card view shows renderer defaults for configs without a card section",
 test("card changes are saved in full and bad ones are refused", () => {
   const before = parseAppConfig(serializeSetupConfig(BASE));
   const { config } = applyCardChanges(before, { theme: "paper", radius: 0 });
-  const { artworkWidth, artworkHeight, ...rest } = DEFAULTS;
+  const { artworkWidth, artworkHeight, fontStack, ...rest } = DEFAULTS;
   assert.deepEqual({ ...config.card }, { ...rest, theme: "paper", radius: 0 });
   assert.deepEqual({ ...config.discord }, { ...before.discord });
   for (const bad of [{}, { colors: {} }, { radius: 99 }, { theme: "neon" }, { showProgress: 1 }, { artworkTint: "no" }]) assert.throws(() => applyCardChanges(before, bad), TypeError, JSON.stringify(bad));
@@ -117,7 +117,7 @@ test("the running app applies a card save to /card.svg without a restart", async
 test("the page has a Card section with a live preview and no inline script or style", async () => {
   const h = handler();
   const page = (await h({ url: "/settings" })).body;
-  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-fontFamily", "card-statusStyle", "card-artShape", "card-progressStyle", "card-border", "card-background", "card-progressWidth", "card-direction", "card-preview", "card-artwork-scale-note", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
+  for (const id of ["card-theme", "card-width", "card-padding", "card-radius", "card-showProgress", "card-progressHeight", "card-artworkPosition", "card-artworkWidth", "card-artworkHeight", "card-fieldOrder", "card-textAlign", "card-progressPosition", "card-fontFamily", "card-statusStyle", "card-artShape", "card-progressStyle", "card-border", "card-background", "card-fontStack", "card-progressWidth", "card-direction", "card-preview", "card-artwork-scale-note", "card-save", "card-reset"]) assert.match(page, new RegExp(`id="${id}"`), id);
   for (const value of ["midnight-blue", "paper", "compact"]) assert.match(page, new RegExp(`<option value="${value}">`));
   assert.match(page, /<input type="number" id="card-width" min="280" max="800"/);
   assert.equal(page.match(/<option value="(?:state|title|subtitle),(?:state|title|subtitle),(?:state|title|subtitle)">/g).length, 6);
