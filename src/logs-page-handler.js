@@ -5,13 +5,13 @@
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying logs</title><link rel="stylesheet" href="/status-ui.css"><link rel="stylesheet" href="/logs.css"></head>
-<body class="status-ui"><div class="app-shell"><aside class="sidebar"><a class="app-name" href="/">nowplaying</a><nav aria-label="Main"><a href="/">Status</a><a href="/settings">Settings</a><span aria-current="page">Logs</span></nav><p class="sidebar-note">On this device</p></aside>
-<main><header class="page-heading"><h1>Logs</h1></header><p class="hint logs-intro">Newest first. Updates while the app is running.</p>
+<body class="status-ui"><a class="skip-link" href="#main-content">Skip to content</a><div class="app-shell"><aside class="sidebar"><a class="app-name" href="/">nowplaying</a><nav aria-label="Main"><a href="/">Status</a><a href="/settings">Settings</a><span aria-current="page">Logs</span></nav><p class="sidebar-note">On this device</p></aside>
+<main id="main-content" tabindex="-1"><header class="page-heading"><h1>Logs</h1></header><p class="hint logs-intro">Newest first. Updates while the app is running.</p>
 <section aria-labelledby="h-log"><h2 id="h-log">Recent events</h2>
 <p class="row"><label for="level">Show</label>
 <select id="level"><option value="info">Everything</option><option value="warn">Warnings and errors</option><option value="error">Errors only</option></select>
 <button type="button" id="copy-log">Copy</button> <span id="log-result" role="status" aria-live="polite"></span></p>
-<p id="log-empty" hidden>Nothing logged yet.</p>
+<p id="log-empty" role="status" aria-live="polite" hidden>Nothing logged yet.</p>
 <div class="log-table"><table id="log"><thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Part</th><th scope="col">Event</th></tr></thead><tbody></tbody></table></div>
 <p class="hint">The log never includes your server address, user name, what you're playing or sign-in details. Use Copy diagnostics on the Status page for bug reports.</p>
 </section>
@@ -47,7 +47,9 @@ function render() {
     cell(tr, e.status + (e.code ? " (" + e.code + ")" : ""));
     body.appendChild(tr);
   }
-  document.getElementById("log-empty").hidden = rows.length > 0;
+  const empty = document.getElementById("log-empty");
+  empty.hidden = rows.length > 0;
+  empty.textContent = events.length === 0 ? "Nothing logged yet." : level.value === "error" ? "No errors in recent events." : "No warnings or errors in recent events.";
 }
 async function load() {
   try {
@@ -55,8 +57,9 @@ async function load() {
     if (!res.ok) throw new Error(String(res.status));
     events = (await res.json()).events;
     render();
+    say("", "");
   } catch {
-    say("Can't reach NowPlaying. It may have been closed.", "bad");
+    say("Can't reach NowPlaying. Displayed events may be out of date.", "bad");
   }
 }
 level.addEventListener("change", render);
