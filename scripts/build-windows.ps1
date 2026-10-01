@@ -14,7 +14,8 @@ $Bundle = Join-Path $Root "dist/windows/nowplaying-v$Version-windows-x64"
 Remove-Item (Join-Path $Root 'dist/windows') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item (Join-Path $Bundle 'runtime') -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $Bundle 'app') -ItemType Directory -Force | Out-Null
-& (Join-Path $Root 'scripts/generate-windows-icon.ps1')
+# The app icon is a committed brand asset (scripts/brand/render.mjs builds it).
+if (-not (Test-Path (Join-Path $Root 'assets/nowplaying.ico'))) { throw 'assets/nowplaying.ico is missing; run node scripts/brand/render.mjs' }
 
 
 

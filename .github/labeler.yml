@@ -131,7 +131,7 @@ area:installer:
           - "scripts/windows-setup.ps1"
           - "scripts/windows-entry.js"
           - "scripts/nowplaying.js"
-          - "scripts/generate-windows-icon.ps1"
+          - "scripts/brand/**"
           - "src/windows-shutdown.js"
           - "assets/**"
           - "test/windows-installer*.js"
