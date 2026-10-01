@@ -427,6 +427,12 @@ async function refreshVersion() {
     }
   } catch { document.getElementById("drpp-version").textContent = "Version unavailable"; }
 }
+// Setup notice navigation must also work after Media servers is collapsed.
+document.getElementById("drpp-setup-action").addEventListener("click", (event) => {
+  event.preventDefault();
+  document.getElementById("servers-section").closest("details").open = true;
+  document.getElementById("scan-subnet").focus();
+});
 // DRPP InfoModal: local, read-only NOTICE/README/LICENSE tabs.
 const infoDialog = document.getElementById("drpp-info");
 const infoContent = document.getElementById("drpp-info-content");
