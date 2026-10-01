@@ -121,7 +121,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="serif">Serif</option>
 <option value="mono">Monospace</option>
 </select></p>
-<p class="row"><label for="card-fontStack">Custom font</label><input type="text" id="card-fontStack" maxlength="80" placeholder="e.g. Inter, Segoe UI" autocomplete="off"> <span class="unit">optional, overrides Font</span></p>
+<p class="row"><label for="card-fontStack">Custom font</label><input type="text" id="card-fontStack" aria-describedby="card-font-help card-font-error" maxlength="80" placeholder="e.g. Inter, Segoe UI" autocomplete="off"> <span class="unit" id="card-font-help">optional, overrides Font; up to 5 names, no quotes</span></p><p id="card-font-error" class="bad" role="status" aria-live="polite" hidden></p>
 <p class="row"><label for="card-statusStyle">Status line</label>
 <select id="card-statusStyle">
 <option value="plain">Plain text</option>
@@ -262,7 +262,8 @@ body.drpp-shell{margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-
 .drpp-heading,.drpp-actions,.drpp-panel-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .drpp-shell h1{font-size:20px;line-height:1.3;margin:0;color:#f1f3f5}.drpp-shell h2{font-size:18px;line-height:1.3;margin:0;color:#f1f3f5}
 .drpp-divider{height:26px;width:1px;background:#373a40;flex:none}.drpp-actions a{padding:8px 12px;border:1px solid #373a40;border-radius:4px;text-decoration:none;color:inherit}.drpp-actions a:hover{background:#2e2e2e}
-.drpp-shell button,.drpp-shell select,.drpp-shell input[type=number],.drpp-shell input[type=search]{font:inherit;background:#2e2e2e;color:#c1c2c5;border:1px solid #373a40;border-radius:4px;padding:7px 12px}
+.drpp-shell button,.drpp-shell select,.drpp-shell input[type=number],.drpp-shell input[type=search],.drpp-shell input[type=text]{font:inherit;background:#2e2e2e;color:#c1c2c5;border:1px solid #373a40;border-radius:4px;padding:7px 12px}
+.drpp-shell #card-font-error{color:#ffa552;margin:0 0 12px}.drpp-shell #card-font-help{color:#a8a9ae}.drpp-shell #card-fontStack{max-width:100%}
 .drpp-shell button:not(:disabled){cursor:pointer}.drpp-shell button:disabled{opacity:.55}.drpp-shell button[type=submit]{background:#1971c2;color:white;border-color:#1971c2}
 .drpp-columns{display:flex;height:calc(100vh - 79px);min-height:0}.drpp-config,.drpp-logs{width:50%;min-width:0;display:flex;flex-direction:column}
 .drpp-config{max-width:none;padding:0;margin:0;border-right:1px solid #373a40}.drpp-panel-heading{padding:16px;min-height:69px;border-bottom:1px solid #373a40;flex:none}
@@ -553,8 +554,11 @@ function cardValues() {
   for (const key of Object.keys(CARD_NUMBERS)) values[key] = ART_AUTO[key] ? null : Number(cardField(key).value);
   return values;
 }
+function customFontValid(value) {
+  return !value || (value.length <= 80 && /^[A-Za-z0-9][A-Za-z0-9 .-]*(,\\s*[A-Za-z0-9][A-Za-z0-9 .-]*){0,4}$/.test(value));
+}
 function cardValid(values) {
-  return Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => (ART_AUTO[key] && values[key] === null) || (Number.isInteger(values[key]) && values[key] >= min && values[key] <= max));
+  return customFontValid(values.fontStack) && Object.entries(CARD_NUMBERS).every(([key, [min, max]]) => (ART_AUTO[key] && values[key] === null) || (Number.isInteger(values[key]) && values[key] >= min && values[key] <= max));
 }
 // Read the actual SVG returned for this preview, not an assumed media kind:
 // live movies and episodes use different automatic artwork widths from tracks.
@@ -580,7 +584,12 @@ function cardChanged() {
   card.scaleNote.hidden = true;
   previewTimer = setTimeout(async () => {
     const values = cardValues();
-    if (!cardValid(values)) { cardSay("Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
+    const fontInvalid = !customFontValid(values.fontStack);
+    const fontError = document.getElementById("card-font-error");
+    fontError.hidden = !fontInvalid;
+    fontError.textContent = fontInvalid ? "Use up to 5 plain font names separated by commas, without quotes or semicolons (80 characters max)." : "";
+    cardField("fontStack").setAttribute("aria-invalid", String(fontInvalid));
+    if (!cardValid(values)) { cardSay(fontInvalid ? fontError.textContent : "Width must be a whole number from 280 to 800.", "bad"); card.save.disabled = true; return; }
     card.save.disabled = false;
     if (document.getElementById("card-result").className === "bad") cardSay("");
     const query = new URLSearchParams({ ...values, showProgress: values.showProgress ? "1" : "0", fieldOrder: values.fieldOrder.join(",") });
