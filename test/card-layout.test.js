@@ -98,3 +98,12 @@ test("show.time hides the elapsed and total clock but keeps the bar", async () =
   assert.match(hidden, /height="4"/);
   assert.throws(() => renderCard(presence, { show: { time: "no" } }), TypeError);
 });
+
+test("layout.background transparent leaves the card body unfilled", async () => {
+  const { renderCard } = await import("../src/card.js");
+  const presence = { state: "playing", kind: "track", title: "Song", subtitle: "Artist", positionMs: 1, durationMs: 2 };
+  assert.match(renderCard(presence), /<rect x="0.5" y="0.5"[^>]* fill="#0d1117"/);
+  const clear = renderCard(presence, { layout: { background: "transparent" } });
+  assert.match(clear, /<rect x="0.5" y="0.5"[^>]* fill="none"/);
+  assert.throws(() => renderCard(presence, { layout: { background: "blur" } }), TypeError);
+});
