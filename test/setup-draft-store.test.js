@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { advanceSetupDraft, createSetupDraft } from "../src/setup.js";
+import { advanceSetupDraft, createSetupDraft, serializeSetupDraft } from "../src/setup.js";
 import { createSetupDraftStore } from "../src/setup-draft-store.js";
 
 async function store() {
@@ -53,4 +53,36 @@ test("clear removes the draft so a completed or cancelled setup starts over", as
   await drafts.clear();
   assert.equal((await drafts.load()).resumed, false);
   assert.throws(() => createSetupDraftStore(), /file is required/);
+});
+
+function sizedDraft(bytes) {
+  const make = n => createSetupDraft({ step: "signin", provider: "jellyfin",
+    account: { provider: "jellyfin", id: "u1", displayName: "Test", serverUrl: `https://media.example/${"a".repeat(n)}` },
+    servers: [{ provider: "emby", id: "u2", displayName: "Test", serverUrl: `https://other.example/${"b".repeat(1800)}` }] });
+  return make(bytes - Buffer.byteLength(serializeSetupDraft(make(0))));
+}
+
+test("every accepted draft size round-trips and one byte over is rejected without deleting the saved draft", async () => {
+  for (const bytes of [4095, 4096]) {
+    const drafts = await store();
+    const draft = sizedDraft(bytes);
+    assert.equal(Buffer.byteLength(serializeSetupDraft(draft)), bytes);
+    await drafts.save(draft);
+    const loaded = await drafts.load();
+    assert.equal(loaded.discarded, false);
+    assert.deepEqual(loaded.draft, draft);
+    assert.deepEqual((await createSetupDraftStore({ file: drafts.file }).load()).draft, draft);
+  }
+  const drafts = await store();
+  const saved = sizedDraft(4096);
+  await drafts.save(saved);
+  await assert.rejects(drafts.save(sizedDraft(4097)), /too large/);
+  assert.deepEqual((await drafts.load()).draft, saved);
+});
+
+test("an oversized draft file is still discarded on load", async () => {
+  const drafts = await store();
+  await drafts.save(createSetupDraft());
+  await writeFile(drafts.file, `${serializeSetupDraft(sizedDraft(4096))} \n`);
+  assert.equal((await drafts.load()).discarded, true);
 });
