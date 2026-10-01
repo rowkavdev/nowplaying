@@ -16,9 +16,11 @@ Bind to `127.0.0.1` behind a TLS reverse proxy unless the process is isolated by
 
 - `GET` or `HEAD /card.svg` returns the SVG card.
 - `GET` or `HEAD /healthz` returns `ok` when the HTTP process is responsive.
-- Public card options are allowlisted: `theme`, `width`, and comma-separated `show` fields.
+- Public card options are allowlisted: `theme`, `width`, and comma-separated `show` fields. Add `notime` to `show` to hide the elapsed and total clock.
 
-Layout options, also set only in the card URL: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`). Out-of-range or repeated values get a 400 `invalid_layout`. The app never sends these; they exist for hand-tuned public cards.
+Layout options, also set only in the card URL: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`).
+
+Look options, also card URL only: `fontFamily` (`system`/`serif`/`mono`/`humanist`), `fontStack` (a custom font name list, names only), `statusStyle` (`plain`/`caps`/`dot`), `progressStyle` (`square`/`rounded`), `border` (`none`/`thin`) and `background` (`solid`/`transparent`). The hosted card never draws artwork, so the artwork options do not apply to it. Out-of-range or repeated values get a 400 `invalid_layout`. These options belong to the card URL only; the push payload from the app never carries them. The app's Settings page does add your saved look and layout choices to the card link it generates for you, and you can also edit them by hand.
 
 Successful cards carry a strong ETag and a short public cache lifetime. Resolver and adapter failures are generic and `no-store`.
 
