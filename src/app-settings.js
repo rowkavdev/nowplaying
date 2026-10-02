@@ -3,12 +3,13 @@ import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { parseAppConfig } from "./app-config.js";
 import { normalizeCard, serializeSetupConfig } from "./setup-config.js";
 import { IDLE_BEHAVIORS } from "./discord-presence.js";
+import { validateTemplate } from "./template.js";
 
 // Settings the web UI can change while the app runs (#253). Each change is
 // checked against the same rules as setup, then config.json is replaced in one
 // step (temp file + rename) so a crash never leaves half a file.
 
-const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior"]);
+const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior", "name", "statusDisplayType"]);
 const HOSTED_KEYS = new Set(["enabled"]);
 const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
@@ -20,6 +21,8 @@ export function discordSettingsView(config) {
     artworkLookup: config.discord?.artworkLookup ?? "off",
     artworkUpload: config.discord?.artworkUpload !== false,
     idleBehavior: config.discord?.idleBehavior ?? "clear",
+    name: config.discord?.name ?? "",
+    statusDisplayType: config.discord?.statusDisplayType ?? "name",
   });
 }
 
@@ -91,6 +94,8 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     discordArtworkLookup: discord.artworkLookup,
     discordArtworkUpload: discord.artworkUpload,
     discordTimestamps: discord.timestamps,
+    discordName: discord.name,
+    discordStatusDisplayType: discord.statusDisplayType,
     ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card ? { card } : {}),
@@ -104,6 +109,9 @@ export function applyDiscordChanges(config, changes) {
   checkChanges(changes, DISCORD_KEYS, "discord");
   if (changes.idleBehavior !== undefined && !IDLE_BEHAVIORS.includes(changes.idleBehavior)) throw new TypeError("discord settings: idleBehavior is invalid");
   if (changes.artworkUpload !== undefined && typeof changes.artworkUpload !== "boolean") throw new TypeError("discord settings: artworkUpload must be true or false");
+  if (changes.name !== undefined && (typeof changes.name !== "string" || changes.name.length > 128)) throw new TypeError("discord settings: name must be text of at most 128 characters");
+  if (changes.name !== undefined) validateTemplate(changes.name, "discord settings: status text");
+  if (changes.statusDisplayType !== undefined && !["name", "state", "details"].includes(changes.statusDisplayType)) throw new TypeError("discord settings: statusDisplayType is invalid");
   return rewrite(config, { discord: { ...discordSettingsView(config), ...changes } });
 }
 

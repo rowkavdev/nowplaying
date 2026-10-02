@@ -2,9 +2,11 @@ import { createProviderIdentity } from "./provider-identity.js";
 import { isFontStack } from "./card.js";
 import { isServerUrl } from "./setup.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
+import { validateTemplate } from "./template.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
+const STATUS_DISPLAY_TYPES = new Set(["name", "state", "details"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress"];
 const PRIVACY_KINDS = new Set(["movie", "episode", "track"]);
@@ -124,6 +126,13 @@ export function createSetupConfig(input = {}) {
   if (input.discordTimestamps !== undefined && !TIMESTAMP_MODES.has(input.discordTimestamps)) {
     throw new TypeError("setup config.discordTimestamps must be elapsed, remaining, both or none");
   }
+  if (input.discordName !== undefined && (typeof input.discordName !== "string" || input.discordName.length > 128)) {
+    throw new TypeError("setup config.discordName must be a string of at most 128 characters");
+  }
+  if (input.discordName !== undefined) validateTemplate(input.discordName, "setup config.discordName");
+  if (input.discordStatusDisplayType !== undefined && !STATUS_DISPLAY_TYPES.has(input.discordStatusDisplayType)) {
+    throw new TypeError("setup config.discordStatusDisplayType must be name, state or details");
+  }
   if (input.hostedEnabled !== undefined && typeof input.hostedEnabled !== "boolean") {
     throw new TypeError("setup config.hostedEnabled must be a boolean");
   }
@@ -151,6 +160,9 @@ export function createSetupConfig(input = {}) {
       // Discord timer (set from the settings page): elapsed, remaining, both
       // or none. Left out means "both", so setup's own output is unchanged.
       ...(input.discordTimestamps !== undefined ? { timestamps: input.discordTimestamps } : {}),
+      // The Discord header text template and which field it shows (left out = defaults).
+      ...(input.discordName ? { name: input.discordName } : {}),
+      ...(input.discordStatusDisplayType !== undefined && input.discordStatusDisplayType !== "name" ? { statusDisplayType: input.discordStatusDisplayType } : {}),
     }),
     // Hosted card upload (#140) is off unless the user turns it on.
     ...(input.hostedEnabled !== undefined || hostedUrl ? {
