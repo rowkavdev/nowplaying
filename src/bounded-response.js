@@ -1,5 +1,10 @@
 // Read an HTTP response body with a hard byte cap, so a hostile or broken
 // server can't make the updater buffer an unbounded amount of memory.
+// Start a cancel without waiting for it or letting it replace the real error.
+function cancelQuietly(target) {
+  try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch { /* ignore */ }
+}
+
 export async function readBoundedBytes(response, limit, label = "response") {
   if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("limit: expected a positive integer");
   const rawLength = response?.headers?.get?.("content-length");
@@ -8,7 +13,7 @@ export async function readBoundedBytes(response, limit, label = "response") {
   if (Number.isFinite(declared) && declared > limit) {
     // Release the connection instead of leaving the unread body open.
     // Not awaited: a stream whose cancel() never settles must not hold back the rejection.
-    Promise.resolve(body?.cancel?.()).catch(() => {});
+    cancelQuietly(body);
     throw new Error(`${label} is too large`);
   }
   if (body && typeof body.getReader === "function") {
@@ -24,7 +29,7 @@ export async function readBoundedBytes(response, limit, label = "response") {
         chunks.push(value);
       }
     } catch (error) {
-      await reader.cancel().catch(() => {});
+      cancelQuietly(reader);
       throw error;
     }
     const bytes = new Uint8Array(total);

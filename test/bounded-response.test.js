@@ -79,3 +79,18 @@ test("a hanging body cancel does not delay the size rejection", async () => {
   ]);
   assert.equal(outcome, "Artwork is too large");
 });
+
+test("a throwing body cancel does not replace the size error", async () => {
+  const body = { cancel() { throw new Error("cancel exploded"); } };
+  const response = { headers: new Headers({ "content-length": "999999" }), body };
+  await assert.rejects(readBoundedBytes(response, 1000, "Artwork"), /Artwork is too large/);
+});
+
+test("a hanging reader cancel does not delay a mid-read overflow rejection", async () => {
+  const body = new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(600)); }, cancel() { return new Promise(() => {}); } });
+  const outcome = await Promise.race([
+    readBoundedBytes(new Response(body), 1000, "Artwork").then(() => "resolved", (error) => error.message),
+    new Promise((resolve) => setTimeout(() => resolve("hung"), 500)),
+  ]);
+  assert.equal(outcome, "Artwork is too large");
+});
