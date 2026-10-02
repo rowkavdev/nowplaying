@@ -27,7 +27,16 @@ export function createRotatingLog({ file, maxBytes = 1024 * 1024, retain = 3 } =
   if (!Number.isInteger(maxBytes) || maxBytes < 1024 || maxBytes > 50 * 1024 * 1024) throw new TypeError("log maxBytes is invalid");
   if (!Number.isInteger(retain) || retain < 1 || retain > 10) throw new TypeError("log retain is invalid");
 
-  async function write(event) {
+  // Writes share one queue: size check, rotate and append must not interleave,
+  // or concurrent events all see the old size and the cap is never enforced.
+  let queue = Promise.resolve();
+  function write(event) {
+    const run = queue.then(() => writeNow(event));
+    queue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  async function writeNow(event) {
     const line = serializeLogEvent(event);
     if (Buffer.byteLength(line) > maxBytes) throw new Error("log entry exceeds maxBytes");
     await mkdir(dirname(file), { recursive: true });

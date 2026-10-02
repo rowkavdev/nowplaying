@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createRotatingLog, serializeLogEvent, windowsLogPath } from "../src/app-log.js";
@@ -53,4 +53,15 @@ test("validates size and retention bounds", () => {
   assert.throws(() => createRotatingLog({ file: "x", maxBytes: 1023 }), /maxBytes is invalid/);
   assert.throws(() => createRotatingLog({ file: "x", retain: 0 }), /retain is invalid/);
   assert.throws(() => createRotatingLog(), /file is required/);
+});
+
+test("concurrent writes still respect maxBytes and keep every event", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "np-log-race-"));
+  const file = join(dir, "n.log");
+  const log = createRotatingLog({ file, maxBytes: 1024, retain: 3 });
+  await Promise.all(Array.from({ length: 40 }, (_, i) => log.write({ time: new Date(i * 1000), level: "info", component: "tray", status: "ok", code: `C${i}` })));
+  assert.ok((await stat(file)).size <= 1024);
+  let lines = 0;
+  for (const name of await readdir(dir)) lines += (await readFile(join(dir, name), "utf8")).split("\n").filter(Boolean).length;
+  assert.ok(lines >= 12, `kept ${lines}`);
 });
