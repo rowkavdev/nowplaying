@@ -76,3 +76,9 @@ test("rejects unknown and invalid policy values", () => {
     { message: "privacy.hideProgress: expected a boolean" },
   );
 });
+
+test("hidden titles also hide the artist, so {artist} templates cannot leak it", () => {
+  const track = createPresence({ state: "playing", kind: "track", title: "Night Drive", subtitle: "The Fixtures", artist: "The Fixtures", updatedAt: "2026-10-02T12:00:00Z" });
+  assert.equal(applyPrivacy(track, { redactTitles: true }).artist, null);
+  assert.equal(applyPrivacy(track, {}).artist, "The Fixtures");
+});
