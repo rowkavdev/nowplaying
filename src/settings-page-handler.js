@@ -80,7 +80,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="off">Show the NowPlaying icon</option>
 </select></p>
 <p class="hint" id="discord-artwork-help">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
-<p><button type="submit" id="discord-save">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
+<p><button type="submit" id="discord-save" aria-label="Save Discord settings">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
 <p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
@@ -97,7 +97,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <p class="row"><label><input type="checkbox" id="privacy-hideMovies"> Movies</label> <label><input type="checkbox" id="privacy-hideEpisodes"> TV episodes</label> <label><input type="checkbox" id="privacy-hideMusic"> Music</label></p>
 </fieldset>
 <p class="hint">Hidden kinds show as nothing playing. With titles or album art hidden, covers are never looked up on MusicBrainz.</p>
-<p><button type="submit" id="privacy-save">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
+<p><button type="submit" id="privacy-save" aria-label="Save privacy settings">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
@@ -190,7 +190,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="auto">Match the title</option>
 </select></p>
 <div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings" hidden><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
-<p><button type="submit" id="card-save">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
+<p><button type="submit" id="card-save" aria-label="Save card settings">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
@@ -207,7 +207,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">${startupCopy.heading}</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> ${startupCopy.label}</label></p>
-<p><button type="submit" id="startup-save">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
+<p><button type="submit" id="startup-save" aria-label="Save startup settings">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
@@ -218,7 +218,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <p class="row"><label><input type="checkbox" id="hosted-enabled" name="enabled"> Upload my card to the hosted service</label></p>
 <dl id="hosted-details" hidden><dt>Upload</dt><dd id="hosted-state">-</dd><dt>Card link</dt><dd><a id="hosted-url" href="#">-</a> <button type="button" id="copy-url" aria-label="Copy hosted card address">Copy</button></dd>
 <dt>README</dt><dd><code id="hosted-markdown">-</code> <button type="button" id="copy-markdown" aria-label="Copy hosted card README Markdown">Copy</button></dd></dl>
-<p><button type="submit" id="hosted-save">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
+<p><button type="submit" id="hosted-save" aria-label="Save hosted card settings">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
