@@ -71,6 +71,15 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="show">Show that nothing is playing</option>
 <option value="recent">Show what I played last</option>
 </select></p>
+<p class="row"><label for="discord-name">Status text</label>
+<input type="text" id="discord-name" name="name" maxlength="128" placeholder="{artist} on {service}" aria-describedby="discord-name-help"></p>
+<p class="hint" id="discord-name-help">What Discord shows in your status, next to your name. Leave it empty for "{artist} on {service}". Fields you can use: {artist}, {title}, {subtitle}, {album}, {year}, {series}, {season}, {episode}, {episodeCode}, {service} (Spotify, Navidrome and so on), {provider}, {mediaType}, {state}, {stateLabel}, {position}, {duration} and {progressPercent}. Anything else you type is kept as it is. To show a literal brace, write {{ or }}.</p>
+<p class="row"><label for="discord-status-type">Status shows</label>
+<select id="discord-status-type" name="statusDisplayType">
+<option value="name">The status text above</option>
+<option value="state">The second line (artist or episode)</option>
+<option value="details">The first line (title)</option>
+</select></p>
 <p class="row"><label for="discord-upload">Show my server's cover</label>
 <input type="checkbox" id="discord-upload" name="artworkUpload" aria-describedby="discord-upload-help"></p>
 <p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to litterbox.catbox.moe, where it is kept for 72 hours. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
@@ -481,11 +490,11 @@ refreshVersion(); refreshLogs(); setInterval(refreshLogs, 3000); setInterval(ref
 
 const buildScript = (startupCopy) => `"use strict";
 const form = document.getElementById("discord-form");
-const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), artworkUpload: document.getElementById("discord-upload"), idleBehavior: document.getElementById("discord-idle") };
+const fields = { enabled: document.getElementById("discord-enabled"), timestamps: document.getElementById("discord-timestamps"), artworkLookup: document.getElementById("discord-artwork"), artworkUpload: document.getElementById("discord-upload"), idleBehavior: document.getElementById("discord-idle"), name: document.getElementById("discord-name"), statusDisplayType: document.getElementById("discord-status-type") };
 const save = document.getElementById("discord-save");
 function say(text, tone) { const el = document.getElementById("discord-result"); el.textContent = text; el.className = tone || ""; }
-function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; fields.artworkUpload.checked = d.artworkUpload !== false; fields.idleBehavior.value = d.idleBehavior || "clear"; toggle(); }
-function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = fields.artworkUpload.disabled = fields.idleBehavior.disabled = !fields.enabled.checked; }
+function show(d) { fields.enabled.checked = d.enabled; fields.timestamps.value = d.timestamps; fields.artworkLookup.value = d.artworkLookup; fields.artworkUpload.checked = d.artworkUpload !== false; fields.idleBehavior.value = d.idleBehavior || "clear"; fields.name.value = d.name || ""; fields.statusDisplayType.value = d.statusDisplayType || "name"; toggle(); }
+function toggle() { fields.timestamps.disabled = fields.artworkLookup.disabled = fields.artworkUpload.disabled = fields.idleBehavior.disabled = fields.name.disabled = fields.statusDisplayType.disabled = !fields.enabled.checked; }
 fields.enabled.addEventListener("change", toggle);
 async function load() {
   try {
@@ -510,13 +519,13 @@ form.addEventListener("submit", async (event) => {
   save.disabled = true;
   say("Saving...", "warn");
   try {
-    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value, artworkUpload: fields.artworkUpload.checked, idleBehavior: fields.idleBehavior.value } };
+    const body = { discord: { enabled: fields.enabled.checked, timestamps: fields.timestamps.value, artworkLookup: fields.artworkLookup.value, artworkUpload: fields.artworkUpload.checked, idleBehavior: fields.idleBehavior.value, name: fields.name.value.trim(), statusDisplayType: fields.statusDisplayType.value } };
     const res = await fetch("/api/settings", { method: "PUT", cache: "no-store", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(typeof err.message === "string" ? err.message : String(res.status)); }
     show((await res.json()).discord);
     say("Saved. Discord is using the new settings.", "ok");
-  } catch {
-    say("Couldn't save. Nothing was changed.", "bad");
+  } catch (error) {
+    say(/^Status text:/.test(error.message) ? error.message + " Nothing was changed." : "Couldn't save. Nothing was changed.", "bad");
   } finally {
     save.disabled = false;
     if (restoreSaveFocus && document.activeElement === document.body) save.focus();
@@ -1015,6 +1024,9 @@ export function createSettingsPageHandler({ settings, fallback, platform = proce
       await settings[SECTIONS[keys[0]]](input[keys[0]]);
     } catch (error) {
       // Bad values are the caller's fault; anything else (disk, file) is ours.
+      // An unknown {field} in the status text is the one message safe to show: it only repeats what was typed.
+      const unknown = error instanceof TypeError ? /^discord settings: status text: (unknown field \{[A-Za-z0-9]+\})$/.exec(error.message) : null;
+      if (unknown) return json(400, { error: "invalid_settings", message: `Status text: ${unknown[1]}. Check the list of fields below it.` });
       if (error instanceof TypeError || error instanceof RangeError) return json(400, { error: "invalid_settings" });
       return json(500, { error: "save_failed" });
     }

@@ -46,6 +46,8 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       discordArtworkLookup: existing?.discord?.artworkLookup ?? "off",
       ...(typeof existing?.discord?.artworkUpload === "boolean" ? { discordArtworkUpload: existing.discord.artworkUpload } : {}),
       ...(existing?.discord?.timestamps ? { discordTimestamps: existing.discord.timestamps } : {}),
+      ...(existing?.discord?.name ? { discordName: existing.discord.name } : {}),
+      ...(existing?.discord?.statusDisplayType ? { discordStatusDisplayType: existing.discord.statusDisplayType } : {}),
       ...(existing?.hosted ? { hostedEnabled: existing.hosted.enabled, ...(existing.hosted.url ? { hostedUrl: existing.hosted.url } : {}) } : {}),
       ...(existing?.privacy ? { privacy: existing.privacy } : {}),
       ...(existing?.card ? { card: existing.card } : {}),

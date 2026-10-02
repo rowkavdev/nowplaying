@@ -76,6 +76,8 @@ function keptSettings(current) {
   return {
     ...(typeof current.discord?.artworkUpload === "boolean" ? { discordArtworkUpload: current.discord.artworkUpload } : {}),
     ...(current.discord?.timestamps !== undefined ? { discordTimestamps: current.discord.timestamps } : {}),
+    ...(current.discord?.name ? { discordName: current.discord.name } : {}),
+    ...(current.discord?.statusDisplayType ? { discordStatusDisplayType: current.discord.statusDisplayType } : {}),
     ...(current.hosted ? { hostedEnabled: current.hosted.enabled, ...(current.hosted.url ? { hostedUrl: current.hosted.url } : {}) } : {}),
     ...(current.privacy ? { privacy: current.privacy } : {}),
     ...(current.card ? { card: current.card } : {}),

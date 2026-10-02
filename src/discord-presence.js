@@ -23,14 +23,14 @@ function validateLoopOptions({ getPresence, client, idleBehavior, timestamps, in
 }
 
 export function createDiscordPresenceLoop({
-  getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
+  getPresence, client, idleBehavior = "clear", timestamps = "both", artwork, activityFields = {},
   intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, stallAfterMs = 60_000, now = () => performance.now(),
   setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   validateLoopOptions({ getPresence, client, idleBehavior, timestamps, intervalMs, graceMs, stuckAfterMs, stallAfterMs });
 
-  const live = createDiscordController({ client, settings: { idleBehavior: idleBehavior === "show" ? "show" : "clear", timestamps }, ...(artwork ? { artwork } : {}) });
-  const frozen = createDiscordController({ client, settings: { timestamps: "none" }, ...(artwork ? { artwork } : {}) });
+  const live = createDiscordController({ client, settings: { ...activityFields, idleBehavior: idleBehavior === "show" ? "show" : "clear", timestamps }, ...(artwork ? { artwork } : {}) });
+  const frozen = createDiscordController({ client, settings: { ...activityFields, timestamps: "none" }, ...(artwork ? { artwork } : {}) });
   let lastActive = null;
   let idleSince = null;
   let timer = null;

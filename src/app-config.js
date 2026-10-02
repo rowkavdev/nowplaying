@@ -80,6 +80,8 @@ export function parseAppConfig(text) {
       // "upload"; keep that, so an upgrade never starts sending covers.
       discordArtworkUpload: parsed.discord?.artworkUpload ?? parsed.discord?.artworkLookup === "upload",
       discordTimestamps: parsed.discord?.timestamps,
+      discordName: parsed.discord?.name,
+      discordStatusDisplayType: parsed.discord?.statusDisplayType,
       ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
       ...(parsed.card !== undefined ? { card: parsed.card } : {}),
@@ -220,7 +222,7 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   // Hidden titles or album art: never look covers up by title.
   const policy = privacyPolicyFromConfig(config);
   const artwork = createArtwork(policy.redactTitles || policy.hideArtwork ? { ...config.discord, artworkLookup: "off", artworkUpload: false } : config.discord);
-  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", ...(intervalMs ? { intervalMs } : {}), ...(stuckAfterMs ? { stuckAfterMs } : {}), ...(now ? { now } : {}) });
+  const loop = createDiscordPresenceLoop({ getPresence: () => provider.getPresence(), client, artwork, idleBehavior: config.discord.idleBehavior, timestamps: config.discord.timestamps ?? "both", activityFields: { ...(config.discord.name ? { name: config.discord.name } : {}), ...(config.discord.statusDisplayType ? { statusDisplayType: config.discord.statusDisplayType } : {}) }, ...(intervalMs ? { intervalMs } : {}), ...(stuckAfterMs ? { stuckAfterMs } : {}), ...(now ? { now } : {}) });
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.
   async function refreshArtwork() {
