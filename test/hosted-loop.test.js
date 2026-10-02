@@ -167,7 +167,7 @@ test("a playing session frozen at one position is uploaded as idle after the Dis
   await env.loop.tick();
   env.advance(299_000);
   await env.loop.tick();
-  assert.equal(env.pushed.at(-1).state, "playing");
+  assert.equal(env.pushed.at(-1).state, "paused");
   env.advance(1_000);
   assert.equal((await env.loop.tick()).cleared, "stuck");
   assert.equal(env.pushed.at(-1).state, "idle");
@@ -206,7 +206,7 @@ test("frozen playback clears after five elapsed minutes despite a wall-clock rol
   assert.equal((await env.loop.tick()).cleared, "stuck");
   env.advance(60_000);
   assert.equal((await env.loop.tick()).reason, "stuck");
-  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "playing", "playing", "playing", "playing", "idle"]);
+  assert.deepEqual(env.pushed.map((p) => p.state), ["playing", "paused", "paused", "paused", "paused", "idle"]);
   env.set(playingAt(43_000));
   assert.notEqual((await env.loop.tick()).cleared, "stuck");
   assert.equal(env.pushed.at(-1).state, "playing");
@@ -252,4 +252,24 @@ test("normal playback and paused sessions are never treated as stuck", async () 
   env.set(createPresence({ state: "paused", kind: "track", title: "Song", positionMs: 1000, durationMs: 600_000 }));
   for (let i = 0; i < 30; i += 1) { env.advance(15_000); await env.loop.tick(); }
   assert.equal(env.pushed.some((p) => p.state === "idle"), false);
+});
+
+test("a playing session frozen for the stall window is uploaded as paused at that position (#1100)", async () => {
+  const env = staleSetup({ presence: playingAt(42_000) });
+  await env.loop.tick();
+  env.advance(15_000);
+  assert.equal((await env.loop.tick()).stalled, undefined, "15s without movement is not stalled");
+  assert.equal(env.pushed.at(-1).state, "playing");
+  env.advance(45_000);
+  assert.equal((await env.loop.tick()).stalled, true);
+  assert.equal(env.pushed.at(-1).state, "paused");
+  assert.equal(env.pushed.at(-1).positionMs, 42_000);
+  env.set(playingAt(43_000));
+  env.advance(15_000);
+  assert.equal((await env.loop.tick()).stalled, undefined);
+  assert.equal(env.pushed.at(-1).state, "playing", "playback that moves again is playing");
+});
+
+test("stallAfterMs is validated", () => {
+  assert.throws(() => createHostedLoop({ getPresence() {}, uploader: { push() {} }, stallAfterMs: 10 }), RangeError);
 });
