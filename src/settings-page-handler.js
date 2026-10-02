@@ -504,6 +504,7 @@ async function load() {
 }
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const restoreSaveFocus = document.activeElement === save;
   save.disabled = true;
   say("Saving...", "warn");
   try {
@@ -516,6 +517,7 @@ form.addEventListener("submit", async (event) => {
     say("Couldn't save. Nothing was changed.", "bad");
   } finally {
     save.disabled = false;
+    if (restoreSaveFocus && document.activeElement === document.body) save.focus();
   }
 });
 document.getElementById("refresh-art").addEventListener("click", async (event) => {
