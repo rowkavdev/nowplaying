@@ -6,9 +6,14 @@ import { FALLBACK_ARTWORK_URL, isDiscordImage } from "./discord-artwork.js";
 const VIDEO_KINDS = new Set(["episode", "movie", "show"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const IDLE_BEHAVIORS = new Set(["clear", "show"]);
+// What the status line next to "Listening to" shows: the activity name, the state line or the details line.
+const STATUS_DISPLAY_TYPES = new Set(["name", "state", "details"]);
 
 
 export const discordDefaults = Object.freeze({
+  // The text after "Listening to" on Discord. Music only by default; see activityName().
+  name: "{artist} on {service}",
+  statusDisplayType: "name",
   details: "{title}",
   state: "{subtitle}",
   largeText: "{stateLabel}",
@@ -39,13 +44,16 @@ export function validateDiscordSettings(input = {}) {
   for (const key of Object.keys(input)) {
     if (!allowed.has(key)) throw new TypeError(`discord.${key}: unknown setting`);
   }
-  for (const key of ["details", "state", "largeText"]) {
+  for (const key of ["name", "details", "state", "largeText"]) {
     if (input[key] !== undefined) {
       if (typeof input[key] !== "string" || input[key].length > 128) {
         throw new TypeError(`discord.${key}: expected a string up to 128 characters`);
       }
       validateTemplate(input[key], `discord.${key}`);
     }
+  }
+  if (input.statusDisplayType !== undefined && !STATUS_DISPLAY_TYPES.has(input.statusDisplayType)) {
+    throw new TypeError("discord.statusDisplayType: expected name, state or details");
   }
   for (const key of ["largeImage", "smallImage"]) {
     if (input[key] !== undefined && input[key] !== "" && !isDiscordImage(input[key])) {
@@ -96,16 +104,30 @@ function trimDiscordText(value) {
   return chars.join("");
 }
 
+// The default name only applies to music with a known artist: "fakemink on
+// Spotify", or just the artist when the source is unknown. Films and episodes
+// keep Discord's own app name unless a name template was chosen.
+function activityName(presence, input, settings, values) {
+  if (input.name === undefined || input.name === discordDefaults.name) {
+    if (VIDEO_KINDS.has(presence.kind) || !values.artist) return "";
+    return values.service ? `${values.artist} on ${values.service}` : values.artist;
+  }
+  return formatTemplate(settings.name, values);
+}
+
 export function formatDiscordActivity(presence, input = {}) {
   validateDiscordSettings(input);
   const settings = templatesFor(presence, input, { ...discordDefaults, ...input });
   if (presence.state === "idle" && settings.idleBehavior === "clear") return null;
   const values = createTemplateValues(presence);
+  const name = trimDiscordText(activityName(presence, input, settings, values));
   const details = trimDiscordText(formatTemplate(settings.details, values));
   const state = trimDiscordText(formatTemplate(settings.state, values));
   const largeText = trimDiscordText(formatTemplate(settings.largeText, values));
   const activity = {
     type: VIDEO_KINDS.has(presence.kind) ? "watching" : "listening",
+    name: name || undefined,
+    statusDisplayType: settings.statusDisplayType !== "name" ? settings.statusDisplayType : undefined,
     details: details || (presence.state === "idle" ? "Nothing playing" : undefined),
     state: state || undefined,
     largeImage: settings.largeImage || undefined,

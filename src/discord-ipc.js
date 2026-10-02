@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 // Frames are: int32LE opcode, int32LE byte length, UTF-8 JSON.
 
 export const OP = Object.freeze({ HANDSHAKE: 0, FRAME: 1, CLOSE: 2, PING: 3, PONG: 4 });
+const STATUS_DISPLAY_TYPES = Object.freeze({ name: 0, state: 1, details: 2 });
 const ACTIVITY_TYPES = Object.freeze({ playing: 0, listening: 2, watching: 3, competing: 5 });
 const MAX_FRAME_BYTES = 64 * 1024;
 
@@ -51,6 +52,11 @@ export function toIpcActivity(activity) {
   if (activity.type !== undefined) {
     if (!Object.hasOwn(ACTIVITY_TYPES, activity.type)) throw new TypeError("activity.type is not supported");
     out.type = ACTIVITY_TYPES[activity.type];
+  }
+  if (activity.name) out.name = activity.name;
+  if (activity.statusDisplayType !== undefined) {
+    if (!Object.hasOwn(STATUS_DISPLAY_TYPES, activity.statusDisplayType)) throw new TypeError("activity.statusDisplayType is not supported");
+    out.status_display_type = STATUS_DISPLAY_TYPES[activity.statusDisplayType];
   }
   if (activity.details) out.details = activity.details;
   if (activity.state) out.state = activity.state;
