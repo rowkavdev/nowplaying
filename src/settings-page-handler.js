@@ -815,7 +815,8 @@ function showHosted(h) {
   const link = document.getElementById("hosted-url");
   const url = hostedLink(h.cardUrl);
   link.textContent = url || "Appears after the first upload";
-  link.href = url || "#";
+  if (url) link.href = url;
+  else link.removeAttribute("href");
   document.getElementById("hosted-markdown").textContent = url ? "![Now playing](" + url + ")" : "-";
   document.getElementById("copy-url").disabled = document.getElementById("copy-markdown").disabled = !h.cardUrl;
   const details = document.getElementById("hosted-details");
