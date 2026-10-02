@@ -72,14 +72,14 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="recent">Show what I played last</option>
 </select></p>
 <p class="row"><label for="discord-upload">Show my server's cover</label>
-<input type="checkbox" id="discord-upload" name="artworkUpload"></p>
-<p class="hint">Discord can only show a picture from a public address, so this uploads just the cover image to litterbox.catbox.moe, where it is kept for 72 hours. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
+<input type="checkbox" id="discord-upload" name="artworkUpload" aria-describedby="discord-upload-help"></p>
+<p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to litterbox.catbox.moe, where it is kept for 72 hours. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
 <p class="row"><label for="discord-artwork">If that fails</label>
-<select id="discord-artwork" name="artworkLookup">
+<select id="discord-artwork" name="artworkLookup" aria-describedby="discord-artwork-help">
 <option value="musicbrainz">Look up the cover on MusicBrainz</option>
 <option value="off">Show the NowPlaying icon</option>
 </select></p>
-<p class="hint">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
+<p class="hint" id="discord-artwork-help">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
 <p><button type="submit" id="discord-save">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
 <p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
