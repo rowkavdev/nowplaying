@@ -47,6 +47,7 @@ export function applyPrivacy(presence, input = {}) {
     ...presence,
     title: policy.redactTitles && presence.state !== "idle" ? policy.titleReplacement : presence.title,
     subtitle: policy.redactTitles ? null : presence.subtitle,
+    artist: policy.redactTitles ? null : presence.artist,
     series: policy.redactTitles ? null : presence.series,
     season: policy.redactTitles ? null : presence.season,
     episode: policy.redactTitles ? null : presence.episode,
