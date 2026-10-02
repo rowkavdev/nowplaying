@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {runInNewContext} from 'node:vm';
+import {createStatusPageHandler} from '../src/status-page-handler.js';
+for(const elsewhere of [false,true])test(`hosted link disappearance ${elsewhere?'preserves outside focus':'moves focus to its explanation'}`,async()=>{
+ const h=createStatusPageHandler({status:{snapshot(){},async refresh(){}},fallback:async()=>null});const script=(await h({url:'/status.js'})).body,start=script.indexOf('function publicCardUrl('),end=script.indexOf('const SERVER_ROW_WORDS',start);const nodes=new Map();const document={activeElement:null,getElementById:id=>{if(!nodes.has(id))nodes.set(id,{id,hidden:false,textContent:'',focus(){document.activeElement=this;},removeAttribute(){}});return nodes.get(id)}};const ctx={document,URL,cardTick:0,hostedPreviewUrl:null,location:{origin:'http://localhost'}};runInNewContext(script.slice(start,end)+';globalThis.show=showCards;',ctx);ctx.show({enabled:true,state:'connected',cardUrl:'https://cards.example/u/test.svg'});document.getElementById(elsewhere?'copy-diagnostics':'hosted-card-link').focus();ctx.show({enabled:false,state:'off'});assert.equal(document.activeElement.id,elsewhere?'copy-diagnostics':'hosted-card-note');assert.equal(document.getElementById('hosted-card-note').hidden,false);
+});
+test('hosted explanation accepts programmatic focus but adds no tab stop',async()=>{const h=createStatusPageHandler({status:{snapshot(){},async refresh(){}},fallback:async()=>null});assert.match((await h({url:'/'})).body,/<p id="hosted-card-note" tabindex="-1" role="status"/)});
