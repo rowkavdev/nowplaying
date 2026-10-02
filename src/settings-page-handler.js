@@ -816,7 +816,10 @@ function showHosted(h) {
   link.href = url || "#";
   document.getElementById("hosted-markdown").textContent = url ? "![Now playing](" + url + ")" : "-";
   document.getElementById("copy-url").disabled = document.getElementById("copy-markdown").disabled = !h.cardUrl;
-  document.getElementById("hosted-details").hidden = !h.enabled && h.state !== "disconnect_pending";
+  const details = document.getElementById("hosted-details");
+  const hideDetails = !h.enabled && h.state !== "disconnect_pending";
+  if (hideDetails && document.activeElement && details.contains(document.activeElement)) hosted.enabled.focus();
+  details.hidden = hideDetails;
   hosted.save.disabled = h.state === "disconnect_pending";
 }
 async function copy(id) {
