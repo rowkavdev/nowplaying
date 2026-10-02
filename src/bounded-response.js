@@ -7,7 +7,8 @@ export async function readBoundedBytes(response, limit, label = "response") {
   const body = response?.body;
   if (Number.isFinite(declared) && declared > limit) {
     // Release the connection instead of leaving the unread body open.
-    await body?.cancel?.().catch(() => {});
+    // Not awaited: a stream whose cancel() never settles must not hold back the rejection.
+    Promise.resolve(body?.cancel?.()).catch(() => {});
     throw new Error(`${label} is too large`);
   }
   if (body && typeof body.getReader === "function") {

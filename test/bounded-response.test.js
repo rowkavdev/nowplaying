@@ -69,3 +69,13 @@ test("an over-declared response body is cancelled, not left open", async () => {
   await assert.rejects(readBoundedBytes(response, 1000, "Artwork"), /too large/);
   assert.equal(cancelled, true);
 });
+
+test("a hanging body cancel does not delay the size rejection", async () => {
+  const body = new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(10)); }, cancel() { return new Promise(() => {}); } });
+  const response = new Response(body, { headers: { "content-length": "999999" } });
+  const outcome = await Promise.race([
+    readBoundedBytes(response, 1000, "Artwork").then(() => "resolved", (error) => error.message),
+    new Promise((resolve) => setTimeout(() => resolve("hung"), 500)),
+  ]);
+  assert.equal(outcome, "Artwork is too large");
+});
