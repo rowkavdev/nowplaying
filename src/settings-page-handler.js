@@ -521,6 +521,7 @@ form.addEventListener("submit", async (event) => {
 document.getElementById("refresh-art").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const result = document.getElementById("refresh-result");
+  const restoreButtonFocus = document.activeElement === button;
   button.disabled = true;
   result.textContent = "Refreshing..."; result.className = "warn";
   try {
@@ -534,6 +535,7 @@ document.getElementById("refresh-art").addEventListener("click", async (event) =
     result.className = "bad";
   } finally {
     button.disabled = false;
+    if (restoreButtonFocus && document.activeElement === document.body) button.focus();
   }
 });
 const PRIVACY_KEYS = ["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"];
