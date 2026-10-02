@@ -595,7 +595,7 @@ let previewObjectUrl;
 let previewGeneration = 0;
 function cardChanged() {
   for (const key of ["padding", "radius", "progressHeight", "artworkWidth", "artworkHeight"]) document.getElementById("card-" + key + "-value").textContent = ART_AUTO[key] ? "Auto" : cardField(key).value + " px";
-  for (const key of Object.keys(ART_AUTO)) cardField(key).setAttribute("aria-valuetext", ART_AUTO[key] ? "Auto" : cardField(key).value + " px");
+  for (const key of ["padding", "radius", "progressHeight", ...Object.keys(ART_AUTO)]) cardField(key).setAttribute("aria-valuetext", ART_AUTO[key] ? "Auto" : cardField(key).value + " px");
   for (const key of ["progressHeight", "progressPosition", "progressWidth", "progressStyle"]) cardField(key).disabled = !cardField("showProgress").checked;
   clearTimeout(previewTimer);
   previewGeneration++;
