@@ -51,7 +51,7 @@ test("rejects redirects that land off GitHub's asset CDN", async () => {
 test("rejects an oversized archive before hashing it", async () => {
   const fetchImpl = async (url) => url === assetUrl
     ? { ok: true, url: assetUrl, headers: new Headers({ "content-length": String(101 * 1024 * 1024) }), arrayBuffer: async () => { throw new Error("must not buffer"); } }
-    : { ok: true, url: checksumUrl, text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
+    : { ok: true, url: checksumUrl, headers: new Headers({ "content-length": "100" }), text: async () => `${digest}  nowplaying-v0.2.0.tar.gz\n` };
   await assert.rejects(downloadVerifiedUpdate({ update, fetchImpl }), /update archive is too large/);
 });
 
