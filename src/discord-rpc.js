@@ -50,6 +50,8 @@ export function toRpcActivity(activity) {
   if (!activity || typeof activity !== "object" || Array.isArray(activity)) throw new TypeError("activity: expected a formatted Discord activity");
   const mapped = {
     type: activity.type,
+    name: activity.name,
+    statusDisplayType: activity.statusDisplayType,
     details: activity.details,
     state: activity.state,
     largeImageKey: activity.largeImage,
