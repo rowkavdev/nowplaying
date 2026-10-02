@@ -679,6 +679,7 @@ card.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const values = cardValues();
   if (!cardValid(values)) return;
+  const restoreSaveFocus = document.activeElement === card.save;
   card.save.disabled = true;
   cardSay("Saving...", "warn");
   try {
@@ -691,6 +692,7 @@ card.form.addEventListener("submit", async (event) => {
     cardSay("Couldn't save. Nothing was changed.", "bad");
   } finally {
     card.save.disabled = false;
+    if (restoreSaveFocus && document.activeElement === document.body) card.save.focus();
   }
 });
 // YouTube extension pairing (#136). The code is fetched with POST so the
