@@ -111,7 +111,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="paper">Light</option>
 <option value="compact">Compact (title only)</option>
 </select></p>
-<p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="1" inputmode="numeric"> <span class="unit">px, 280 to 800</span></p>
+<p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="1" inputmode="numeric" aria-describedby="card-width-help card-result"> <span class="unit" id="card-width-help">px, 280 to 800</span></p>
 <p class="row"><label for="card-padding">Padding</label><input type="range" id="card-padding" min="12" max="48" step="1"> <output id="card-padding-value" for="card-padding"></output></p>
 <p class="row"><label for="card-radius">Corners</label><input type="range" id="card-radius" min="0" max="24" step="1"> <output id="card-radius-value" for="card-radius"></output></p>
 <p class="row"><label for="card-fontFamily">Font</label>
@@ -594,6 +594,7 @@ function cardChanged() {
   card.scaleNote.hidden = true;
   previewTimer = setTimeout(async () => {
     const values = cardValues();
+    cardField("width").setAttribute("aria-invalid", String(!Number.isInteger(values.width) || values.width < CARD_NUMBERS.width[0] || values.width > CARD_NUMBERS.width[1]));
     const fontInvalid = !customFontValid(values.fontStack);
     const fontError = document.getElementById("card-font-error");
     fontError.hidden = !fontInvalid;
