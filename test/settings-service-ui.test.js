@@ -12,7 +12,7 @@ function page({ manualTimers = false } = {}) {
   const elements = new Map();
   const node = (id) => {
     if (!elements.has(id)) elements.set(id, { value: "", hidden: false, textContent: "", children: [],
-      addEventListener(event, fn) { this[event] = fn; }, replaceChildren(...children) { this.children = children; } });
+      setAttribute(name,value) { this[name]=value; }, addEventListener(event, fn) { this[event] = fn; }, replaceChildren(...children) { this.children = children; } });
     return elements.get(id);
   };
   const calls = [];
