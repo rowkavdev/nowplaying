@@ -546,6 +546,7 @@ function privacySay(text, tone) { const el = document.getElementById("privacy-re
 function showPrivacy(p) { privacy.form.hidden = !p; if (p) for (const key of PRIVACY_KEYS) document.getElementById("privacy-" + key).checked = p[key] === true; }
 privacy.form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const restoreSaveFocus = document.activeElement === privacy.save;
   privacy.save.disabled = true;
   privacySay("Saving...", "warn");
   try {
@@ -558,6 +559,7 @@ privacy.form.addEventListener("submit", async (event) => {
     privacySay("Couldn't save. Nothing was changed.", "bad");
   } finally {
     privacy.save.disabled = false;
+    if (restoreSaveFocus && document.activeElement === document.body) privacy.save.focus();
   }
 });
 const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin", background: "solid", fontStack: "" };
