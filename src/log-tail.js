@@ -29,11 +29,14 @@ export async function readLogTail(file, { maxLines = 200, maxBytes = 64 * 1024 }
   try {
     const { size } = await handle.stat();
     const length = Math.min(size, maxBytes);
-    const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, size - length);
+    // Read one byte before the window when there is one, so a window that starts exactly on a
+    // line boundary is told apart from one that starts mid-line.
+    const extra = length < size ? 1 : 0;
+    const buffer = Buffer.alloc(length + extra);
+    await handle.read(buffer, 0, length + extra, size - length - extra);
     const lines = buffer.toString("utf8").split("\n");
-    // The first line may be cut off when only part of the file was read.
-    if (length < size) lines.shift();
+    // The first piece is the end of a cut-off line, or empty when the window began on a boundary.
+    if (extra) lines.shift();
     return lines.map((line) => line.trim()).filter(Boolean).map(parseLogLine).filter(Boolean).slice(-maxLines);
   } finally {
     await handle.close();
