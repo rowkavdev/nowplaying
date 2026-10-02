@@ -66,7 +66,7 @@ $('hosted-connect').addEventListener('click',async()=>{
     if(generation!==hostedGeneration)return;
     hostedFlow=false;
     if(e.message==='invalid_url') $('hosted-address').setAttribute('aria-invalid','true');
-    say('hosted-service-result','GitHub sign-in could not start: '+(e.message==='invalid_url'?'Enter an HTTPS card service address. Use HTTP only for localhost, 127.0.0.1 or [::1].':e.message==='no_credential_store'?'This installation cannot store sign-in credentials. GitHub sign-in is unavailable.':e.message==='not_configured'?'GitHub sign-in is not configured in this installation.':e.message==='unreachable'?'Could not reach GitHub. Check your connection and try again.':e.message));
+    say('hosted-service-result','GitHub sign-in could not start: '+(e.message==='invalid_url'?'Enter an HTTPS card service address. Use HTTP only for localhost, 127.0.0.1 or [::1].':e.message==='no_credential_store'?'This installation cannot store sign-in credentials. GitHub sign-in is unavailable.':e.message==='not_configured'?'GitHub sign-in is not configured in this installation.':e.message==='unreachable'?'Could not reach GitHub. Check your connection and try again.':e.message==='github_error'?'GitHub could not complete sign-in. Try signing in again.':e.message));
   } finally { if(generation===hostedGeneration)hostedStarting=false; }
 });
 async function pollHosted(generation){
@@ -82,7 +82,7 @@ async function pollHosted(generation){
   } catch(e){
     if(generation!==hostedGeneration)return;
     hostedFlow=false;
-    say('hosted-service-result','GitHub sign-in failed: '+(e.message==='denied'?'Sign-in was not approved. Click Sign in with GitHub to try again.':e.message==='expired'?'The sign-in code expired. Click Sign in with GitHub to get a new code.':e.message==='rate_limited'?'The card service received too many sign-in requests. Wait a while before signing in again.':e.message));
+    say('hosted-service-result','GitHub sign-in failed: '+(e.message==='denied'?'Sign-in was not approved. Click Sign in with GitHub to try again.':e.message==='expired'?'The sign-in code expired. Click Sign in with GitHub to get a new code.':e.message==='rate_limited'?'The card service received too many sign-in requests. Wait a while before signing in again.':e.message==='github_error'?'GitHub could not complete sign-in. Try signing in again.':e.message));
   }
 }
 load();
