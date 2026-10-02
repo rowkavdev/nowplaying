@@ -6,7 +6,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 test('#826 stale password response leaves replacement sign-in panel alone', async () => {
   for (const provider of ['emby', 'navidrome']) {
     const elements = new Map(), calls = [];
-    const node = id => { if (!elements.has(id)) elements.set(id, { value: '', hidden: false, textContent: '', disabled: false, children: [], focus() {}, append() {}, replaceChildren() {}, addEventListener(event, fn) { this[event] = fn; } }); return elements.get(id); };
+    const node = id => { if (!elements.has(id)) elements.set(id, { value: '', hidden: false, textContent: '', disabled: false, children: [], setAttribute() {}, focus() {}, append() {}, replaceChildren() {}, addEventListener(event, fn) { this[event] = fn; } }); return elements.get(id); };
     runInNewContext(SERVER_SCRIPT, { document: { getElementById: id => id === 'first-run-state' ? null : node(id), createElement: () => node(Math.random()) }, URL, fetch(path, options) { let resolve; const promise = new Promise(r => { resolve = r; }); calls.push({path, options, resolve}); return promise; }, clearTimeout, setTimeout, confirm: () => true });
     calls[0].resolve({ ok: true, json: async () => ({ servers: [] }) }); await tick();
     node('server-provider').value = provider; node('server-url').value = 'http://127.0.0.1:4533';
