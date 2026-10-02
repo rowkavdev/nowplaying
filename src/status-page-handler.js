@@ -26,7 +26,7 @@ const PAGE = `<!doctype html>
 <div class="card-preview"><img id="card" src="/card.svg" alt="Local now playing card" width="480"></div></article>
 <article><h3>Hosted card</h3><p class="hint">Public link for your README</p>
 <p class="card-address"><a id="hosted-card-link" hidden target="_blank" rel="noreferrer"></a><span id="hosted-card-address">No hosted address yet</span></p>
-<div class="card-preview"><img id="hosted-card" hidden referrerpolicy="no-referrer" alt="Hosted now playing card" width="480"><p id="hosted-card-note" role="status">Checking hosted upload...</p></div></article></div></section>
+<div class="card-preview"><img id="hosted-card" hidden referrerpolicy="no-referrer" alt="Hosted now playing card" width="480"><p id="hosted-card-note" tabindex="-1" role="status">Checking hosted upload...</p></div></article></div></section>
 <section aria-labelledby="h-help"><h2 id="h-help">Diagnostics</h2>
 <p class="hint">Version and connection details only. No titles, server addresses or sign-in details.</p>
 <p><button type="button" id="copy-diagnostics">Copy diagnostics</button> <a href="/api/diagnostics" download="nowplaying-diagnostics.json">Download</a> <span id="copy-result" role="status" aria-live="polite"></span></p>
@@ -113,6 +113,7 @@ function showCards(hosted) {
   const address = document.getElementById("hosted-card-address");
   const note = document.getElementById("hosted-card-note");
   const url = hosted?.enabled && hosted.state !== "disconnect_pending" ? publicCardUrl(hosted.cardUrl) : null;
+  const returnHostedFocus = !url && document.activeElement === link;
   link.hidden = !url; address.hidden = Boolean(url);
   if (url) { link.href = url; link.textContent = url; }
   const preview = url && url.startsWith("https://nowplaying-hosted.vercel.app/");
@@ -127,6 +128,7 @@ function showCards(hosted) {
     if (image.removeAttribute) image.removeAttribute("src"); else image.src = "";
     note.textContent = !hosted?.enabled ? "Hosted upload is off. Enable it in Settings to get a public card link." : hosted.state === "disconnect_pending" ? "Remote deletion is pending. Reconnect in Settings once it finishes." : url ? "Open the address to view this card on your own hosted service." : "No hosted card address yet. Connect in Settings and wait for the first upload.";
   }
+  if (returnHostedFocus) note.focus();
 }
 const SERVER_ROW_WORDS = { playing: "playing", paused: "paused", idle: "connected, nothing playing", waiting: "waiting for first check", error: "returned an error", unavailable: "sign-in missing" };
 const SERVER_ROW_ERRORS = { unauthorized: "sign-in rejected, run setup again", unreachable: "can't reach it", timeout: "can't reach it", error: "returned an error" };
