@@ -371,3 +371,8 @@ test("the card cover status reports a short allow-listed reason and nothing else
   status.setCardArtwork(() => ({ state: "failed", reason: "http://secret.example/?token=abc" }));
   assert.equal(status.snapshot().cardArtwork.reason, "unknown");
 });
+
+test("a provider id that names an Object.prototype property is shown as its own text, not a function", () => {
+  const status = createAppStatus({ config: { ...config, provider: "constructor" }, version: "0.1.1-dev" });
+  assert.equal(status.snapshot().server.type, "constructor");
+});
