@@ -25,6 +25,11 @@ export function createPresence(input = {}) {
     kind,
     title: optionalString(input.title, "title"),
     subtitle: optionalString(input.subtitle, "subtitle"),
+    // The track's artist on its own, for {artist}. subtitle may fall back to the
+    // album, so it cannot stand in for this. Null when the source has none.
+    artist: optionalString(input.artist, "artist"),
+    // Which source the presence came from (a provider id such as "spotify").
+    provider: optionalProviderId(input.provider),
     artwork: normalizeArtwork(input.artwork),
     artworkUrl: optionalString(input.artworkUrl, "artworkUrl"),
     // Optional TV / film details (#143). Providers that don't know them
@@ -78,6 +83,12 @@ function optionalString(value, name) {
   if (typeof value !== "string") throw new TypeError(`${name} must be a string`);
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function optionalProviderId(value) {
+  if (value == null) return null;
+  if (typeof value !== "string" || !/^[a-z][a-z0-9-]*$/.test(value)) throw new TypeError("provider must be a lowercase slug");
+  return value;
 }
 
 function nonNegativeNumber(value, name) {
