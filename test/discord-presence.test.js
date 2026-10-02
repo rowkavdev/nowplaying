@@ -356,3 +356,34 @@ test("default Discord timers do not depend on a backward Date.now correction (#7
     Date.now = originalNow;
   }
 });
+
+test("a playing session whose position stops moving is shown as stopped before it is cleared", async () => {
+  let time = Date.parse("2026-09-23T12:00:00.000Z");
+  const client = fakeClient();
+  let position = 1000;
+  const l = createDiscordPresenceLoop({ client, now: () => time, stallAfterMs: 60_000, stuckAfterMs: 300_000,
+    getPresence: async () => ({ ...playing, positionMs: position, updatedAt: new Date(time).toISOString() }) });
+  await l.tick();
+  assert.equal(client.calls.at(-1).startTimestamp !== undefined, true, "moving playback keeps its timer");
+  time += 15_000; position += 15_000;
+  await l.tick();
+  time += 15_000;
+  assert.equal((await l.tick()).stalled, undefined, "15s without movement is not stalled yet");
+  time += 45_000;
+  const stalled = await l.tick();
+  assert.equal(stalled.stalled, true);
+  const shown = client.calls.at(-1);
+  assert.notEqual(shown, null);
+  assert.equal(shown.startTimestamp, undefined, "no running timer once stalled");
+  assert.equal(shown.endTimestamp, undefined);
+  assert.match(JSON.stringify(shown), /Paused/);
+  time += 239_000;
+  assert.equal((await l.tick()).action, "publish", "still shown just before the clear deadline");
+  time += 1_000;
+  assert.equal((await l.tick()).action, "clear");
+  assert.equal(client.calls.at(-1), null);
+  time += 15_000; position += 15_000;
+  const resumed = await l.tick();
+  assert.equal(resumed.stalled, undefined);
+  assert.notEqual(client.calls.at(-1).startTimestamp, undefined, "playback that moves again gets its timer back");
+});

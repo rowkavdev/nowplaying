@@ -11,11 +11,7 @@ export const IDLE_BEHAVIORS = Object.freeze(["clear", "grace", "show", "recent"]
 const TIMESTAMP_MODES = Object.freeze(["elapsed", "remaining", "both", "none"]);
 const ACTIVE = new Set(["playing", "paused"]);
 
-export function createDiscordPresenceLoop({
-  getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
-  intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, now = () => performance.now(),
-  setTimer = setTimeout, clearTimer = clearTimeout,
-} = {}) {
+function validateLoopOptions({ getPresence, client, idleBehavior, timestamps, intervalMs, graceMs, stuckAfterMs, stallAfterMs }) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
   if (!client || typeof client.publish !== "function") throw new TypeError("discord client.publish is required");
   if (!IDLE_BEHAVIORS.includes(idleBehavior)) throw new TypeError("idleBehavior is invalid");
@@ -23,6 +19,15 @@ export function createDiscordPresenceLoop({
   if (!Number.isInteger(intervalMs) || intervalMs < 1000) throw new RangeError("intervalMs must be at least 1000");
   if (!Number.isInteger(graceMs) || graceMs < 0) throw new RangeError("graceMs is invalid");
   if (!Number.isInteger(stuckAfterMs) || stuckAfterMs < 1000) throw new RangeError("stuckAfterMs must be at least 1000");
+  if (!Number.isInteger(stallAfterMs) || stallAfterMs < 1000) throw new RangeError("stallAfterMs must be at least 1000");
+}
+
+export function createDiscordPresenceLoop({
+  getPresence, client, idleBehavior = "clear", timestamps = "both", artwork,
+  intervalMs = 15_000, graceMs = 120_000, stuckAfterMs = 300_000, stallAfterMs = 60_000, now = () => performance.now(),
+  setTimer = setTimeout, clearTimer = clearTimeout,
+} = {}) {
+  validateLoopOptions({ getPresence, client, idleBehavior, timestamps, intervalMs, graceMs, stuckAfterMs, stallAfterMs });
 
   const live = createDiscordController({ client, settings: { idleBehavior: idleBehavior === "show" ? "show" : "clear", timestamps }, ...(artwork ? { artwork } : {}) });
   const frozen = createDiscordController({ client, settings: { timestamps: "none" }, ...(artwork ? { artwork } : {}) });
@@ -49,6 +54,15 @@ export function createDiscordPresenceLoop({
     return now() - stuck.since >= stuckAfterMs;
   }
 
+  // Before a frozen position is stale enough to clear, it is already not
+  // "playing": the player closed or the server stopped updating. Show it as
+  // stopped at that position instead of letting Discord's timer keep running,
+  // then the stuck rule above clears it. Never applies to a position that
+  // moved since the last poll or to the first sight of an item.
+  function isStalled(presence) {
+    return Boolean(stuck) && presence.state === "playing" && now() - stuck.since >= Math.min(stallAfterMs, stuckAfterMs - 1);
+  }
+
   // Ticks run one at a time (a Refresh artwork tick can land during a
   // scheduled one). Otherwise an older poll whose artwork lookup is slow
   // publishes after a newer one and Discord shows the previous track.
@@ -71,6 +85,7 @@ export function createDiscordPresenceLoop({
     if (active) {
       lastActive = presence;
       idleSince = null;
+      if (isStalled(presence)) return Object.freeze({ action: "publish", stalled: true, ...(await frozen.publish({ ...presence, state: "paused" })) });
       return Object.freeze({ action: "publish", ...(await live.publish(presence)) });
     }
     idleSince ??= now();
