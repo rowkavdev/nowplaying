@@ -66,6 +66,7 @@ const CSS = `@font-face{font-family:Inter;src:url('/inter.woff2') format('woff2'
 .status-ui #summary{font-size:12px;margin:0 0 26px}.status-ui h2{font-size:13px;font-weight:600;margin:0 0 14px}.status-ui h3{font-size:13px;font-weight:600;margin:0}
 .status-ui section{margin:0 0 22px}.status-ui .playing-section{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:4px;padding:18px 20px;background:var(--panel)}
 .status-ui .playing-section h2{color:var(--muted);font-size:11px;margin:0 0 8px;font-weight:500}.status-ui #playing{font-size:22px;line-height:1.3;font-weight:600;letter-spacing:-.5px;margin:0}.status-ui #playing-subtitle{color:var(--muted);font-size:13px;margin:5px 0 0}
+.status-ui #playing,.status-ui #playing-subtitle{overflow-wrap:anywhere}
 .status-ui .connection-grid{display:grid;grid-template-columns:1.45fr 1fr 1fr;gap:12px;margin-bottom:26px}
 .status-ui .connection-grid section{border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:16px;margin:0;min-width:0}
 .status-ui dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;margin:0;font-size:12px}.status-ui dt{color:var(--muted)}.status-ui dd{margin:0;overflow-wrap:anywhere}
