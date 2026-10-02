@@ -418,7 +418,9 @@ async function refreshVersion() {
     const rows = Array.isArray(status.servers) ? status.servers : [];
     const failedServer = rows.some((row) => row.state === "error" || row.state === "unavailable");
     const checking = !failedServer && state === "starting";
-    notice.hidden = state === "connected" && !failedServer;
+    const recovered = state === "connected" && !failedServer;
+    if (recovered && document.activeElement && notice.contains(document.activeElement)) document.getElementById("settings-content").focus();
+    notice.hidden = recovered;
     if (!notice.hidden) {
       const unconfigured = !status.server?.type || state === "safe_mode";
       document.getElementById("drpp-setup-title").textContent = unconfigured ? "Setup Incomplete" : checking ? "Checking Servers" : "Server Needs Attention";
