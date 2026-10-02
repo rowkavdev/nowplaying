@@ -199,7 +199,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
 <dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
 <dt>Port</dt><dd><code id="youtube-port">-</code></dd></dl>
-<p class="row"><button type="button" id="youtube-show" aria-pressed="false">Show code</button> <button type="button" id="youtube-copy">Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
+<p class="row"><button type="button" id="youtube-show" disabled aria-pressed="false">Show code</button> <button type="button" id="youtube-copy" disabled>Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
 <p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
 </section>
 </details>
@@ -697,6 +697,7 @@ card.form.addEventListener("submit", async (event) => {
 const youtube = { section: document.getElementById("youtube-section"), code: document.getElementById("youtube-token"), show: document.getElementById("youtube-show"), token: "", shown: false };
 function youtubeSay(text, tone) { const el = document.getElementById("youtube-result"); el.textContent = text; el.className = tone || ""; }
 function youtubeRender() {
+  youtube.show.disabled = document.getElementById("youtube-copy").disabled = !youtube.token;
   youtube.code.textContent = youtube.shown ? youtube.token : "\u2022".repeat(16);
   youtube.code.className = youtube.shown ? "" : "secret";
   youtube.show.textContent = youtube.shown ? "Hide code" : "Show code";
