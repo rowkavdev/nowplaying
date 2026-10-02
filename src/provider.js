@@ -25,7 +25,8 @@ export function defineProvider({ id, getPresence, whoami, mediaKinds = MEDIA_KIN
     id,
     mediaKinds: kinds,
     async getPresence(context = {}) {
-      const presence = createPresence(await getPresence(context));
+      // The provider id is stamped here so every source reports where it came from.
+      const presence = createPresence({ ...(await getPresence(context)), provider: id });
       // A kind the provider doesn't claim is reported as unknown rather than
       // passed on as something it can't really describe. A whole-series item
       // ("show") counts as TV.

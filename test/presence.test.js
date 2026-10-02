@@ -18,6 +18,8 @@ test("normalizes a playing track", () => {
     kind: "track",
     title: "Song",
     subtitle: "Artist",
+    artist: null,
+    provider: null,
     artwork: null,
     artworkUrl: null,
     series: null,
