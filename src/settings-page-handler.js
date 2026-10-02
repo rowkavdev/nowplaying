@@ -446,6 +446,7 @@ let infoRequest = 0;
 async function selectInfoTab(tab) {
   for (const item of infoTabs) { item.setAttribute("aria-selected", String(item === tab)); item.setAttribute("tabindex", item === tab ? "0" : "-1"); }
   infoContent.setAttribute("aria-labelledby", tab.id);
+  infoContent.scrollTop = 0;
   const filename = tab.dataset.file;
   const request = ++infoRequest;
   if (infoCache.has(filename)) { infoContent.textContent = infoCache.get(filename); return; }
