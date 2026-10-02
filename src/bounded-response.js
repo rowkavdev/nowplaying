@@ -4,8 +4,12 @@ export async function readBoundedBytes(response, limit, label = "response") {
   if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("limit: expected a positive integer");
   const rawLength = response?.headers?.get?.("content-length");
   const declared = typeof rawLength === "string" && rawLength.trim() !== "" ? Number(rawLength) : NaN;
-  if (Number.isFinite(declared) && declared > limit) throw new Error(`${label} is too large`);
   const body = response?.body;
+  if (Number.isFinite(declared) && declared > limit) {
+    // Release the connection instead of leaving the unread body open.
+    await body?.cancel?.().catch(() => {});
+    throw new Error(`${label} is too large`);
+  }
   if (body && typeof body.getReader === "function") {
     const reader = body.getReader();
     const chunks = [];

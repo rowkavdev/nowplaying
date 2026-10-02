@@ -61,3 +61,11 @@ test("buffers non-streaming bodies that declare a length within the cap", async 
   assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "2" }), text: async () => "ok" }, 10)).byteLength, 2);
   assert.equal((await readBoundedBytes({ headers: new Headers({ "content-length": "4" }), arrayBuffer: async () => new Uint8Array(4).buffer }, 10)).byteLength, 4);
 });
+
+test("an over-declared response body is cancelled, not left open", async () => {
+  let cancelled = false;
+  const body = new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(10)); }, cancel() { cancelled = true; } });
+  const response = new Response(body, { headers: { "content-length": "999999" } });
+  await assert.rejects(readBoundedBytes(response, 1000, "Artwork"), /too large/);
+  assert.equal(cancelled, true);
+});
