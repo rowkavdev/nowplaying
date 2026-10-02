@@ -189,7 +189,7 @@ function render(data) {
 }
 async function act(body, done) {
   const focused = document.activeElement;
-  const restore = list.contains(focused);
+  const restore = list.contains(focused) || focused === everywhere;
   say("Working...", "warn");
   try {
     const data = await call(body);
