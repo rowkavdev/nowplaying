@@ -13,7 +13,7 @@ import { presenceItemKey } from "./presence-identity.js";
 //   rule and default as Discord, #339) is uploaded as idle until it moves.
 
 export function createHostedLoop({
-  getPresence, uploader, intervalMs = 15_000, failAfterMs = 60_000, stuckAfterMs = 300_000,
+  getPresence, uploader, intervalMs = 15_000, failAfterMs = 60_000, stuckAfterMs = 300_000, stallAfterMs = 60_000,
   elapsedNow = () => performance.now(), setTimer = setTimeout, clearTimer = clearTimeout,
 } = {}) {
   if (typeof getPresence !== "function") throw new TypeError("getPresence is required");
@@ -21,6 +21,7 @@ export function createHostedLoop({
   if (!Number.isInteger(intervalMs) || intervalMs < 1000) throw new RangeError("intervalMs must be at least 1000");
   if (!Number.isInteger(failAfterMs) || failAfterMs < 0) throw new RangeError("failAfterMs is invalid");
   if (!Number.isInteger(stuckAfterMs) || stuckAfterMs < 1000) throw new RangeError("stuckAfterMs must be at least 1000");
+  if (!Number.isInteger(stallAfterMs) || stallAfterMs < 1000) throw new RangeError("stallAfterMs must be at least 1000");
   let timer = null;
   let stopped = true;
   let running = null;
@@ -43,6 +44,14 @@ export function createHostedLoop({
     return elapsedNow() - stuck.since >= stuckAfterMs;
   }
 
+  // Before a frozen position is stale enough to clear, it is already not
+  // playing (the player closed, or the server stopped updating): show it as
+  // paused at that position, as the Discord loop does (#1099). Never applies
+  // to a position that moved or to the first sight of an item.
+  function isStalled(presence) {
+    return Boolean(stuck) && presence.state === "playing" && elapsedNow() - stuck.since >= Math.min(stallAfterMs, stuckAfterMs - 1);
+  }
+
   async function push(presence) {
     try { return await uploader.push(presence); } catch { return { sent: false, reason: "upload_failed" }; }
   }
@@ -53,19 +62,32 @@ export function createHostedLoop({
     try {
       presence = await getPresence();
     } catch {
-      if (privacyClearPending) return clearForPrivacy();
-      failingSince ??= elapsedNow();
-      if (clearedForFailure || elapsedNow() - failingSince < failAfterMs) return { sent: false, reason: "provider_error" };
-      const result = await push(createPresence({ state: "idle" }));
-      // Only stop retrying once the idle state actually reached the host (or
-      // the uploader says it already has it).
-      if (result.sent || result.reason === "unchanged") clearedForFailure = true;
-      return { ...result, cleared: "provider_error" };
+      return providerFailed();
     }
     if (privacyClearPending) return clearForPrivacy();
     failingSince = null;
     clearedForFailure = false;
     if (!presence) return { sent: false, reason: "no_presence" };
+    const frozen = await pushFrozen(presence);
+    if (frozen) return frozen;
+    if (privacyClearPending) return clearForPrivacy();
+    return push(presence);
+  }
+
+  async function providerFailed() {
+    if (privacyClearPending) return clearForPrivacy();
+    failingSince ??= elapsedNow();
+    if (clearedForFailure || elapsedNow() - failingSince < failAfterMs) return { sent: false, reason: "provider_error" };
+    const result = await push(createPresence({ state: "idle" }));
+    // Only stop retrying once the idle state actually reached the host (or
+    // the uploader says it already has it).
+    if (result.sent || result.reason === "unchanged") clearedForFailure = true;
+    return { ...result, cleared: "provider_error" };
+  }
+
+  // A position that stopped moving: paused after the stall window, idle after
+  // the stuck window. Returns null while the position is moving (or new).
+  async function pushFrozen(presence) {
     if (isStuck(presence)) {
       if (clearedForStuck) return { sent: false, reason: "stuck" };
       const result = await push(createPresence({ state: "idle" }));
@@ -73,7 +95,8 @@ export function createHostedLoop({
       return { ...result, cleared: "stuck" };
     }
     if (privacyClearPending) return clearForPrivacy();
-    return push(presence);
+    if (isStalled(presence)) return { ...(await push({ ...presence, state: "paused" })), stalled: true };
+    return null;
   }
 
   function clearForPrivacy() {
