@@ -82,7 +82,7 @@ async function pollHosted(generation){
   } catch(e){
     if(generation!==hostedGeneration)return;
     hostedFlow=false;
-    say('hosted-service-result','GitHub sign-in failed: '+(e.message==='denied'?'Sign-in was not approved. Click Sign in with GitHub to try again.':e.message==='expired'?'The sign-in code expired. Click Sign in with GitHub to get a new code.':e.message));
+    say('hosted-service-result','GitHub sign-in failed: '+(e.message==='denied'?'Sign-in was not approved. Click Sign in with GitHub to try again.':e.message==='expired'?'The sign-in code expired. Click Sign in with GitHub to get a new code.':e.message==='rate_limited'?'The card service received too many sign-in requests. Wait a while before signing in again.':e.message));
   }
 }
 load();
