@@ -76,8 +76,8 @@ test("keeps surrounding text when a segment has another value", () => {
 
 test("rejects unknown fields", () => {
   assert.throws(
-    () => validateTemplate("{title} by {artist}", "discord.details"),
-    { message: "discord.details: unknown field {artist}" },
+    () => validateTemplate("{title} by {singer}", "discord.details"),
+    { message: "discord.details: unknown field {singer}" },
   );
 });
 
@@ -85,6 +85,8 @@ test("exports every supported template field", () => {
   assert.deepEqual(templateFields, [
     "title",
     "subtitle",
+    "artist",
+    "service",
     "album",
     "year",
     "series",
@@ -107,4 +109,29 @@ test("formats series, season, episode and a compact episode code", () => {
   assert.equal(createTemplateValues({ episode: 7 }).episodeCode, "E07");
   assert.equal(createTemplateValues({ season: 1 }).episodeCode, "S01");
   assert.deepEqual([createTemplateValues({}).episodeCode, createTemplateValues({}).series, createTemplateValues({}).season], ["", "", ""]);
+});
+
+test("{artist} and {service} come from the track artist and the source's display name", () => {
+  const values = createTemplateValues({ state: "playing", title: "Mr. Chow", subtitle: "fakemink", artist: "fakemink", provider: "navidrome" });
+  assert.equal(formatTemplate("{artist} on {service}", values), "fakemink on Navidrome");
+  assert.equal(createTemplateValues({ state: "playing", provider: "spotify" }).service, "Spotify");
+  assert.equal(createTemplateValues({ state: "playing", provider: "tidal" }).service, "Tidal");
+  assert.equal(createTemplateValues({ state: "playing" }).service, "");
+  assert.equal(createTemplateValues({ state: "playing", subtitle: "Album Name" }).artist, "");
+});
+
+test("{{ and }} write literal braces and are not read as fields", () => {
+  const values = { title: "Song", artist: "Band" };
+  assert.equal(formatTemplate("{{title}} = {title}", values), "{title} = Song");
+  assert.equal(formatTemplate("{{{artist}}}", values), "{Band}");
+  assert.doesNotThrow(() => validateTemplate("{{not a field}}"));
+  assert.throws(() => validateTemplate("{{ok}} {nope}"), /unknown field \{nope\}/);
+  assert.equal(formatTemplate("{title}", { title: "a{{b}}c" }), "a{{b}}c");
+});
+
+test("{service} for a provider id that names an Object.prototype property is plain text", () => {
+  for (const id of ["constructor", "toString", "hasOwnProperty", "valueOf"]) {
+    const service = createTemplateValues({ state: "playing", provider: id }).service;
+    assert.equal(service, id.charAt(0).toUpperCase() + id.slice(1));
+  }
 });

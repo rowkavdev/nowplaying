@@ -1,8 +1,10 @@
-const TEMPLATE_PATTERN = /\{([a-zA-Z][a-zA-Z0-9]*)\}/g;
+import { providerDisplayName } from "./provider-names.js";
 
 export const templateFields = Object.freeze([
   "title",
   "subtitle",
+  "artist",
+  "service",
   "album",
   "year",
   "series",
@@ -17,6 +19,11 @@ export const templateFields = Object.freeze([
   "duration",
   "progressPercent",
 ]);
+
+// A token is a {field}, or "{{" / "}}" which write one literal brace. Fields
+// win over "{{" when both could start at the same place, so "{{{artist}}}"
+// is "{", the artist, "}".
+const TOKEN_PATTERN = /\{([a-zA-Z][a-zA-Z0-9]*)\}|\{\{|\}\}/g;
 
 const FIELD_SET = new Set(templateFields);
 
@@ -59,6 +66,8 @@ export function createTemplateValues(presence, { labels = {} } = {}) {
   return Object.freeze({
     title: presence.title ?? "",
     subtitle: presence.subtitle ?? "",
+    artist: presence.artist ?? "",
+    service: providerDisplayName(presence.provider),
     album: presence.album ?? "",
     year: presence.year == null ? "" : String(presence.year),
     series: presence.series ?? "",
@@ -79,8 +88,8 @@ export function validateTemplate(template, path = "template") {
   if (typeof template !== "string") {
     throw new TypeError(`${path}: expected a string`);
   }
-  for (const match of template.matchAll(TEMPLATE_PATTERN)) {
-    if (!FIELD_SET.has(match[1])) {
+  for (const match of template.matchAll(TOKEN_PATTERN)) {
+    if (match[1] !== undefined && !FIELD_SET.has(match[1])) {
       throw new TypeError(`${path}: unknown field {${match[1]}}`);
     }
   }
@@ -98,11 +107,12 @@ export function formatTemplate(template, values, { separator = " · ", emptyValu
 
   const segments = separator === "" ? [template] : template.split(separator);
   const formatted = segments.flatMap((segment) => {
-    const fields = [...segment.matchAll(TEMPLATE_PATTERN)].map((match) => match[1]);
+    const fields = [...segment.matchAll(TOKEN_PATTERN)].map((match) => match[1]).filter((field) => field !== undefined);
     if (fields.length > 0 && fields.every((field) => values[field] == null || values[field] === "")) {
       return [];
     }
-    const text = segment.replace(TEMPLATE_PATTERN, (_match, field) => {
+    const text = segment.replace(TOKEN_PATTERN, (token, field) => {
+      if (field === undefined) return token === "{{" ? "{" : "}";
       const value = values[field];
       return value == null || value === "" ? emptyValue : String(value);
     }).trim();
