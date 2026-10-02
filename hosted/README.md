@@ -17,8 +17,9 @@ What it never does:
 | `GET` / `POST` | `/api/devices` | `Authorization: Bearer <device token>` of a signed-in PC. `GET` lists the user's PCs; `POST { action: "rename", deviceId?, name }`, `{ action: "remove", deviceId }` or `{ action: "remove-all" }`. |
 | `POST` | `/api/ingest` | `Authorization: Bearer <device token>`. Push one state update (schema below). |
 | `POST` / `DELETE` | `/api/revoke` | Delete the device token and any stored state. |
-| `GET` / `HEAD` | `/card/<cardId>.svg` | Public SVG. Options: `theme`, `width`, `show` (same as the local card). |
+| `GET` / `HEAD` | `/card/<cardId>.svg` | Public SVG. Options: `theme`, `width`, `show` (same as the local card; add `notime` to `show` to hide the elapsed and total clock). |
 | | | Layout options, all optional: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`). Out-of-range or repeated values return 400 `invalid_layout`. Set only in the URL, never sent by the app. |
+| | | Look options, all optional: `fontFamily` (`system`/`serif`/`mono`/`humanist`), `fontStack` (custom font names only), `statusStyle` (`plain`/`caps`/`dot`), `progressStyle` (`square`/`rounded`), `border` (`none`/`thin`), `background` (`solid`/`transparent`). Same 400 `invalid_layout` rule, same URL-only rule. The hosted card never draws artwork. |
 | `GET` / `HEAD` | `/u/<github-login>.svg` | The signed-in user's card, same options as above. |
 | `GET` | `/healthz` | Liveness. |
 
