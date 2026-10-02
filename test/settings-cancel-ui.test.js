@@ -15,7 +15,8 @@ function page() {
       replaceChildren(...children) { this.children = children; },
       append(...children) { this.children.push(...children); },
       setAttribute(name, value) { this[name] = value; },
-      focus() {},
+      focus() { document.activeElement = this; },
+      contains(other) { return this === other || (this.id === "signin-panel" && ["signin-button", "signin-cancel", "signin-username", "signin-password", "signin-open-link"].includes(other?.id)); },
     });
     return elements.get(id);
   };
