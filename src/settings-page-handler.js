@@ -762,6 +762,7 @@ function showStartup(s) {
 }
 startup.form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const restoreSaveFocus = document.activeElement === startup.save;
   startup.save.disabled = true;
   startupSay("Saving...", "warn");
   try {
@@ -775,6 +776,7 @@ startup.form.addEventListener("submit", async (event) => {
     startupSay("Couldn't save. Nothing was changed.", "bad");
   } finally {
     startup.save.disabled = false;
+    if (restoreSaveFocus && document.activeElement === document.body) startup.save.focus();
   }
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], disconnect_pending: ["Uploads stopped; remote card deletion pending. Retry Disconnect this PC when online.", "bad"], off: ["Off", ""] };
