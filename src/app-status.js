@@ -4,6 +4,8 @@ import { createBuildProvenance } from "./build-provenance.js";
 import { createTrayHealth } from "./tray-health.js";
 
 const PROVIDER_LABELS = Object.freeze({ jellyfin: "Jellyfin", emby: "Emby", plex: "Plex", navidrome: "Navidrome" });
+// Own keys only, so an id such as "constructor" is not read off Object.prototype.
+function providerLabel(id) { return typeof id === "string" && Object.hasOwn(PROVIDER_LABELS, id) ? PROVIDER_LABELS[id] : undefined; }
 const STATE_BY_FAILURE = Object.freeze({ unauthorized: "authentication_failed", unreachable: "unreachable", timeout: "unreachable", error: "error" });
 
 // Tracks what the local status page shows. It only keeps the latest poll
@@ -69,7 +71,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     try { rows = servers(); } catch { rows = []; }
     if (!Array.isArray(rows)) return Object.freeze([]);
     return Object.freeze(rows.map((row, index) => Object.freeze({
-      type: PROVIDER_LABELS[row?.provider] ?? word(row?.provider),
+      type: providerLabel(row?.provider) ?? word(row?.provider),
       address: serverOrigin(config.servers?.[index]?.serverUrl),
       user: text(row?.displayName),
       state: word(row?.state),
@@ -108,7 +110,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       build: buildLabel(build),
       uptimeMs: Math.max(0, elapsedNow() - startedElapsed),
       server: Object.freeze({
-        type: PROVIDER_LABELS[config.provider] ?? config.provider,
+        type: providerLabel(config.provider) ?? config.provider,
         address: serverOrigin(config.serverUrl),
         user: text(config.identity?.displayName),
         state: safeMode ? "safe_mode" : failure ? STATE_BY_FAILURE[failure] : lastOkAt === null ? "starting" : "connected",
