@@ -54,6 +54,7 @@ function mapSession(session) {
   const subtitle = kind === "episode" ? optionalText(item.SeriesName) || optionalText(item.SeasonName) : kind === "track" ? artistLine(item.Artists, item.AlbumArtist) : year !== null ? String(year) : null;
   return {
     state: session.PlayState?.IsPaused ? "paused" : "playing", kind, title: optionalText(item.Name), subtitle,
+    artist: kind === "track" ? artistLine(item.Artists, item.AlbumArtist) : null,
     artwork: artworkRef("jellyfin", item.Id, item.ImageTags?.Primary),
     artworkUrl: null,
     ...playbackTimes(ticksToMilliseconds(session.PlayState?.PositionTicks), ticksToMilliseconds(item.RunTimeTicks)),

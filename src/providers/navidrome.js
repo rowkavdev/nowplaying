@@ -48,6 +48,7 @@ function normalizeBaseUrl(value) {
 function mapEntry(entry) {
   return {
     state: "playing", kind: "track", title: optionalText(entry.title), subtitle: optionalText(entry.artist) || optionalText(entry.album),
+    artist: optionalText(entry.artist),
     artwork: imageRef("navidrome", entry.coverArt, "cover"),
     artworkUrl: null,
     ...playbackTimes(null, Number.isFinite(entry.duration) ? entry.duration * 1000 : null),

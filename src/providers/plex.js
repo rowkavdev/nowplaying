@@ -63,14 +63,25 @@ function matchesUser(session, username) {
   return actual.localeCompare(username, undefined, { sensitivity: "accent" }) === 0;
 }
 
+function trackArtist(session) {
+  return optionalText(session.grandparentTitle) || optionalText(session.originalTitle);
+}
+
+function subtitleFor(kind, session, year) {
+  if (kind === "episode") return optionalText(session.grandparentTitle) || optionalText(session.parentTitle);
+  if (kind === "track") return trackArtist(session);
+  return year !== null ? String(year) : null;
+}
+
 function mapSession(session) {
   const state = session?.Player?.state === "paused" ? "paused" : "playing";
   const type = session.type;
   const kind = type === "track" ? "track" : type === "episode" ? "episode" : type === "movie" ? "movie" : "unknown";
   const year = optionalYear(session.year);
-  const subtitle = kind === "episode" ? optionalText(session.grandparentTitle) || optionalText(session.parentTitle) : kind === "track" ? optionalText(session.grandparentTitle) || optionalText(session.originalTitle) : year !== null ? String(year) : null;
+  const subtitle = subtitleFor(kind, session, year);
   return {
     state, kind, title: optionalText(session.title), subtitle,
+    artist: kind === "track" ? trackArtist(session) : null,
     artwork: imageRef("plex", optionalText(session.thumb) || session.grandparentThumb, "thumb"),
     artworkUrl: null,
     ...playbackTimes(session.viewOffset, session.duration),

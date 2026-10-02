@@ -44,6 +44,11 @@ export function createSpotifyProvider({ getAccessToken, forgetAccessToken = () =
   });
 }
 
+// The track's artists joined, or null when Spotify lists none.
+function artistNames(item) {
+  return (Array.isArray(item.artists) ? item.artists.map((a) => text(a?.name)).filter(Boolean).join(", ") : "") || null;
+}
+
 export function mapPlayback(payload) {
   const item = payload?.item;
   const type = payload?.currently_playing_type;
@@ -51,7 +56,7 @@ export function mapPlayback(payload) {
   const title = text(item.name);
   if (!title) return { state: "idle" };
   const subtitle = type === "track"
-    ? (Array.isArray(item.artists) ? item.artists.map((a) => text(a?.name)).filter(Boolean).join(", ") : null) || text(item.album?.name)
+    ? artistNames(item) || text(item.album?.name)
     : text(item.show?.name);
   const images = type === "track" ? item.album?.images : (item.images ?? item.show?.images);
   const durationMs = count(item.duration_ms);
@@ -62,6 +67,7 @@ export function mapPlayback(payload) {
     kind: "track",
     title,
     subtitle: subtitle || null,
+    artist: type === "track" ? artistNames(item) : null,
     artwork: null,
     artworkUrl: largestImage(images),
     positionMs,
