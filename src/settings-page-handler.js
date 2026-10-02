@@ -259,6 +259,7 @@ const DRPP_SHELL_CSS = `html.drpp-root{color-scheme:dark}
 .drpp-shell .drpp-skip{position:fixed;top:-60px;left:12px;background:#242424;color:#f1f3f5;padding:8px 12px;border:2px solid #bda0f8;z-index:20}.drpp-shell .drpp-skip:focus{top:12px}
 .drpp-shell #hosted-details[hidden]{display:none}
 .drpp-shell input[type=range]{accent-color:#7ab8ff}
+.drpp-shell #hosted-devices{overflow-wrap:anywhere}
 .drpp-shell :focus-visible{outline:2px solid #bda0f8;outline-offset:3px}.drpp-shell .drpp-config-scroll:focus-visible,.drpp-shell .drpp-log-lines:focus-visible{outline-offset:-3px}
 body.drpp-shell{color-scheme:dark;margin:0;background:#242424;color:#c1c2c5;font:14px/1.55 system-ui, sans-serif}
 .drpp-shell #discovered-list li,.drpp-shell #servers-list li,.drpp-shell #signin-panel,.drpp-shell #services-section>div{border-color:#373a40}
