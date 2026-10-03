@@ -73,3 +73,23 @@ test("native builder rejects unsupported versions and bundled arm64 before packa
     }
   }
 });
+
+test("prebuilt RPM spec disables debug packages and has a changelog", linuxOnly, () => {
+  const dir = mkdtempSync(join(tmpdir(), "np-rpm-spec-"));
+  const bundle = join(dir, "bundle"); const bin = join(dir, "bin");
+  mkdirSync(join(bundle, "runtime"), { recursive: true });
+  mkdirSync(join(bundle, "app/assets/brand/png"), { recursive: true });
+  mkdirSync(bin);
+  for (const file of ["nowplaying", "runtime/node"]) {
+    writeFileSync(join(bundle, file), "#!/bin/sh\nprintf x64\n"); chmodSync(join(bundle, file), 0o755);
+  }
+  writeFileSync(join(bundle, "app/assets/brand/png/icon-512.png"), "test");
+  writeFileSync(join(bin, "rpmbuild"), '#!/bin/sh\ncp "$4" "$SPEC_CAPTURE"\n');
+  chmodSync(join(bin, "rpmbuild"), 0o755);
+  const capture = join(dir, "generated.spec");
+  execFileSync("bash", [join(root, "scripts/build-linux-native.sh"), "rpm", bundle, "0.2.1+dev.abc123", join(dir, "out")], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SPEC_CAPTURE: capture } });
+  const spec = readFileSync(capture, "utf8");
+  assert.match(spec, /^%global debug_package %\{nil\}$/m);
+  assert.match(spec, /^Version: 0\.2\.1\+dev\.abc123$/m);
+  assert.match(spec, /^%changelog\n\* [A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4} rowkav09 - 0\.2\.1\+dev\.abc123-1\n- Package the prebuilt development bundle\./m);
+});

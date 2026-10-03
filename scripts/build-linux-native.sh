@@ -28,6 +28,8 @@ if [[ "$kind" = rpm ]]; then
   mkdir -p "$stage/rpm/"{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
   tar -czf "$stage/rpm/SOURCES/payload.tar.gz" -C "$stage/payload" .
   cat > "$stage/rpm/SPECS/nowplaying.spec" <<SPEC
+# Prebuilt Node payload has no source tree/debug symbols to extract.
+%global debug_package %{nil}
 Name: nowplaying
 Version: ${version//-/_}
 Release: 1
@@ -51,6 +53,9 @@ tar -xzf %{SOURCE0} -C %{buildroot}
 /usr/bin/nowplaying
 /usr/share/applications/nowplaying.desktop
 /usr/share/icons/hicolor/512x512/apps/nowplaying.png
+%changelog
+* $(LC_ALL=C date -u '+%a %b %d %Y') rowkav09 - ${version//-/_}-1
+- Package the prebuilt development bundle.
 SPEC
   rpmbuild --define "_topdir $stage/rpm" -bb "$stage/rpm/SPECS/nowplaying.spec"
   find "$stage/rpm/RPMS" -name '*.rpm' -exec cp {} "$out/" \;
