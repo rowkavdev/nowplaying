@@ -3,6 +3,7 @@
 # Input is trusted, immutable build output from our own CI. Link validation
 # rejects accidental escapes; it is not race-safe against concurrent edits.
 set -euo pipefail
+[[ "$(uname -s)" = Linux ]] || { echo "Linux only: native Linux packaging" >&2; exit 2; }
 bundle="${1:?bundle directory required}"
 stage="${2:?staging directory required}"
 [[ -x "$bundle/nowplaying" && -x "$bundle/runtime/node" ]] || { echo 'Not a built bundle' >&2; exit 2; }

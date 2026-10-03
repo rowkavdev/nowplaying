@@ -2,6 +2,7 @@
 # Build only. Installing/releasing is an explicit next step. Source app version
 # is normalised for package managers; a dev package must use a dev version.
 set -euo pipefail
+[[ "$(uname -s)" = Linux ]] || { echo "Linux only: native Linux packaging" >&2; exit 2; }
 kind="${1:?deb|rpm|arch required}"
 case "$kind" in
   deb|rpm|arch) ;;
