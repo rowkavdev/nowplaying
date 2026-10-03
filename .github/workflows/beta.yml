@@ -7,12 +7,17 @@ on:
     paths:
       - scripts/build-windows.ps1
       - scripts/build-posix.sh
+      - scripts/build-linux-native.sh
+      - scripts/stage-linux-package.sh
+      - scripts/build-deb.sh
+      - scripts/linux-distro-lab.sh
+      - scripts/linux-desktop-smoke.py
       - scripts/release-notes.js
       - .github/workflows/beta.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 
 concurrency:
@@ -23,10 +28,8 @@ jobs:
   windows:
     runs-on: windows-2025
     permissions:
-      contents: write
+      contents: read
       pull-requests: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -55,13 +58,6 @@ jobs:
             $name = $_.Name -replace '^nowplaying-v[0-9]+\.[0-9]+\.[0-9]+-', 'nowplaying-dev-'
             if ($name -ne $_.Name) { Rename-Item $_.FullName $name }
           }
-      - name: Attest development build provenance
-        if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          subject-path: |
-            dist/windows/*.exe
-            dist/windows/*.zip
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -74,10 +70,8 @@ jobs:
   macos:
     runs-on: macos-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -90,11 +84,6 @@ jobs:
       - name: Build macOS ZIP
         shell: bash
         run: ./scripts/build-posix.sh macos
-      - name: Attest development build provenance
-        if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          subject-path: dist/macos/*.zip
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -105,10 +94,8 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -121,11 +108,6 @@ jobs:
       - name: Build Linux tarball
         shell: bash
         run: ./scripts/build-posix.sh linux
-      - name: Attest development build provenance
-        if: ${{ github.event.repository.visibility == 'public' }}
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          subject-path: dist/linux/*.tar.gz
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -133,12 +115,81 @@ jobs:
           path: dist/linux/*.tar.gz
           retention-days: 1
 
+  linux-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            image: debian:13
+          - distro: fedora
+            image: fedora:43
+          - distro: arch
+            image: archlinux:base
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev
+      - run: bash scripts/build-posix.sh linux
+      - name: Package, install and verify native desktop app
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          mkdir -p native-packages
+          package_version="$(node -p 'require("./package.json").version')+dev.${GITHUB_SHA:0:7}"
+          docker run --rm -e DISTRO -e "PACKAGE_VERSION=$package_version" -v "$PWD:/source:ro" -v "$PWD/native-packages:/artifacts" "$DISTRO_IMAGE" bash /source/scripts/linux-distro-lab.sh
+      - name: Upload native development packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-native-${{ matrix.distro }}
+          path: |
+            native-packages/*.deb
+            native-packages/*.rpm
+            native-packages/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
+  attest:
+    needs: [windows, macos, linux, linux-native]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: '*'
+          path: dist
+          merge-multiple: true
+      - name: Attest trusted development assets
+        if: ${{ github.event.repository.visibility == 'public' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+
   # One moving pre-release: the "dev" tag and its release are updated in place
   # on every push to main, so the releases page shows a single development
   # build instead of one per merge. It is never marked Latest.
   release:
-    needs: [windows, macos, linux]
-    if: github.event_name != 'pull_request'
+    needs: [windows, macos, linux, linux-native, attest]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -161,7 +212,7 @@ jobs:
         shell: bash
         run: |
           cd dist
-          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' \) -printf '%f\n' | sort | while IFS= read -r f; do
+          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' \) -printf '%f\n' | sort | while IFS= read -r f; do
             sha256sum "$f"
           done > SHA256SUMS
           cat SHA256SUMS
@@ -217,7 +268,7 @@ jobs:
           set -euo pipefail
           title="nowplaying dev build #${GITHUB_RUN_NUMBER} (${DEV_VERSION})"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          mapfile -t files < <(find dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' -o -name SHA256SUMS \) | sort)
+          mapfile -t files < <(find dist -maxdepth 1 -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name SHA256SUMS \) | sort)
           # Only a 404 means there is no dev release yet. Any other lookup error
           # (rate limit, outage) used to fall through to "create", which moved the
           # tag and then failed with "a release with the same tag name already

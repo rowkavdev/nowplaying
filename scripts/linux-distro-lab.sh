@@ -18,7 +18,7 @@ esac
 useradd -m builder
 cp -a /source /home/builder/source
 chown -R builder:builder /home/builder/source
-runuser -u builder -- bash /home/builder/source/scripts/build-linux-native.sh "$format" /home/builder/source/dist/linux/nowplaying 0.2.1+dev /home/builder/packages
+runuser -u builder -- bash /home/builder/source/scripts/build-linux-native.sh "$format" /home/builder/source/dist/linux/nowplaying "${PACKAGE_VERSION:-0.2.1+dev}" /home/builder/packages
 case "$format" in
   deb) apt-get install -y /home/builder/packages/*.deb ;;
   rpm) dnf install -y /home/builder/packages/*.rpm ;;
@@ -27,3 +27,9 @@ esac
 /usr/bin/nowplaying --version
 # appPaths/first-run and real GTK helper run in a private user session.
 runuser -u builder -- xvfb-run -a dbus-run-session -- python3 /home/builder/source/scripts/linux-desktop-smoke.py
+
+# Export only after package installation and desktop protocol acceptance pass.
+if [[ -d /artifacts ]]; then
+  find /home/builder/packages -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' \) -exec cp {} /artifacts/ \;
+  find /artifacts -maxdepth 1 -type f -exec chmod 644 {} +
+fi

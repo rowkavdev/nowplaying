@@ -22,3 +22,11 @@ makepkg requires an unprivileged builder. The scripts build files only; they
 do not install, publish, enable autostart or cut stable releases. Versions use
 letters, digits, dot, plus and dash; RPM/Arch translate dash to underscore.
 This slice rejects non-x86_64 hosts and bundles rather than mislabeling them.
+
+## Development release identity
+
+Rolling development packages carry `+dev.<headsha>` in package metadata so
+upgrades can identify the commit. The installed `nowplaying --version` reports
+the base version from the bundled package.json, not that package-manager suffix.
+Use package metadata and the published checksum/attestation for exact build
+identity; do not infer the commit from the CLI's base version alone.
