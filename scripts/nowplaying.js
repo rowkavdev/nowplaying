@@ -108,6 +108,8 @@ async function start() {
   if (!args.includes("--no-tray") && linuxTrayAvailable()) {
     tray = createLinuxTray({
       url: app.url,
+      isFirstRun: () => Boolean(liveApp?.firstRun),
+      getUrl: () => liveApp.url,
       script: fileURLToPath(new URL("./linux-tray.py", import.meta.url)),
       icon: fileURLToPath(new URL("../assets/brand/png/icon-512.png", import.meta.url)),
       onQuit: () => { void close(); },

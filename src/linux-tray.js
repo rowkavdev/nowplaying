@@ -22,7 +22,7 @@ export function linuxTrayAvailable({ platform = process.platform, env = process.
 // The helper sees only the icon path. Menu events are a small allowlist, not
 // commands or URLs supplied by the helper. Missing desktop support leaves the
 // WebUI/server running rather than turning Quit into a startup failure.
-export function createLinuxTray({ url, script, icon, spawnProcess = spawn, openUrl = openLinuxWebUiUrl, onQuit = () => {}, onUnavailable = () => {}, readyTimeoutMs = 5000, killTimeoutMs = 1000, env = process.env } = {}) {
+export function createLinuxTray({ url, script, icon, spawnProcess = spawn, openUrl = openLinuxWebUiUrl, onQuit = () => {}, onUnavailable = () => {}, readyTimeoutMs = 5000, killTimeoutMs = 1000, isFirstRun = () => false, getUrl = () => url, env = process.env } = {}) {
   const target = new URL(url);
   if (target.protocol !== "http:" || target.hostname !== "127.0.0.1" || target.username || target.password || target.pathname !== "/" || target.search || target.hash)
     throw new TypeError("tray URL must be a loopback app origin");
@@ -60,7 +60,11 @@ export function createLinuxTray({ url, script, icon, spawnProcess = spawn, openU
         if (event === "ready") settle(true);
         else if (readyDone && event === "quit") { didQuit = true; onQuit(); break; }
         else if (readyDone && ["open", "settings", "logs"].includes(event))
-          try { openUrl(event === "open" ? target.origin : `${target.origin}/${event}`); }
+          try {
+            const live = new URL(getUrl());
+            if (live.protocol !== "http:" || live.hostname !== "127.0.0.1" || live.username || live.password || live.pathname !== "/" || live.search || live.hash) throw new TypeError("Invalid live origin");
+            openUrl(isFirstRun() ? `${live.origin}/settings` : event === "open" ? live.origin : `${live.origin}/${event}`);
+          }
           catch { /* A browser failure must not terminate the media app. */ }
       }
     });
