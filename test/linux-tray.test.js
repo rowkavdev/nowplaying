@@ -116,3 +116,15 @@ test("real helper ignoring TERM is killed within the bounded shutdown window", {
     assert.equal(signal, "SIGKILL");
   } finally { child.kill("SIGKILL"); }
 });
+
+test("first-run menu opens setup until the live app is configured", async () => {
+  const child = fakeChild(); const opened = []; let firstRun = true; let url = "http://127.0.0.1:47832";
+  const tray = createLinuxTray(options(child, { isFirstRun: () => firstRun, getUrl: () => url, openUrl: (url) => opened.push(url) }));
+  child.stdout.write("ready\nopen\nlogs\n");
+  await tray.ready;
+  firstRun = false;
+  url = "http://127.0.0.1:47833";
+  child.stdout.write("logs\n");
+  assert.deepEqual(opened, ["http://127.0.0.1:47832/settings", "http://127.0.0.1:47832/settings", "http://127.0.0.1:47833/logs"]);
+  tray.close();
+});
