@@ -27,7 +27,7 @@ rm -rf "dist/$os"
 mkdir -p "$bundle/runtime" "$bundle/app"
 
 cp "$(command -v node)" "$bundle/runtime/node"
-cp -r src scripts package.json "$bundle/app/"
+cp -r src scripts assets package.json "$bundle/app/"
 cp -r node_modules "$bundle/app/node_modules"
 cp NOTICE README.md LICENSE "$bundle/"
 # The Info modal handler reads ../NOTICE, ../README.md and ../LICENSE

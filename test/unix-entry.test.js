@@ -35,7 +35,7 @@ test("--version prints the package version", unix, async () => {
 
 test("start --no-setup with no config serves WebUI Settings on loopback", unix, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-"));
-  const cli = run(home, ["start", "--no-setup"]);
+  const cli = run(home, ["start", "--no-setup", "--no-tray"]);
   try {
     const url = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`WebUI did not come up: ${JSON.stringify(cli.output())}`)), 10000);
@@ -54,7 +54,7 @@ test("start --no-setup with no config serves WebUI Settings on loopback", unix, 
 
 test("unknown commands and options exit 2", unix, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-"));
-  for (const args of [["bogus"], ["start", "--no-tray"], ["setup"]]) {
+  for (const args of [["bogus"], ["start", "--bogus"], ["setup"]]) {
     const cli = run(home, args);
     assert.equal(await cli.exited, 2, args.join(" "));
   }
@@ -71,12 +71,12 @@ test("start runs the server and card from the setup config and the real Secret S
   await writeFile(join(home, ".config", "nowplaying", "config.json"), serializeSetupConfig({
     provider: "jellyfin", serverUrl: "http://127.0.0.1:9", identity: { id: identityId, displayName: "CI" }, credentialStored: true,
   }));
-  const missing = run(home, ["start", "--no-setup"]);
+  const missing = run(home, ["start", "--no-setup", "--no-tray"]);
   assert.equal(await missing.exited, 1);
   assert.match(missing.output().stderr, /sign in again/);
 
   await store.save({ provider: "jellyfin", identityId }, "ci-token");
-  const cli = run(home, ["start", "--no-setup"]);
+  const cli = run(home, ["start", "--no-setup", "--no-tray"]);
   try {
     const url = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`start did not come up: ${JSON.stringify(cli.output())}`)), 30000);
@@ -105,7 +105,7 @@ test("start runs the server and card from the setup config and the real Secret S
 });
 
 test("start and setup without HOME say so plainly, no stack trace (#500)", unix, async () => {
-  for (const args of [["start", "--no-setup"]]) {
+  for (const args of [["start", "--no-setup", "--no-tray"]]) {
     const env = { ...process.env };
     delete env.HOME;
     const child = spawn(process.execPath, [ENTRY, ...args], { env, stdio: ["ignore", "pipe", "pipe"] });

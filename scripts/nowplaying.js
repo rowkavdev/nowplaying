@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createLinuxTray, linuxTrayAvailable } from "../src/linux-tray.js";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,11 +24,11 @@ import {
   guardStartup,
 } from "../src/startup-recovery-store.js";
 
-// Linux and macOS entry point (#215): the server and card without the tray.
+// Linux/macOS entry point. Linux graphical sessions also run a native tray.
 // Settings open in the browser, sign-ins go to the OS keychain and files live
 // where appPaths puts them. Windows keeps scripts/windows-entry.js.
 
-const USAGE = `Usage: nowplaying start [--no-setup]   (opens WebUI Settings the first time)
+const USAGE = `Usage: nowplaying start [--no-setup] [--no-tray]   (opens WebUI Settings the first time)
        nowplaying --version
        nowplaying --help`;
 
@@ -54,7 +55,7 @@ if (command === "--version" || command === "version") {
 }
 
 async function start() {
-  const unknown = args.find((arg) => arg !== "--no-setup");
+  const unknown = args.find((arg) => arg !== "--no-setup" && arg !== "--no-tray");
   if (unknown) {
     console.error(`nowplaying: unknown start option: ${unknown}`);
     process.exit(2);
@@ -88,14 +89,35 @@ async function start() {
     throw error;
   }
   await logger.event("startup", "ok");
+  let tray;
+  let closing = false;
   const close = async () => {
-    // A deliberate stop after a successful start is not a crash (#497).
-    await recovery?.cleanShutdown?.();
-    await liveApp.close();
-    await logger.event("startup", "stopped");
+    if (closing) return;
+    closing = true;
+    try {
+      tray?.close();
+      // A deliberate stop after a successful start is not a crash (#497).
+      await recovery?.cleanShutdown?.();
+    } finally {
+      await liveApp.close();
+      await logger.event("startup", "stopped");
+    }
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
+  if (!args.includes("--no-tray") && linuxTrayAvailable()) {
+    tray = createLinuxTray({
+      url: app.url,
+      script: fileURLToPath(new URL("./linux-tray.py", import.meta.url)),
+      icon: fileURLToPath(new URL("../assets/brand/png/icon-512.png", import.meta.url)),
+      onQuit: () => { void close(); },
+      onUnavailable: () => {
+        console.error(`NowPlaying tray unavailable. Web UI is still running: ${app.url}/settings. Check Python GTK/AppIndicator packages and your desktop's indicator support.`);
+        void logger.event("tray", "failed", { level: "warn", code: "TRAY_UNAVAILABLE" });
+      },
+    });
+    if (await tray.ready) await logger.event("tray", "ok");
+  }
 }
 
 async function version() {
