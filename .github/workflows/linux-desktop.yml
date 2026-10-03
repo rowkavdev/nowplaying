@@ -1,0 +1,39 @@
+name: Linux desktop packages
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: linux-desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  distro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian
+            image: debian:13
+          - distro: fedora
+            image: fedora:43
+          - distro: arch
+            image: archlinux:base
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev
+      - run: bash scripts/build-posix.sh linux
+      - name: Install and test in distro userland
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+          DISTRO: ${{ matrix.distro }}
+        run: |
+          docker run --rm -e DISTRO -v "$PWD:/source:ro" "$DISTRO_IMAGE" bash /source/scripts/linux-distro-lab.sh
