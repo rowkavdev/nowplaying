@@ -8,6 +8,7 @@
 # usage: build-deb.sh <bundle-dir> <version> <amd64|arm64> <out-dir>
 # The Maintainer field comes from NOWPLAYING_DEB_MAINTAINER.
 set -euo pipefail
+[[ "$(uname -s)" = Linux ]] || { echo "Linux only: native Linux packaging" >&2; exit 2; }
 
 bundle="${1:?usage: build-deb.sh <bundle-dir> <version> <amd64|arm64> <out-dir>}"
 version="${2:?missing version}"

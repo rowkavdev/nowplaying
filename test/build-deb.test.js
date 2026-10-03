@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const script = new URL("../scripts/build-deb.sh", import.meta.url).pathname;
-const haveDpkg = spawnSync("dpkg-deb", ["--version"]).status === 0 && spawnSync("fakeroot", ["--version"]).status === 0;
+const haveDpkg = process.platform === "linux" && spawnSync("dpkg-deb", ["--version"]).status === 0 && spawnSync("fakeroot", ["--version"]).status === 0;
 
 function fakeBundle() {
   const dir = mkdtempSync(join(tmpdir(), "np-deb-"));
@@ -21,7 +21,7 @@ function fakeBundle() {
   return { dir, bundle };
 }
 
-test("rejects a bad version or architecture before building", () => {
+test("rejects a bad version or architecture before building", { skip: process.platform !== "linux" }, () => {
   const { dir, bundle } = fakeBundle();
   const bad = [[bundle, "0.2.0\nSection: evil", "amd64", dir, /invalid version/], [bundle, "v0.2", "amd64", dir, /invalid version/], [bundle, "0.2.0", "i386", dir, /unsupported architecture/]];
   for (const [bundleDir, version, arch, out, message] of bad) {

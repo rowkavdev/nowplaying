@@ -5,8 +5,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, statSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const linuxOnly = { skip: process.platform !== "linux" };
 const root = new URL("../", import.meta.url).pathname;
-test("common staging contains a non-terminal desktop entry and branding", () => {
+test("common staging contains a non-terminal desktop entry and branding", linuxOnly, () => {
   const dir = mkdtempSync(join(tmpdir(), "np-native-"));
   const bundle = join(dir, "bundle");
   mkdirSync(join(bundle, "runtime"), { recursive: true });
@@ -30,7 +31,7 @@ test("common staging contains a non-terminal desktop entry and branding", () => 
   assert.match(readFileSync(join(stage, "usr/bin/nowplaying"), "utf8"), /exec \/opt\/nowplaying\/nowplaying "\$@"/);
 });
 
-test("native builder rejects invalid package version and unknown format", () => {
+test("native builder rejects invalid package version and unknown format", linuxOnly, () => {
   const bundle = mkdtempSync(join(tmpdir(), "np-package-bad-"));
   const out = join(bundle, "out");
   mkdirSync(join(bundle, "runtime"));
@@ -43,7 +44,7 @@ test("native builder rejects invalid package version and unknown format", () => 
   }
 });
 
-test("native staging accepts internal links but rejects paths escaping the bundle", () => {
+test("native staging accepts internal links but rejects paths escaping the bundle", linuxOnly, () => {
   const dir = mkdtempSync(join(tmpdir(), "np-native-links-"));
   const bundle = join(dir, "bundle");
   mkdirSync(join(bundle, "runtime"), { recursive: true });
