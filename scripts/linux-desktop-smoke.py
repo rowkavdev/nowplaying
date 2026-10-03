@@ -5,7 +5,7 @@ import socket
 import subprocess
 import tempfile
 import time
-import urllib.request
+import http.client
 from pathlib import Path
 import gi
 gi.require_version("Gio", "2.0")
@@ -62,8 +62,14 @@ with tempfile.TemporaryDirectory(prefix='np-desktop-smoke-') as temp:
             wait_for(registration, 'tray did not register', 20)
             sender, item_path = registered[0]
             url = 'http://127.0.0.1:47832'
-            with urllib.request.urlopen(url + '/settings', timeout=5) as response:
+            connection = http.client.HTTPConnection('127.0.0.1', 47832, timeout=5)
+            try:
+                connection.request('GET', '/settings')
+                response = connection.getresponse()
                 assert response.status == 200
+                response.read()
+            finally:
+                connection.close()
             def active_menu():
                 try:
                     props = call(sender, item_path, 'org.freedesktop.DBus.Properties', 'GetAll', GLib.Variant('(s)', ('org.kde.StatusNotifierItem',)))[0]
@@ -95,6 +101,10 @@ with tempfile.TemporaryDirectory(prefix='np-desktop-smoke-') as temp:
             if child.poll() is None:
                 child.terminate()
                 try: child.wait(timeout=3)
-                except subprocess.TimeoutExpired: child.kill(); child.wait()
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
             if not passed:
-                log.flush(); log.seek(0); print(log.read())
+                log.flush()
+                log.seek(0)
+                print(log.read())
