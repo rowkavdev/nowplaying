@@ -27,14 +27,9 @@ esac
 
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-mkdir -p "$stage/opt" "$stage/usr/bin" "$stage/DEBIAN" "$out"
-chmod 755 "$stage" "$stage/opt" "$stage/usr" "$stage/usr/bin"
-cp -a "$bundle" "$stage/opt/nowplaying"
-cat > "$stage/usr/bin/nowplaying" <<'WRAP'
-#!/bin/sh
-exec /opt/nowplaying/nowplaying "$@"
-WRAP
-chmod 755 "$stage/usr/bin/nowplaying"
+mkdir -p "$stage/DEBIAN" "$out"
+chmod 755 "$stage"
+bash "$(dirname "$0")/stage-linux-package.sh" "$bundle" "$stage"
 
 size_kb=$(du -sk "$stage/opt" "$stage/usr" | awk '{ sum += $1 } END { print sum }')
 cat > "$stage/DEBIAN/control" <<CONTROL
@@ -43,16 +38,16 @@ Version: $version
 Architecture: $arch
 Maintainer: $maintainer
 Installed-Size: $size_kb
-Depends: libc6, libstdc++6, libgcc-s1
+Depends: libc6, libstdc++6, libgcc-s1, python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, libsecret-tools, gnome-keyring, xdg-utils
 Section: sound
 Priority: optional
 Homepage: https://github.com/rowkavdev/nowplaying
 Description: Show what you are playing on Plex, Jellyfin, Emby or Navidrome
  Turns playback from your media server into a README card or Discord Rich
- Presence. Ships its own Node runtime, so nothing else needs to be installed.
+ Presence. Ships its own Node runtime; desktop dependencies are installed by apt.
 CONTROL
 
 # Root-owned files regardless of who builds, and no stray build-time modes.
 file="$out/nowplaying_${version}_${arch}.deb"
-fakeroot sh -c "chown -R 0:0 '$stage' && dpkg-deb --root-owner-group -Zxz --build '$stage' '$file' >/dev/null"
+fakeroot dpkg-deb --root-owner-group -Zxz --build "$stage" "$file" >/dev/null
 echo "$file"
