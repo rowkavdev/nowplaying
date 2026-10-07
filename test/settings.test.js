@@ -87,3 +87,21 @@ test("rejects oversized Discord templates", () => {
     { message: "discord.details: expected a string between 0 and 128 characters" },
   );
 });
+
+test("partial card layout retains default fields", () => {
+  const layout = { padding: 32 };
+  const settings = createSettings({ card: { layout } });
+  assert.deepEqual(settings.card.layout, { ...defaultSettings.card.layout, padding: 32 });
+  assert.equal(defaultSettings.card.layout.padding, 24);
+});
+
+test("settings copy card layout without freezing caller input", () => {
+  const layout = { ...defaultSettings.card.layout, padding: 32 };
+  const settings = createSettings({ card: { layout } });
+  assert.notEqual(settings.card.layout, layout);
+  assert.equal(Object.isFrozen(settings.card.layout), true);
+  assert.equal(Object.isFrozen(layout), false);
+  layout.padding = 40;
+  assert.equal(settings.card.layout.padding, 32);
+  assert.equal(defaultSettings.card.layout.padding, 24);
+});
