@@ -172,6 +172,7 @@ export function createSettings(input = {}) {
       ...defaultSettings.card,
       ...input.card,
       show: { ...defaultSettings.card.show, ...input.card?.show },
+      layout: { ...defaultSettings.card.layout, ...input.card?.layout },
     },
     discord: { ...defaultSettings.discord, ...input.discord },
   };
