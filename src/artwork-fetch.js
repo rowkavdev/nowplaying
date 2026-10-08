@@ -21,12 +21,16 @@ export async function fetchArtwork(request, {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchSameHost(fetchImpl, request, controller.signal);
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Artwork request failed: ${response.status} ${response.statusText}`);
+    // Final responses rejected before reading still own an unread body.
+    function discard() {
+      try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+    }
+    if (response.status === 404) { discard(); return null; }
+    if (!response.ok) { discard(); throw new Error(`Artwork request failed: ${response.status} ${response.statusText}`); }
     const contentType = response.headers?.get?.("content-type")?.split(";", 1)[0].trim().toLowerCase();
-    if (!ALLOWED_TYPES.has(contentType)) throw new TypeError(`Artwork content type is not allowed: ${contentType || "missing"}`);
+    if (!ALLOWED_TYPES.has(contentType)) { discard(); throw new TypeError(`Artwork content type is not allowed: ${contentType || "missing"}`); }
     const declaredLength = Number(response.headers?.get?.("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new RangeError("Artwork exceeds maximum byte size");
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) { discard(); throw new RangeError("Artwork exceeds maximum byte size"); }
     // Chunked responses have no Content-Length, so stop reading as soon as
     // the cap is passed instead of buffering the whole body first.
     const bytes = await readBoundedBytes(response, maxBytes, "Artwork").catch((error) => {
