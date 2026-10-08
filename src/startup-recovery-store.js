@@ -17,8 +17,15 @@ export function createStartupRecoveryStore({ file } = {}) {
       return createStartupRecoveryState();
     }
   }
-  async function save(state) {
+  let saveTail = Promise.resolve();
+  function save(state) {
     const current = createStartupRecoveryState(state);
+    const turn = saveTail.then(() => saveCurrent(current));
+    // Each caller sees its own failure; later saves can still recover.
+    saveTail = turn.catch(() => {});
+    return turn;
+  }
+  async function saveCurrent(current) {
     await mkdir(dirname(file), { recursive: true });
     const temporary = `${file}.tmp`;
     await writeFile(temporary, `${JSON.stringify({ version: 1, failures: current.failures, subsystem: current.subsystem })}\n`, { encoding: "utf8", mode: 0o600 });
