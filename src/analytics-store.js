@@ -42,6 +42,12 @@ async function load(file) {
   try {
     const data = JSON.parse(await readFile(file, "utf8"));
     if (data?.version !== 1) throw new Error("unsupported analytics format");
+    const countersValid = ["cards", "discords"].every((key) => Number.isSafeInteger(data[key]) && data[key] >= 0);
+    const installationsValid = ["installations", "cardInstallations", "discordInstallations"].every((key) =>
+      Array.isArray(data[key]) && data[key].every((id) => typeof id === "string"));
+    // Do not reset a malformed existing store: reject before any write so its
+    // history stays intact and a later call can reload a repaired file.
+    if (!countersValid || !installationsValid) throw new Error("invalid analytics data");
     return data;
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
