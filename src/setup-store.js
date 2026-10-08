@@ -5,6 +5,13 @@ import { createSetupConfig, serializeSetupConfig } from "./setup-config.js";
 export function createSetupStore({ file } = {}) {
   if (typeof file !== "string" || !file) throw new TypeError("setup store.file is required");
 
+  let tail = Promise.resolve();
+  function queue(operation) {
+    const turn = tail.then(operation);
+    tail = turn.catch(() => {});
+    return turn;
+  }
+
   async function save(input) {
     const config = createSetupConfig(input);
     await mkdir(dirname(file), { recursive: true });
@@ -28,5 +35,5 @@ export function createSetupStore({ file } = {}) {
     await rm(file, { force: true });
   }
 
-  return Object.freeze({ save, load, reset });
+  return Object.freeze({ save: input => queue(() => save(input)), load: () => queue(load), reset: () => queue(reset) });
 }
