@@ -31,6 +31,8 @@ export async function readBoundedBytes(response, limit, label = "response") {
     } catch (error) {
       cancelQuietly(reader);
       throw error;
+    } finally {
+      reader.releaseLock();
     }
     const bytes = new Uint8Array(total);
     let offset = 0;
