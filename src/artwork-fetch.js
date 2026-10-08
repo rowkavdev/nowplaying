@@ -50,6 +50,9 @@ async function fetchSameHost(fetchImpl, request, signal) {
   for (let hops = 0; ; hops += 1) {
     const response = await fetchImpl(url, { headers: request.headers, signal, redirect: "manual" });
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    // Discard every intermediate body, even when redirect validation fails.
+    // Cleanup must not delay the shared deadline or replace the real error.
+    try { void response.body?.cancel().catch(() => {}); } catch {}
     if (hops >= MAX_REDIRECTS) throw new Error("Artwork request redirected too many times");
     const location = response.headers?.get?.("location");
     if (!location) throw new Error(`Artwork request failed: ${response.status} redirect without a location`);
