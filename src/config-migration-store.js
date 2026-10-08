@@ -1,4 +1,4 @@
-import { copyFile, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { migrateConfigDocument } from "./config-migration.js";
 
@@ -29,10 +29,19 @@ export function createConfigMigrationStore({ file, currentVersion, migrations, v
     await mkdir(dirname(file), { recursive: true });
     try {
       await copyFileExclusive(file, backup);
-      await writeFile(temporary, `${JSON.stringify(result.document, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-      await rename(temporary, file);
+      // Take ownership before writing: failure to acquire wx must not delete
+      // a temporary file belonging to another migration.
+      const handle = await open(temporary, "wx", 0o600);
+      try {
+        await handle.writeFile(`${JSON.stringify(result.document, null, 2)}\n`);
+        await handle.close();
+        await rename(temporary, file);
+      } catch (error) {
+        await handle.close().catch(() => {});
+        await rm(temporary, { force: true });
+        throw error;
+      }
     } catch {
-      await rm(temporary, { force: true });
       throw new Error("configuration migration could not be saved");
     }
     return Object.freeze({ changed: true, status: "migrated", backup, sourceVersion: result.sourceVersion, targetVersion: result.targetVersion, document: result.document });
@@ -43,9 +52,16 @@ export function createConfigMigrationStore({ file, currentVersion, migrations, v
 
 async function copyFileExclusive(source, destination) {
   const handle = await open(destination, "wx", 0o600);
+  try {
+    // copyFile copies the source mode too, undoing the owner-only wx open.
+    // Write through the exclusive handle so the backup stays private.
+    await handle.writeFile(await readFile(source));
+  } catch (error) {
+    await handle.close();
+    await rm(destination, { force: true });
+    throw error;
+  }
   await handle.close();
-  try { await copyFile(source, destination); }
-  catch (error) { await rm(destination, { force: true }); throw error; }
 }
 
 function canonicalTimestamp(value) {
