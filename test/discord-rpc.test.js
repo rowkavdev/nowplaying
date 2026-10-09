@@ -63,3 +63,42 @@ test("a failed connect can be retried", async () => {
   await transport.connect();
   assert.equal(transport.connected, true);
 });
+
+test("close during a pending login destroys the late client (#1127)", async () => {
+  let releaseLogin;
+  let destroyed = 0;
+  const rpc = {
+    login: () => new Promise((resolve) => { releaseLogin = resolve; }),
+    setActivity: async () => {},
+    clearActivity: async () => {},
+    destroy: async () => { destroyed += 1; },
+  };
+  const transport = createDiscordRpcTransport({ clientId: "123456789012345678", createClient: async () => rpc });
+  const pending = transport.connect();
+  await new Promise((resolve) => setImmediate(resolve)); // login is in flight
+  await transport.close();
+  releaseLogin();
+  await pending;
+  assert.equal(transport.connected, false);
+  assert.equal(destroyed, 1);
+});
+test("late-client cleanup handles a synchronous or throwing destroy (#1127)", async () => {
+  for (const destroy of [() => { /* sync, returns undefined */ }, () => { throw new Error("destroy blew up"); }]) {
+    let releaseLogin;
+    let destroyed = 0;
+    const rpc = {
+      login: () => new Promise((resolve) => { releaseLogin = resolve; }),
+      setActivity: async () => {},
+      clearActivity: async () => {},
+      destroy: () => { destroyed += 1; return destroy(); },
+    };
+    const transport = createDiscordRpcTransport({ clientId: "123456789012345678", createClient: async () => rpc });
+    const pending = transport.connect();
+    await new Promise((resolve) => setImmediate(resolve));
+    await transport.close();
+    releaseLogin();
+    await pending;
+    assert.equal(transport.connected, false);
+    assert.equal(destroyed, 1);
+  }
+});

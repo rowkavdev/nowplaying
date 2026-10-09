@@ -3,6 +3,7 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
   if (typeof createClient !== "function") throw new TypeError("createClient: expected an RPC client factory");
   let client;
   let connecting;
+  let generation = 0;
 
   // An RPC client whose socket Discord closed (Discord quit or restarted) is
   // dropped so the next connect logs in again.
@@ -19,11 +20,19 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
   async function open() {
     if (dead()) await close().catch(() => {});
     if (client) return;
+    const epoch = generation;
     const next = await createClient();
     if (!next || typeof next.login !== "function" || typeof next.setActivity !== "function" || typeof next.clearActivity !== "function") {
       throw new TypeError("RPC client: expected login, setActivity and clearActivity functions");
     }
     await next.login({ clientId });
+    // A close during createClient/login must not be undone by this late
+    // arrival: destroy the new client instead of adopting it.
+    if (epoch !== generation) {
+      // destroy may be synchronous or async; both must stay quiet here.
+      try { if (typeof next.destroy === "function") await next.destroy(); } catch {}
+      return;
+    }
     client = next;
   }
 
@@ -38,6 +47,7 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
   }
 
   async function close() {
+    generation += 1;
     const current = client;
     client = undefined;
     if (current && typeof current.destroy === "function") await current.destroy();
