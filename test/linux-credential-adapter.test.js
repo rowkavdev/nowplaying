@@ -62,3 +62,19 @@ test("round trip against the real Secret Service", { skip: !realTest }, async ()
   assert.equal(await store.remove(key), true);
   assert.equal(await store.read(key), null);
 });
+
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { runSecretTool } from "../src/linux-credential-adapter.js";
+test("oversized secret-tool output is rejected and stopped without exposing it", async () => {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  let killed = false;
+  child.kill = () => { killed = true; child.emit("close", 0); };
+  const result = runSecretTool(["lookup", "service", "nowplaying"], { spawnProcess: () => child, timeoutMs: 500 });
+  child.stdout.write(Buffer.alloc(4097, 120));
+  // Baseline resolves the oversized value; fixed implementation rejects.
+  child.emit("close", 0);
+  await assert.rejects(result, { message: "Secret Service response is too large" });
+  assert.equal(killed, true);
+});
