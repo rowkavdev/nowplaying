@@ -47,3 +47,16 @@ test("summarizes downloads per asset and in total", async () => {
   ])));
   assert.deepEqual(summary, { total: 9, byAsset: { "a.zip": 7, "b.zip": 2 } });
 });
+
+test("counts assets named like Object.prototype members (#1122)", () => {
+  const releases = [
+    { assets: [{ name: "constructor", downloads: 3 }, { name: "toString", downloads: 2 }, { name: "app.tar.gz", downloads: 5 }] },
+    { assets: [{ name: "constructor", downloads: 4 }, { name: "__proto__", downloads: 1 }] },
+  ];
+  const { total, byAsset } = summarizeReleaseDownloads(releases);
+  assert.equal(total, 15);
+  assert.equal(byAsset.constructor, 7);
+  assert.equal(byAsset.toString, 2);
+  assert.equal(byAsset["__proto__"], 1);
+  assert.equal(byAsset["app.tar.gz"], 5);
+});

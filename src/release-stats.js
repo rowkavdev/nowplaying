@@ -27,11 +27,13 @@ export async function fetchReleaseDownloadStats({ repository, token, fetchImpl =
 }
 
 export function summarizeReleaseDownloads(releases) {
-  const byAsset = {};
+  // A plain object's prototype poisons names like "constructor" and swallows
+  // "__proto__" writes, so accumulate in a Map and define own properties.
+  const byAsset = new Map();
   let total = 0;
   for (const release of releases) for (const asset of release.assets) {
     total += asset.downloads;
-    byAsset[asset.name] = (byAsset[asset.name] || 0) + asset.downloads;
+    byAsset.set(asset.name, (byAsset.get(asset.name) || 0) + asset.downloads);
   }
-  return Object.freeze({ total, byAsset: Object.freeze(byAsset) });
+  return Object.freeze({ total, byAsset: Object.freeze(Object.fromEntries(byAsset)) });
 }
