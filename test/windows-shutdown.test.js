@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { requestLocalShutdown, STOP_EXIT } from "../src/windows-shutdown.js";
 
 test("a refused connection means the app is not running", async () => {
-  const outcome = await requestLocalShutdown({ port: 47832, token: "t", fetchImpl: async () => { throw new Error("fetch failed"); } });
+  const outcome = await requestLocalShutdown({ port: 47832, token: "t", fetchImpl: async () => { throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }); } });
   assert.equal(outcome, "not-running");
 });
 
@@ -81,4 +81,10 @@ test('#815 a hanging health probe is not proof the listener stopped', async () =
     assert.equal(server.listening, true);
     assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/`, { method: 'POST' })).status, 202);
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+});
+
+test("a reset on the shutdown request is unavailable, not not-running (#1123)", async () => {
+  const reset = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+  const outcome = await requestLocalShutdown({ port: 47832, token: "t", fetchImpl: async () => { throw reset; } });
+  assert.equal(outcome, "unavailable");
 });

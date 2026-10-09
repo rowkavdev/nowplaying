@@ -26,9 +26,10 @@ export async function requestLocalShutdown({ port, token, fetchImpl = fetch, req
       signal: AbortSignal.timeout(requestTimeoutMs),
     });
   } catch (error) {
-    // A timeout means something else answered (or nothing parsed); a refused
-    // connection means the app is not running.
-    return error?.name === "TimeoutError" || error?.name === "AbortError" ? "unavailable" : "not-running";
+    // Only a refused connection proves the app is not running. Timeouts,
+    // resets and other failures can come from a live app that answered
+    // badly; report unavailable so setup does not walk over it.
+    return error?.code === "ECONNREFUSED" || error?.cause?.code === "ECONNREFUSED" ? "not-running" : "unavailable";
   }
   if (reply.status !== 202) return "unavailable";
   // The app quits after answering; wait for the port to stop responding.
