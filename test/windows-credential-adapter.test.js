@@ -112,3 +112,14 @@ test("PowerShell credential response is bounded without rejecting maximum escape
     }
   }
 });
+
+test("early PowerShell stdin closure is handled without an uncaught stream error", async () => {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const result = runPowerShell({ op: "get", target: "fixture" }, { spawnProcess: () => child });
+  try {
+    const error = Object.assign(new Error("fixture pipe closed"), { code: "EPIPE" });
+    assert.doesNotThrow(() => child.stdin.emit("error", error));
+  } finally { child.emit("close", 1); }
+  await assert.rejects(result, { message: "Credential Manager request failed" });
+});
