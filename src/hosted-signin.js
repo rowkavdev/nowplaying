@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 import { hostname } from "node:os";
 import { normalizeHostedUrl, hostedCredentialMatches } from "./hosted-uploader.js";
 
@@ -24,7 +25,7 @@ export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = proc
   async function post(url, body, headers = {}) {
     const res = await fetchImpl(url, { method: "POST", headers: { accept: "application/json", "content-type": "application/json", ...headers }, body: JSON.stringify(body), redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
     let data = null;
-    try { data = await res.json(); } catch { data = null; }
+    try { data = await readBoundedJson(res); } catch { data = null; }
     return { status: res.status, ok: res.ok, data };
   }
 
