@@ -22,9 +22,17 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
     fetchImpl(assetUrl, options),
     fetchImpl(checksumUrl, options),
   ]);
-  if (!assetResponse.ok || !checksumResponse.ok) throw new Error("update download failed");
-  assertFinalUrl(assetResponse, assetUrl);
-  assertFinalUrl(checksumResponse, checksumUrl);
+  try {
+    if (!assetResponse.ok || !checksumResponse.ok) throw new Error("update download failed");
+    assertFinalUrl(assetResponse, assetUrl);
+    assertFinalUrl(checksumResponse, checksumUrl);
+  } catch (error) {
+    // Both responses still own unread bodies. Cleanup must not delay or replace rejection.
+    for (const response of [assetResponse, checksumResponse]) {
+      try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+    }
+    throw error;
+  }
   const [archive, checksumBytes] = await Promise.all([
     readBoundedBytes(assetResponse, MAX_ARCHIVE_BYTES, "update archive"),
     readBoundedBytes(checksumResponse, MAX_CHECKSUM_BYTES, "checksum manifest"),
