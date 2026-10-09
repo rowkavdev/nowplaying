@@ -22,7 +22,11 @@ export async function checkForUpdate({ currentVersion, repository, token, channe
   if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new TypeError("repository: expected owner/name");
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl: expected a function");
   const response = await fetchImpl(`https://api.github.com/repos/${repository}/releases`, { headers: { Accept: "application/vnd.github+json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...signalOption(timeoutMs) });
-  if (!response.ok) throw new Error(`update check failed (${response.status})`);
+  if (!response.ok) {
+    // The rejected releases body will not be read. Cleanup must not delay or replace the status error.
+    try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+    throw new Error(`update check failed (${response.status})`);
+  }
   const releases = await readReleases(response);
   if (!Array.isArray(releases)) throw new TypeError("update check returned invalid releases");
   const candidates = releases.filter((release) => release && !release.draft && typeof release.tag_name === "string" && Boolean(release.prerelease) === (channel === "beta"))
