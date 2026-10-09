@@ -18,10 +18,25 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
   // asset fetches must follow; the SHA256SUMS check below is the integrity
   // anchor, and the final URL is pinned to GitHub's asset CDN origins.
   const options = { headers, redirect: "follow", ...(signal ? { signal } : {}) };
-  const [assetResponse, checksumResponse] = await Promise.all([
-    fetchImpl(assetUrl, options),
-    fetchImpl(checksumUrl, options),
-  ]);
+  const responses = [];
+  let fetchFailed = false;
+  const fetchResponse = async (url) => {
+    const response = await fetchImpl(url, options);
+    if (fetchFailed) cancelResponse(response);
+    else responses.push(response);
+    return response;
+  };
+  let assetResponse, checksumResponse;
+  try {
+    [assetResponse, checksumResponse] = await Promise.all([
+      fetchResponse(assetUrl),
+      fetchResponse(checksumUrl),
+    ]);
+  } catch (error) {
+    fetchFailed = true;
+    for (const response of responses) cancelResponse(response);
+    throw error;
+  }
   try {
     if (!assetResponse.ok || !checksumResponse.ok) throw new Error("update download failed");
     assertFinalUrl(assetResponse, assetUrl);
@@ -29,7 +44,7 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
   } catch (error) {
     // Both responses still own unread bodies. Cleanup must not delay or replace rejection.
     for (const response of [assetResponse, checksumResponse]) {
-      try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+      cancelResponse(response);
     }
     throw error;
   }
@@ -44,6 +59,10 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
   const actual = createHash("sha256").update(archive).digest("hex");
   if (actual !== expected) throw new Error("update checksum mismatch");
   return Object.freeze({ filename, bytes: archive, sha256: actual, version: update.version });
+}
+
+function cancelResponse(response) {
+  try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
 }
 
 // Only the two names the release workflow publishes for this exact version are
