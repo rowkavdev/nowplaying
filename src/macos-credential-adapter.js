@@ -21,7 +21,7 @@ export function runSecurity(args, { input, timeoutMs = 20000, spawnProcess = spa
     let stdoutBytes = 0;
     let settled = false;
     const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
-    const timer = setTimeout(() => { child.kill?.(); finish(new Error("Keychain timed out")); }, timeoutMs);
+    const timer = setTimeout(() => { finish(new Error("Keychain timed out")); child.kill?.(); }, timeoutMs);
     child.stdout.on("data", (chunk) => {
       if (settled) return;
       stdoutBytes += chunk.length;
