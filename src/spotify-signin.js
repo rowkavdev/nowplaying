@@ -1,3 +1,4 @@
+import { readBoundedJson } from "./bounded-response.js";
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { buildAuthorizeUrl, createPkcePair, exchangeCode, readCallback } from "./spotify-auth.js";
@@ -15,8 +16,13 @@ const PROFILE_URL = "https://api.spotify.com/v1/me";
 // for config.spotify.identity and the credential store key.
 export async function getSpotifyProfile({ accessToken, fetchImpl = fetch }) {
   const response = await fetchImpl(PROFILE_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!response.ok) throw Object.assign(new Error(`Spotify profile request failed: ${response.status}`), { code: "profile_failed" });
-  const body = await response.json();
+  if (!response.ok) {
+    try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+    throw Object.assign(new Error(`Spotify profile request failed: ${response.status}`), { code: "profile_failed" });
+  }
+  let body;
+  try { body = await readBoundedJson(response); }
+  catch { throw Object.assign(new Error("Spotify returned an unreadable account profile"), { code: "profile_failed" }); }
   const id = typeof body?.id === "string" && body.id.trim() ? body.id.trim() : null;
   if (!id) throw Object.assign(new Error("Spotify returned no account ID"), { code: "profile_failed" });
   const displayName = typeof body.display_name === "string" && body.display_name.trim() ? body.display_name.trim() : id;
