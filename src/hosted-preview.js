@@ -71,11 +71,15 @@ export async function checkHostedEndpoint(url, { fetchImpl = fetch, timeoutMs = 
   }
 }
 
+function cancelHealthBody(target) {
+  try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch {}
+}
+
 // Returns the health body text, or null when it is over the byte cap.
 async function readHealthBody(res) {
   const declaredHeader = res.headers?.get?.("content-length");
   const declared = typeof declaredHeader === "string" && declaredHeader.trim() !== "" ? Number(declaredHeader) : NaN;
-  if (Number.isFinite(declared) && declared > MAX_HEALTH_BYTES) return null;
+  if (Number.isFinite(declared) && declared > MAX_HEALTH_BYTES) { cancelHealthBody(res.body); return null; }
   const body = res.body;
   if (body && typeof body.getReader === "function") {
     const reader = body.getReader();
@@ -87,14 +91,16 @@ async function readHealthBody(res) {
         const { done, value } = await reader.read();
         if (done) break;
         total += value?.byteLength ?? 0;
-        if (total > MAX_HEALTH_BYTES) { oversize = true; break; }
+        if (total > MAX_HEALTH_BYTES) { oversize = true; cancelHealthBody(reader); break; }
         chunks.push(value);
       }
     } catch (error) {
-      await reader.cancel().catch(() => {});
+      cancelHealthBody(reader);
       throw error;
+    } finally {
+      reader.releaseLock?.();
     }
-    if (oversize) { await reader.cancel().catch(() => {}); return null; }
+    if (oversize) return null;
     const bytes = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
