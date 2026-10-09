@@ -92,3 +92,23 @@ test("round-trips through real Windows Credential Manager", { skip: process.plat
   }
   assert.equal(await store.read(target), null);
 });
+
+test("PowerShell credential response is bounded without rejecting maximum escaped secrets", async () => {
+  for (const oversized of [false, true]) {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    let killed = false;
+    child.kill = () => { killed = true; child.emit("close", 0); };
+    const result = runPowerShell({ op: "get", target: "fixture" }, { spawnProcess: () => child });
+    const secret = String.fromCharCode(1).repeat(1280);
+    child.stdout.write(oversized ? Buffer.alloc(16385, 120) : JSON.stringify({ ok: true, secret }));
+    child.emit("close", 0);
+    if (oversized) {
+      await assert.rejects(result, { message: "Credential Manager response is too large" });
+      assert.equal(killed, true);
+    } else {
+      assert.equal((await result).secret, secret);
+      assert.equal(killed, false);
+    }
+  }
+});
