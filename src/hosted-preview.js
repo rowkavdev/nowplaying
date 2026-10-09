@@ -60,7 +60,7 @@ export async function checkHostedEndpoint(url, { fetchImpl = fetch, timeoutMs = 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(`${origin}/healthz`, { method: "GET", headers: { accept: "text/plain" }, redirect: "error", signal: controller.signal });
-    if (res.status !== 200) return { ok: false, reason: "bad_status", status: res.status };
+    if (res.status !== 200) { cancelHealthBody(res.body); return { ok: false, reason: "bad_status", status: res.status }; }
     const body = await readHealthBody(res);
     if (body === null || body.trim() !== "ok") return { ok: false, reason: "not_nowplaying" };
     return { ok: true, url: origin };
