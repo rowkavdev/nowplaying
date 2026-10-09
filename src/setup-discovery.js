@@ -79,6 +79,10 @@ export function mergeServers(local, lan) {
   return Object.freeze(merged);
 }
 
+function cancelProbeBody(target) {
+  try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch {}
+}
+
 async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailure) {
   const baseUrl = `http://${host}:${probe.port}`;
   const failed = (reason) => onProbeFailure?.({ provider: probe.port === 32400 ? "plex" : probe.port === 4533 ? "navidrome" : "jellyfin_or_emby", baseUrl, reason });
@@ -91,7 +95,7 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailur
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const declaredHeader = response.headers?.get?.("content-length");
     const declared = typeof declaredHeader === "string" && declaredHeader.trim() !== "" ? Number(declaredHeader) : NaN;
-    if (Number.isFinite(declared) && declared > MAX_BODY) { failed("oversize"); return null; }
+    if (Number.isFinite(declared) && declared > MAX_BODY) { cancelProbeBody(response.body); failed("oversize"); return null; }
     // Bound the actual bytes as they arrive, even when the peer omits
     // Content-Length: cancel the stream at the cap instead of buffering it
     // all first (#745).
@@ -100,12 +104,19 @@ async function runProbe(host, probe, fetchImpl, timeoutMs, signal, onProbeFailur
     if (reader) {
       const chunks = [];
       let bytes = 0;
-      for (;;) {
-        const part = await reader.read();
-        if (part.done) break;
-        bytes += part.value.byteLength;
-        if (bytes > MAX_BODY) { await reader.cancel().catch(() => {}); failed("oversize"); return null; }
-        chunks.push(part.value);
+      try {
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          bytes += part.value.byteLength;
+          if (bytes > MAX_BODY) { cancelProbeBody(reader); failed("oversize"); return null; }
+          chunks.push(part.value);
+        }
+      } catch (error) {
+        cancelProbeBody(reader);
+        throw error;
+      } finally {
+        reader.releaseLock?.();
       }
       text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8");
     } else {
