@@ -40,8 +40,11 @@ async function request(fetchImpl, url, init = {}) {
   } catch (error) {
     throw new SignInError(networkFailure(error));
   }
-  if (response.status === 401 || response.status === 403) throw new SignInError("authentication_failed");
-  if (!response.ok) throw new SignInError("connection_failed");
+  if (response.status === 401 || response.status === 403 || !response.ok) {
+    // Rejected responses still own unread bodies. Cleanup cannot delay or replace sign-in errors.
+    try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+    throw new SignInError(response.status === 401 || response.status === 403 ? "authentication_failed" : "connection_failed");
+  }
   try { return await readBoundedJson(response); } catch { throw new SignInError("connection_failed"); }
 }
 
