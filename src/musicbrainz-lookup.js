@@ -44,7 +44,11 @@ export function createMusicBrainzLookup({ fetchImpl = globalThis.fetch, userAgen
     if (typeof artist !== "string" || !artist.trim()) return null;
     const query = `recording:${luceneTerm(title)} AND artist:${luceneTerm(artist)}`;
     const response = await limited(`${API}?${new URLSearchParams({ query, fmt: "json", limit: "5" })}`, { redirect: "error" });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // No search body will be read; release it without waiting on cleanup or changing the result.
+      try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+      return null;
+    }
     const body = await readBoundedJson(response);
     const releases = (Array.isArray(body?.recordings) ? body.recordings : [])
       .filter((recording) => Number(recording?.score) >= minScore)
