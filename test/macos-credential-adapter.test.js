@@ -95,3 +95,10 @@ test("security output is bounded while allowing a maximum credential plus newlin
     }
   }
 });
+
+test("Keychain timeout cannot become a successful lookup during helper termination", async () => {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  child.kill = () => { child.emit("close", 0); };
+  await assert.rejects(runSecurity(["find-generic-password"], { spawnProcess: () => child, timeoutMs: 5 }), { message: "Keychain timed out" });
+});
