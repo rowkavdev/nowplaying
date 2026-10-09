@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createLinuxTray, linuxTrayAvailable } from "../src/linux-tray.js";
+import { createLinuxTray, linuxTrayAvailable, openLinuxWebUiUrl } from "../src/linux-tray.js";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,7 +68,7 @@ async function start() {
     app = await guardedStart(paths);
     liveApp = app;
     if (app.firstRun && !args.includes("--no-setup"))
-      openLocalSettingsUrl(`${app.url}/settings`);
+      (process.platform === "linux" ? openLinuxWebUiUrl : openLocalSettingsUrl)(`${app.url}/settings`);
     if (app.safeMode)
       await logger.event("startup", "degraded", {
         level: "warn",
