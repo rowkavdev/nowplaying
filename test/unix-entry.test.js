@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:net";
+import { rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -116,4 +118,29 @@ test("start and setup without HOME say so plainly, no stack trace (#500)", unix,
     assert.match(stderr, /HOME is not set/);
     assert.doesNotMatch(stderr, /TypeError|app-paths\.js/);
   }
+});
+
+test("Linux first-run browser opener does not inherit unrelated exported secrets", { skip: process.platform !== "linux", timeout: 10000 }, async () => {
+  const home = await mkdtemp(join(tmpdir(), "np-first-run-env-"));
+  const bin = join(home, "bin");
+  await mkdir(bin);
+  const marker = join(home, "opener-env.txt");
+  await writeFile(join(bin, "xdg-open"), `#!/bin/sh\nprintf '%s' "\${GH_TOKEN-unset}" > '${marker}'\n`, { mode: 0o755 });
+  const listener = createServer();
+  await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
+  const port = listener.address().port;
+  await new Promise((resolve) => listener.close(resolve));
+  const child = spawn(process.execPath, [ENTRY, "start", "--no-tray"], {
+    env: { ...process.env, HOME: home, XDG_CONFIG_HOME: "", XDG_STATE_HOME: "", PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: "regression-fixture-not-a-secret", NOWPLAYING_PORT: String(port) },
+    stdio: "ignore",
+  });
+  const exited = new Promise((resolve) => child.on("close", resolve));
+  try {
+    let output;
+    for (let n = 0; n < 100; n++) {
+      try { output = await readFile(marker, "utf8"); break; } catch (error) { if (error.code !== "ENOENT") throw error; }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    assert.equal(output, "unset");
+  } finally { child.kill("SIGTERM"); await exited; await rm(home, { recursive: true, force: true }); }
 });
