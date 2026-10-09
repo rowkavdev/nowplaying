@@ -78,3 +78,10 @@ test("oversized secret-tool output is rejected and stopped without exposing it",
   await assert.rejects(result, { message: "Secret Service response is too large" });
   assert.equal(killed, true);
 });
+
+test("secret-tool timeout remains a failure when termination closes successfully", async () => {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  child.kill = () => { child.emit("close", 0); };
+  await assert.rejects(runSecretTool(["lookup"], { spawnProcess: () => child, timeoutMs: 5 }), { message: "Secret Service timed out" });
+});
