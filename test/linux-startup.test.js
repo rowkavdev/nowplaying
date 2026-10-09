@@ -179,3 +179,29 @@ test("the written entry passes desktop-file-validate", { skip: !hasValidator }, 
   await startup.setEnabled(true);
   execFileSync("desktop-file-validate", [startup.file]);
 });
+
+test("autostart entries missing Type=Application report broken until repaired", async () => {
+  const { writeFile } = await import("node:fs/promises");
+  const startup = make({ autostartDir: await dir() });
+  for (const replacement of ["Type=Link", "", "Type=Directory"]) {
+    await startup.setEnabled(true);
+    const original = await readFile(startup.file, "utf8");
+    await writeFile(startup.file, original.replace("Type=Application", replacement));
+    assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+    await startup.setEnabled(true);
+    assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+  }
+});
+
+test("desktop entry Type accepts valid whitespace and ignores other groups", async () => {
+  const { writeFile } = await import("node:fs/promises");
+  const startup = make({ autostartDir: await dir() });
+  await startup.setEnabled(true);
+  const original = await readFile(startup.file, "utf8");
+  await writeFile(startup.file, original.replace("Type=Application", "Type = Application"));
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+  await writeFile(startup.file, original.replace("Type=Application", "Type=Link") + "\n[Desktop Action Settings]\nType=Application\n");
+  assert.deepEqual(await startup.status(), { enabled: false, broken: true });
+  await writeFile(startup.file, original + "\n[Desktop Action Settings]\nHidden=true\nX-GNOME-Autostart-enabled=false\n");
+  assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});

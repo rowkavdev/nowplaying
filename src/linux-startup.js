@@ -77,16 +77,21 @@ export function createLinuxStartup({
     }
     // The file holds the escaped form (%% for a literal %), which is what
     // execLine is built as, so the comparison is byte-for-byte.
-    const current = text
-      .split("\n")
-      .find((line) => line.startsWith("Exec="))
-      ?.slice("Exec=".length);
-    // XDG disable keys: Hidden=true acts as if the entry were deleted, and
-    // X-GNOME-Autostart-enabled=false is GNOME's off switch. Either one means
-    // autostart is off despite the file - report broken so the Settings
-    // toggle shows off and re-enabling repairs the entry.
-    const disabled = /^\s*Hidden\s*=\s*true\s*$/m.test(text) || /^\s*X-GNOME-Autostart-enabled\s*=\s*false\s*$/m.test(text);
-    const matches = current === execLine && !disabled;
+    // Only the Desktop Entry group describes autostart. Action groups can
+    // have their own keys and must not mask or disable the main entry.
+    const values = new Map();
+    let desktopEntry = false;
+    for (const line of text.split("\n")) {
+      const group = line.match(/^\s*\[([^\]]+)\]\s*$/);
+      if (group) { desktopEntry = group[1] === "Desktop Entry"; continue; }
+      if (!desktopEntry) continue;
+      const key = line.match(/^\s*([A-Za-z0-9-]+)\s*=\s*(.*?)\s*$/);
+      if (key) values.set(key[1], key[2]);
+    }
+    const current = values.get("Exec");
+    const disabled = values.get("Hidden") === "true" || values.get("X-GNOME-Autostart-enabled") === "false";
+    const application = values.get("Type") === "Application";
+    const matches = current === execLine && !disabled && application;
     return Object.freeze({ enabled: matches, broken: !matches });
   }
   return Object.freeze({
