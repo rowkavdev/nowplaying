@@ -30,6 +30,9 @@ export function createResilientCardResolver({ resolveCard, timeoutMs = 5000, sta
       pending = withTimeout(Promise.resolve().then(() => resolveCard(options)), timeoutMs)
         .then((result) => {
           const svg = typeof result === "string" ? result : result?.svg;
+          // Only valid card output may replace the last-good fallback. Match
+          // the HTTP handler's check before recording a successful render.
+          if (typeof svg !== "string" || !svg.includes("<svg")) throw new TypeError("invalid card output");
           const source = result?.source === "idle" ? "idle" : "live";
           if (epoch === generation) remember(key, { svg, source, at: now() });
           return { svg, source };
