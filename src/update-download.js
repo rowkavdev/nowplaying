@@ -48,10 +48,18 @@ export async function downloadVerifiedUpdate({ update, token, fetchImpl = global
     }
     throw error;
   }
-  const [archive, checksumBytes] = await Promise.all([
-    readBoundedBytes(assetResponse, MAX_ARCHIVE_BYTES, "update archive"),
-    readBoundedBytes(checksumResponse, MAX_CHECKSUM_BYTES, "checksum manifest"),
-  ]);
+  const bodyController = new AbortController();
+  let archive, checksumBytes;
+  try {
+    [archive, checksumBytes] = await Promise.all([
+      readBoundedBytes(assetResponse, MAX_ARCHIVE_BYTES, "update archive", { signal: bodyController.signal }),
+      readBoundedBytes(checksumResponse, MAX_CHECKSUM_BYTES, "checksum manifest", { signal: bodyController.signal }),
+    ]);
+  } catch (error) {
+    // Cancel the sibling reader too, without awaiting underlying stream cleanup.
+    bodyController.abort(error);
+    throw error;
+  }
   if (archive.byteLength < 1) throw new Error("update archive size is invalid");
   const checksumText = new TextDecoder().decode(checksumBytes);
   const filename = expectedAssetName(update);

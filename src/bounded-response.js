@@ -5,8 +5,9 @@ function cancelQuietly(target) {
   try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch { /* ignore */ }
 }
 
-export async function readBoundedBytes(response, limit, label = "response") {
+export async function readBoundedBytes(response, limit, label = "response", { signal } = {}) {
   if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("limit: expected a positive integer");
+  if (signal?.aborted) { cancelQuietly(response?.body); throw signal.reason; }
   const rawLength = response?.headers?.get?.("content-length");
   const declared = typeof rawLength === "string" && rawLength.trim() !== "" ? Number(rawLength) : NaN;
   const body = response?.body;
@@ -20,18 +21,28 @@ export async function readBoundedBytes(response, limit, label = "response") {
     const reader = body.getReader();
     const chunks = [];
     let total = 0;
+    let cancelled = false;
+    const cancel = () => { if (!cancelled) { cancelled = true; cancelQuietly(reader); } };
+    let onAbort;
+    const aborted = signal ? new Promise((_, reject) => {
+      onAbort = () => { cancel(); reject(signal.reason); };
+      signal.addEventListener("abort", onAbort, { once: true });
+    }) : null;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const reading = reader.read();
+        const { done, value } = await (aborted ? Promise.race([reading, aborted]) : reading);
+        if (signal?.aborted) throw signal.reason;
         if (done) break;
         total += value.byteLength;
         if (total > limit) throw new Error(`${label} is too large`);
         chunks.push(value);
       }
     } catch (error) {
-      cancelQuietly(reader);
+      cancel();
       throw error;
     } finally {
+      if (onAbort) signal.removeEventListener("abort", onAbort);
       reader.releaseLock();
     }
     const bytes = new Uint8Array(total);
