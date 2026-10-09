@@ -9,7 +9,7 @@ function tokenFetch(status = 200, body = { access_token: "a1", refresh_token: "r
   const calls = [];
   const profileCalls = [];
   return { calls, profileCalls, fetchImpl: async (url, init) => {
-    if (new URL(url).hostname === "api.spotify.com") { profileCalls.push(init.headers.Authorization); return { ok: true, status: 200, json: async () => profile }; }
+    if (new URL(url).hostname === "api.spotify.com") { profileCalls.push(init.headers.Authorization); return streamJsonFixture({ ok: true, status: 200, json: async () => profile }); }
     calls.push({ url, body: new URLSearchParams(init.body) });
     return streamJsonFixture({ ok: status < 300, status, json: async () => body });
   } };
@@ -43,7 +43,7 @@ test("a duplicate valid callback cannot consume the code twice or fail the first
   const exchangeStarted = new Promise((resolve) => { enteredExchange = resolve; });
   let exchanges = 0;
   const fetchImpl = async (url) => {
-    if (new URL(url).hostname === "api.spotify.com") return { ok: true, json: async () => ({ id: "rowan123", display_name: "Rowan" }) };
+    if (new URL(url).hostname === "api.spotify.com") return streamJsonFixture({ ok: true, json: async () => ({ id: "rowan123", display_name: "Rowan" }) });
     exchanges++;
     enteredExchange();
     if (exchanges > 1) return streamJsonFixture({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) });
@@ -91,7 +91,7 @@ test("no refresh token or no profile fails the sign-in (#135)", async () => {
 });
 
 test("profile falls back to the ID when there's no display name", async () => {
-  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ id: "abc", display_name: null }) });
+  const fetchImpl = async () => streamJsonFixture({ ok: true, status: 200, json: async () => ({ id: "abc", display_name: null }) });
   assert.deepEqual({ ...(await getSpotifyProfile({ accessToken: "a", fetchImpl })) }, { id: "abc", displayName: "abc" });
   await assert.rejects(getSpotifyProfile({ accessToken: "a", fetchImpl: async () => ({ ok: false, status: 401 }) }), (e) => e.code === "profile_failed");
 });
