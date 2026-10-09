@@ -123,3 +123,12 @@ test("early PowerShell stdin closure is handled without an uncaught stream error
   } finally { child.emit("close", 1); }
   await assert.rejects(result, { message: "Credential Manager request failed" });
 });
+
+test("Credential Manager timeout cannot resolve through helper termination", async () => {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  child.kill = () => { child.emit("close", 0); };
+  const result = runPowerShell({ op: "get", target: "fixture" }, { spawnProcess: () => child, timeoutMs: 5 });
+  child.stdout.write(JSON.stringify({ ok: true, secret: "fixture" }));
+  await assert.rejects(result, { message: "Credential Manager timed out" });
+});
