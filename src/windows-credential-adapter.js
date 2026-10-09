@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 // built-in CredWrite/CredRead/CredDelete APIs through PowerShell, so no native
 // module is needed. Secrets only travel over stdin/stdout, never the command line.
 
+const MAX_RESPONSE_BYTES = 16384; // JSON escaping plus metadata for a maximum-sized blob
 const MAX_SECRET_BYTES = 2560; // CRED_MAX_CREDENTIAL_BLOB_SIZE
 const SERVICE = /^[A-Za-z0-9._-]{1,64}$/;
 const ACCOUNT = /^[^\u0000-\u001f\u007f]{1,256}$/; // usernames can contain spaces; control characters never
@@ -84,10 +85,21 @@ export function runPowerShell(input, { timeoutMs = 20000, spawnProcess = spawn }
   return new Promise((resolve, reject) => {
     const child = spawnProcess("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], { shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
     const out = [];
+    let stdoutBytes = 0;
     let settled = false;
     const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
     const timer = setTimeout(() => { child.kill?.(); finish(new Error("Credential Manager timed out")); }, timeoutMs);
-    child.stdout.on("data", (chunk) => out.push(chunk));
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > MAX_RESPONSE_BYTES) {
+        out.length = 0;
+        finish(new Error("Credential Manager response is too large"));
+        child.kill?.();
+        return;
+      }
+      out.push(chunk);
+    });
     child.stderr.on("data", () => {}); // never surface stderr: it could echo input
     child.on("error", () => finish(new Error("Credential Manager is unavailable")));
     child.on("close", (code) => {
