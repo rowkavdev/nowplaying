@@ -1,3 +1,4 @@
+import { readBoundedBytes } from "./bounded-response.js";
 import { createHash, randomBytes } from "node:crypto";
 
 // Spotify sign-in for #135: Authorization Code with PKCE, so the desktop app
@@ -95,7 +96,10 @@ async function tokenRequest(fields, fetchImpl, requestTimeoutMs = 10_000) {
     body: new URLSearchParams(fields).toString(),
   });
   let payload = {};
-  try { payload = await response.json(); } catch { /* keep empty */ }
+  try {
+    const bytes = await readBoundedBytes(response, 1024 * 1024, "Spotify token response", { signal: controller.signal });
+    payload = JSON.parse(new TextDecoder().decode(bytes));
+  } catch { /* keep empty; never accept a token from an unreadable or oversized body */ }
   if (payload === null || typeof payload !== "object") payload = {};
   if (!response.ok) {
     // invalid_grant: the refresh token was revoked or expired, so the user must sign in again.
