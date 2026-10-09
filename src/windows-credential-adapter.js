@@ -107,6 +107,9 @@ export function runPowerShell(input, { timeoutMs = 20000, spawnProcess = spawn }
       try { finish(null, JSON.parse(Buffer.concat(out).toString("utf8").replace(/^\uFEFF/, ""))); }
       catch { finish(new Error("Credential Manager returned an invalid response")); }
     });
+    // PowerShell can exit before it consumes stdin. EPIPE must not become
+    // an uncaught stream error; process error/exit/timeout reports failure.
+    child.stdin.on("error", () => {});
     child.stdin.end(JSON.stringify(input));
   });
 }
