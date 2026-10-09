@@ -18,10 +18,22 @@ export function runSecurity(args, { input, timeoutMs = 20000, spawnProcess = spa
     try { child = spawnProcess("/usr/bin/security", args, { shell: false, stdio: ["pipe", "pipe", "pipe"] }); }
     catch { reject(new Error("Keychain is unavailable")); return; }
     const out = [];
+    let stdoutBytes = 0;
     let settled = false;
     const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
     const timer = setTimeout(() => { child.kill?.(); finish(new Error("Keychain timed out")); }, timeoutMs);
-    child.stdout.on("data", (chunk) => out.push(chunk));
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      stdoutBytes += chunk.length;
+      // security -w appends a newline after the maximum 4096-byte secret.
+      if (stdoutBytes > MAX_SECRET_BYTES + 1) {
+        out.length = 0;
+        finish(new Error("Keychain response is too large"));
+        child.kill?.();
+        return;
+      }
+      out.push(chunk);
+    });
     child.stderr.on("data", () => {}); // never surface stderr
     child.on("error", () => finish(new Error("Keychain is unavailable")));
     child.on("close", (code) => finish(null, { code, stdout: Buffer.concat(out).toString("utf8") }));

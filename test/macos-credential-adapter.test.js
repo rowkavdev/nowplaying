@@ -73,3 +73,25 @@ test("round trip against the real Keychain", { skip: !realTest }, async () => {
   assert.equal(await store.remove(key), true);
   assert.equal(await store.read(key), null);
 });
+
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { runSecurity } from "../src/macos-credential-adapter.js";
+test("security output is bounded while allowing a maximum credential plus newline", async () => {
+  for (const bytes of [4097, 4098]) {
+    const child = new EventEmitter();
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    let killed = false;
+    child.kill = () => { killed = true; child.emit("close", 0); };
+    const result = runSecurity(["find-generic-password"], { spawnProcess: () => child });
+    child.stdout.write(Buffer.alloc(bytes, 120));
+    child.emit("close", 0);
+    if (bytes === 4097) {
+      assert.equal((await result).stdout.length, 4097);
+      assert.equal(killed, false);
+    } else {
+      await assert.rejects(result, { message: "Keychain response is too large" });
+      assert.equal(killed, true);
+    }
+  }
+});
