@@ -15,11 +15,22 @@ export function runSecretTool(args, { input = "", timeoutMs = 20000, spawnProces
     try { child = spawnProcess("secret-tool", args, { shell: false, stdio: ["pipe", "pipe", "pipe"] }); }
     catch { reject(new Error("Secret Service is unavailable")); return; }
     const out = [];
+    let stdoutBytes = 0;
     let stderrBytes = 0;
     let settled = false;
     const finish = (error, value) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
     const timer = setTimeout(() => { child.kill?.(); finish(new Error("Secret Service timed out")); }, timeoutMs);
-    child.stdout.on("data", (chunk) => out.push(chunk));
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > MAX_SECRET_BYTES) {
+        out.length = 0;
+        finish(new Error("Secret Service response is too large"));
+        child.kill?.();
+        return;
+      }
+      out.push(chunk);
+    });
     child.stderr.on("data", (chunk) => { stderrBytes += chunk.length; }); // counted, never shown
     child.on("error", () => finish(new Error("Secret Service is unavailable (install libsecret-tools)")));
     child.on("close", (code) => finish(null, { code, stdout: Buffer.concat(out).toString("utf8"), stderr: stderrBytes > 0 }));
