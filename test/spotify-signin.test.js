@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getSpotifyProfile, signInToSpotify } from "../src/spotify-signin.js";
@@ -10,7 +11,7 @@ function tokenFetch(status = 200, body = { access_token: "a1", refresh_token: "r
   return { calls, profileCalls, fetchImpl: async (url, init) => {
     if (new URL(url).hostname === "api.spotify.com") { profileCalls.push(init.headers.Authorization); return { ok: true, status: 200, json: async () => profile }; }
     calls.push({ url, body: new URLSearchParams(init.body) });
-    return { ok: status < 300, status, json: async () => body };
+    return streamJsonFixture({ ok: status < 300, status, json: async () => body });
   } };
 }
 
@@ -45,9 +46,9 @@ test("a duplicate valid callback cannot consume the code twice or fail the first
     if (new URL(url).hostname === "api.spotify.com") return { ok: true, json: async () => ({ id: "rowan123", display_name: "Rowan" }) };
     exchanges++;
     enteredExchange();
-    if (exchanges > 1) return { ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) };
+    if (exchanges > 1) return streamJsonFixture({ ok: false, status: 400, json: async () => ({ error: "invalid_grant" }) });
     await exchangeGate;
-    return { ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r1", expires_in: 3600 }) };
+    return streamJsonFixture({ ok: true, status: 200, json: async () => ({ access_token: "a1", refresh_token: "r1", expires_in: 3600 }) });
   };
   const done = signInToSpotify({ clientId, fetchImpl, openUrl: async (url) => { authorize = new URL(url); } });
   while (!authorize) await new Promise((resolve) => setTimeout(resolve, 5));

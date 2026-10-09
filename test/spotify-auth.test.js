@@ -1,3 +1,4 @@
+import { streamJsonFixture } from "./helpers/stream-json-fixture.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -14,7 +15,7 @@ function tokenFetch(replies) {
   const fetchImpl = async (url, init) => {
     calls.push({ url, body: new URLSearchParams(init.body) });
     const [status, body] = replies.shift();
-    return { ok: status < 300, status, json: async () => body };
+    return streamJsonFixture({ ok: status < 300, status, json: async () => body });
   };
   return { calls, fetchImpl };
 }
