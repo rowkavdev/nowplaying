@@ -38,20 +38,21 @@ export async function discoverLanServers({ timeoutMs = 1500, broadcastAddress = 
   });
   const abort = () => { for (const socket of sockets) { try { socket.close(); } catch { /* already closed */ } } };
   signal?.addEventListener("abort", abort, { once: true });
+  let timer;
+  let finishWait;
+  // Bound the whole operation, including bind/send callbacks. Either can
+  // disappear during socket shutdown, before the reply-wait stage starts.
+  const deadline = new Promise((resolve) => {
+    finishWait = resolve;
+    timer = setTimeout(resolve, timeoutMs);
+    signal?.addEventListener("abort", resolve, { once: true });
+  });
   try {
-    // Closing a socket mid-bind can suppress its callbacks, so a probe promise
-    // may never settle. Abort must release this stage on its own.
-    const cancelled = new Promise((resolve) => {
-      if (signal?.aborted) { resolve(); return; }
-      signal?.addEventListener("abort", resolve, { once: true });
-    });
-    await Promise.race([Promise.all(probes.map(listen)), cancelled]);
-    if (!signal?.aborted) await new Promise((resolve) => {
-      const timer = setTimeout(done, timeoutMs);
-      function done() { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); }
-      signal?.addEventListener("abort", done, { once: true });
-    });
+    await Promise.race([Promise.all(probes.map(listen)), deadline]);
+    if (!signal?.aborted) await deadline;
   } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", finishWait);
     signal?.removeEventListener("abort", abort);
     for (const socket of sockets) { try { socket.close(); } catch { /* already closed */ } }
   }
