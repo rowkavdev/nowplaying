@@ -127,3 +127,19 @@ test("source-isolated cache does not change existing opaque proxy paths", async 
   const result = await resolver.resolve({ artwork });
   assert.equal(result.image, `https://covers.example/${opaque}`);
 });
+
+test("an over-cap upload reply is rejected without buffering it all (#1118)", async () => {
+  const upload = createLitterboxUploader({ coverSource: async () => ({ dataUri }), fetchImpl: async () => new Response("x".repeat(100_000), { status: 200 }) });
+  await assert.rejects(upload(ref), /too large/);
+});
+
+test("a failed upload cancels the unread reply body (#1118)", async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode("gateway timeout")); },
+    cancel() { cancelled = true; },
+  });
+  const upload = createLitterboxUploader({ coverSource: async () => ({ dataUri }), fetchImpl: async () => new Response(body, { status: 502 }) });
+  await assert.rejects(upload(ref), /upload failed/);
+  assert.equal(cancelled, true);
+});

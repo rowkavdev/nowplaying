@@ -1,4 +1,5 @@
 import { classifyArtworkUrl } from "./discord-artwork.js";
+import { readBoundedBytes } from "./bounded-response.js";
 
 // Discord fetches the large image itself, so a cover that lives on a private
 // media server has to be copied somewhere public first. This is what Discord
@@ -9,6 +10,7 @@ import { classifyArtworkUrl } from "./discord-artwork.js";
 const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
 const EXPIRY_HOURS = new Set([1, 12, 24, 72]);
 const MAX_BYTES = 2_000_000;
+const MAX_REPLY_BYTES = 64 * 1024; // the reply is one short URL
 
 function dataUriBytes(value) {
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(typeof value === "string" ? value : "");
@@ -30,8 +32,13 @@ export function createLitterboxUploader({ coverSource, fetchImpl = fetch, expiry
     form.set("time", `${expiryHours}h`);
     form.set("fileToUpload", new Blob([image.bytes], { type: image.type }), `cover.${image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg"}`);
     const response = await fetchImpl(LITTERBOX_API, { method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
-    if (!response.ok) throw new Error("upload failed");
-    const text = (await response.text()).trim();
+    if (!response.ok) {
+      // The failed reply body is never read; release it without waiting or
+      // letting cleanup replace the real error.
+      try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+      throw new Error("upload failed");
+    }
+    const text = new TextDecoder().decode(await readBoundedBytes(response, MAX_REPLY_BYTES, "artwork upload reply")).trim();
     const checked = classifyArtworkUrl(text);
     if (!checked.ok) throw new Error("upload returned no public image URL");
     return checked.url;
