@@ -8,5 +8,10 @@ export function presenceItemKey(presence) {
   const itemId = typeof artwork?.itemId === "string" && artwork.itemId.trim()
     ? [artwork.provider ?? null, artwork.itemId.trim()]
     : null;
-  return JSON.stringify([presence?.kind ?? null, presence?.title ?? null, presence?.subtitle ?? null, itemId]);
+  const key = [presence?.kind ?? null, presence?.title ?? null, presence?.subtitle ?? null, itemId];
+  // Opaque item and cover IDs can collide across configured servers. Keep
+  // untagged keys unchanged; image revisions on one source still do not
+  // mark a new item, including providers that expose only a shared cover.
+  if (Number.isInteger(artwork?.sourceIndex) && artwork.sourceIndex >= 0 && artwork.sourceIndex <= 7) key.push(artwork.sourceIndex);
+  return JSON.stringify(key);
 }
