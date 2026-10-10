@@ -493,3 +493,119 @@ test('disconnect does not use an unsafe clear when conditional cleanup is unavai
   await assert.rejects(up.disconnect(), { code: 'credential_cleanup_unavailable' });
   assert.equal(clears, 0);
 });
+
+test("disconnect waits for initial registration then revokes it without returning a late card link", async () => {
+  const env = setup();
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  const up = env.uploader({fetchImpl: async (url, init) => {
+    const response = await env.fetchImpl(url, init);
+    if (url.endsWith("/api/register")) { entered(); await barrier; }
+    return response;
+  }});
+  const link = up.cardUrl();
+  const observedLink = link.catch(() => null);
+  await started;
+  let finished = false;
+  const disconnect = up.disconnect().then(result => {finished = true; return result;});
+  await new Promise(resolve => setImmediate(resolve));
+  const early = finished;
+  release();
+  assert.deepEqual(await disconnect,{disconnected:true});
+  assert.equal(early,false,"disconnect must include registration already in flight");
+  assert.equal(await observedLink,null,"old registration must not publish a late link");
+  assert.equal(env.stored(),null);
+  assert.equal(up.status().cardUrl,null);
+  assert.equal(env.calls.filter(c=>c.url.endsWith("/api/revoke")).length,1);
+});
+
+test("failed initial registration cannot block disconnect or a later retry", async () => {
+  const env = setup();
+  let entered, rejectRegistration;
+  const started = new Promise(resolve => {entered=resolve;});
+  let fail = true;
+  const up = env.uploader({fetchImpl: async (url,init) => {
+    if (fail && url.endsWith("/api/register")) {entered(); return new Promise((_resolve,reject) => {rejectRegistration=reject;});}
+    return env.fetchImpl(url,init);
+  }});
+  const link = up.cardUrl().catch(()=>null);
+  await started;
+  const disconnected = up.disconnect();
+  assert.equal(await up.cardUrl(),null);
+  assert.deepEqual(await up.push(track()),{sent:false,reason:"disconnect_pending"});
+  rejectRegistration(Error("offline"));
+  assert.equal(await link,null);
+  assert.deepEqual(await disconnected,{disconnected:true});
+  assert.equal(env.stored(),null);
+  fail=false;
+  assert.ok(await up.cardUrl());
+});
+
+test("failed revoke after pending registration preserves the retry key", async () => {
+  const env=setup();
+  let entered, release;
+  const started=new Promise(resolve=>{entered=resolve;});
+  const barrier=new Promise(resolve=>{release=resolve;});
+  let revokeOffline=true;
+  const up=env.uploader({fetchImpl:async(url,init)=>{
+    if (url.endsWith("/api/revoke") && revokeOffline) throw Error("offline");
+    const response=await env.fetchImpl(url,init);
+    if(url.endsWith("/api/register")){entered();await barrier;}
+    return response;
+  }});
+  const link=up.cardUrl();await started;
+  const disconnect=up.disconnect();release();
+  await assert.rejects(disconnect,{code:"network_error"});
+  assert.equal(await link,null);
+  assert.ok(env.stored());
+  assert.equal(up.status().state,"disconnect_pending");
+  assert.equal(up.status().cardUrl,null);
+  revokeOffline=false;
+  assert.deepEqual(await up.disconnect(),{disconnected:true});
+  assert.equal(env.stored(),null);
+});
+
+for (const revokeFails of [false, true]) {
+  test(`disconnect recovers remotely created key when delayed save rejects (revoke fails: ${revokeFails})`, async () => {
+    const env = setup();
+    let entered, release;
+    const saving = new Promise(resolve => { entered = resolve; });
+    const barrier = new Promise(resolve => { release = resolve; });
+    let created;
+    let offline = revokeFails;
+    const credentials = {...env.credentials, save: async value => {created=value;entered();await barrier;throw Error("save failed");}};
+    const up=env.uploader({credentials,fetchImpl:async(url,init)=>{
+      if(url.endsWith("/api/revoke") && offline) throw Error("offline");
+      return env.fetchImpl(url,init);
+    }});
+    const link=up.cardUrl().catch(()=>null);await saving;
+    const disconnect=up.disconnect();release();
+    if(revokeFails){
+      await assert.rejects(disconnect,{code:"network_error"});
+      assert.equal(up.status().state,"disconnect_pending");
+      offline=false;
+      assert.deepEqual(await up.disconnect(),{disconnected:true});
+    }else assert.deepEqual(await disconnect,{disconnected:true});
+    await link;
+    assert.equal(env.stored(),null);
+    assert.equal(up.status().cardUrl,null);
+    assert.equal(env.calls.filter(call=>call.url.endsWith("/api/revoke")).length,1);
+    await assert.rejects(env.service.ingest({token:created.token,payload:{v:1,state:"idle",seq:1,observedAt:env.now()}}),error=>error instanceof ServiceError && error.status===401);
+  });
+}
+
+test("failed registration save recovery never deletes a replacement credential", async () => {
+  const env=setup();
+  let entered, release;
+  const saving=new Promise(resolve=>{entered=resolve;});
+  const barrier=new Promise(resolve=>{release=resolve;});
+  const replacement={login:"replacement",deviceId:"r".repeat(22),token:"r".repeat(24),baseUrl:BASE};
+  const up=env.uploader({credentials:{...env.credentials,save:async()=>{entered();await barrier;throw Error("save failed");}}});
+  const link=up.cardUrl().catch(()=>null);await saving;
+  const disconnect=up.disconnect();
+  await env.credentials.save(replacement);release();
+  assert.deepEqual(await disconnect,{disconnected:true});await link;
+  assert.deepEqual(env.stored(),replacement);
+  assert.equal(up.status().cardUrl,null);
+});
