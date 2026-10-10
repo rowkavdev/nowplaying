@@ -60,16 +60,17 @@ export function createDiscordClient({ transport, retryDelayMs = 5_000, maxRetryD
     }
     if (!connected) {
       if (elapsedNow() < retryAt) { if (activity === null && clearPending) retryClear(); return false; }
-      try { await transport.connect(); connected = true; }
-      catch { const result = failed("DISCORD_NOT_RUNNING"); if (activity === null && clearPending) retryClear(); return result; }
+      try { await transport.connect(); if (closed) return false; connected = true; }
+      catch { if (closed) return false; const result = failed("DISCORD_NOT_RUNNING"); if (activity === null && clearPending) retryClear(); return result; }
     }
     try {
       if (activity === null) await transport.clearActivity(); else await transport.setActivity(activity);
+      if (closed) return false;
       lastKey = key; lastPublishElapsed = elapsedNow(); failures = 0; lastError = null;
       if (activity === null) cancelClear();
       lastPublishedAt = new Date(now()).toISOString();
       return true;
-    } catch { const result = failed("DISCORD_PUBLISH_FAILED"); if (activity === null && clearPending) retryClear(); return result; }
+    } catch { if (closed) return false; const result = failed("DISCORD_PUBLISH_FAILED"); if (activity === null && clearPending) retryClear(); return result; }
   }
 
   async function close() { cancelClear(); closed = true; connected = false; lastKey = undefined; if (typeof transport.close === "function") await transport.close(); }
