@@ -56,6 +56,10 @@ function isPrivateHost(host) {
   return [a, b, c, d].every((n) => n >= 0 && n <= 255) && (a === 10 || a === 192 && b === 168 || a === 172 && b >= 16 && b <= 31);
 }
 
+function cancelProbeBody(target) {
+  try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch {}
+}
+
 async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProbeFailure) {
   const baseUrl = `${probe.protocol}://${host}:${probe.port}`;
   const failed = (reason) => onProbeFailure?.({ provider: probe.port === 32400 ? "plex" : probe.port === 4533 ? "navidrome" : "jellyfin_or_emby", baseUrl, reason });
@@ -63,22 +67,32 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProb
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(abort, timeoutMs);
+  let readFailed = false;
   try {
     const response = await fetchImpl(`${baseUrl}${probe.path}`, { signal: controller.signal, redirect: "error", headers: { Accept: "application/json, application/xml;q=0.9" } });
     const rawLength = response.headers?.get?.("content-length");
     const size = typeof rawLength === "string" && rawLength.trim() !== "" ? Number(rawLength) : NaN;
-    if (Number.isFinite(size) && size > MAX_REPLY) { failed("oversize"); return null; }
+    if (Number.isFinite(size) && size > MAX_REPLY) { cancelProbeBody(response.body); abort(); failed("oversize"); return null; }
     // Bound the actual bytes too, even when the peer omits Content-Length.
     const reader = response.body?.getReader?.();
     let text;
     if (reader) {
       const chunks = []; let bytes = 0;
-      while (true) {
-        const part = await reader.read();
-        if (part.done) break;
-        bytes += part.value.byteLength;
-        if (bytes > MAX_REPLY) { await reader.cancel(); failed("oversize"); return null; }
-        chunks.push(part.value);
+      try {
+        while (true) {
+          const part = await reader.read();
+          if (part.done) break;
+          bytes += part.value.byteLength;
+          if (bytes > MAX_REPLY) { cancelProbeBody(reader); abort(); failed("oversize"); return null; }
+          chunks.push(part.value);
+        }
+      } catch (error) {
+        readFailed = !controller.signal.aborted;
+        cancelProbeBody(reader);
+        abort();
+        throw error;
+      } finally {
+        try { reader.releaseLock?.(); } catch { /* Lock cleanup must not replace the probe result. */ }
       }
       text = Buffer.concat(chunks).toString("utf8");
     } else {
@@ -94,6 +108,6 @@ async function probeServer({ host, probe }, fetchImpl, timeoutMs, signal, onProb
     const found = probe.classify({ status: response.status, text });
     if (!found) { failed(response.status === 200 ? "unrecognized_response" : "http_status"); return null; }
     return { provider: found.provider, baseUrl, version: typeof found.version === "string" ? found.version.slice(0, 40) : null, ...(found.id && /^[\w-]{1,64}$/.test(found.id) ? { id: found.id } : {}), ...(found.name ? { name: found.name } : {}) };
-  } catch { failed(controller.signal.aborted ? "timeout" : "network_error"); return null; }
+  } catch { failed(!readFailed && controller.signal.aborted ? "timeout" : "network_error"); return null; }
   finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
 }
