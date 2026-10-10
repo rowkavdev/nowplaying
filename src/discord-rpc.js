@@ -25,7 +25,13 @@ export function createDiscordRpcTransport({ clientId, createClient } = {}) {
     if (!next || typeof next.login !== "function" || typeof next.setActivity !== "function" || typeof next.clearActivity !== "function") {
       throw new TypeError("RPC client: expected login, setActivity and clearActivity functions");
     }
-    await next.login({ clientId });
+    try { await next.login({ clientId }); }
+    catch (error) {
+      // A failed client was never adopted, so close() cannot release it.
+      // Cleanup must not delay or replace the original login failure.
+      try { Promise.resolve(next.destroy?.()).catch(() => {}); } catch {}
+      throw error;
+    }
     // A close during createClient/login must not be undone by this late
     // arrival: destroy the new client instead of adopting it.
     if (epoch !== generation) {
