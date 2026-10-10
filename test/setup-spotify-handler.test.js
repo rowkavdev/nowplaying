@@ -299,3 +299,60 @@ test("a superseded flow's in-flight save cannot remove the newer credential (#70
   assert.equal(values.get("spotify:rowan"), "newer");
   assert.equal(writes[writes.length - 1], "newer");
 });
+
+for (const sameClient of [false, true]) {
+  test(`Spotify reserves pending consent-link starts (${sameClient ? "same" : "distinct"} Client IDs)`, async () => {
+    const calls = [];
+    let seq = 0;
+    const { handle } = setup({
+      maxFlows: 2,
+      newFlowId: () => `capacity-${++seq}`,
+      signIn: ({ clientId, openUrl }) => {
+        calls.push({ clientId, openUrl });
+        return new Promise(() => {});
+      },
+    });
+    const pending = Array.from({ length: 6 }, (_, index) => handle(post({
+      action: "start", clientId: sameClient ? CLIENT_ID : index.toString(16).padStart(32, "0"),
+    })));
+    const started = calls.length;
+    for (const call of calls) await call.openUrl(`https://accounts.spotify.com/authorize?client_id=${call.clientId}`);
+    const results = await Promise.all(pending);
+    assert.equal(started, 2, "only two consent listeners may start before their URLs arrive");
+    assert.deepEqual(results.map((result) => result.status).sort(), sameClient
+      ? [200, 410, 429, 429, 429, 429]
+      : [200, 200, 429, 429, 429, 429]);
+  });
+}
+
+test("Spotify pending-start reservations are released on failure and disconnect", async () => {
+  for (const failure of ["throws", "rejects", "invalid_url", "disconnect"]) {
+    let calls = 0;
+    let openConsent;
+    let seq = 0;
+    const { handle } = setup({
+      maxFlows: 1,
+      newFlowId: () => `failure-${++seq}`,
+      signIn: ({ openUrl }) => {
+        calls++;
+        if (calls > 1) {
+          openUrl("https://accounts.spotify.com/authorize");
+          return new Promise(() => {});
+        }
+        if (failure === "throws") throw new Error("fixture start failed");
+        if (failure === "rejects") return Promise.reject(new Error("fixture start failed"));
+        if (failure === "invalid_url") openUrl("https://invalid.example/authorize");
+        else openConsent = () => openUrl("https://accounts.spotify.com/authorize");
+        return new Promise(() => {});
+      },
+    });
+    const first = handle(post({ action: "start", clientId: CLIENT_ID }));
+    if (failure === "disconnect") {
+      await handle.cancelPending();
+      await openConsent();
+    }
+    assert.equal((await first).status, failure === "disconnect" ? 410 : 502, failure);
+    assert.equal((await handle(post({ action: "start", clientId: CLIENT_ID }))).status, 200, failure);
+    assert.equal(calls, 2, failure);
+  }
+});

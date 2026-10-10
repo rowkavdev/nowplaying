@@ -21,6 +21,9 @@ export function createSetupSpotifyHandler({
   const flows = new Map();
   const completing = new Set();
   let generation = 0;
+  // Consent links arrive after the loopback listener starts. Reserve capacity
+  // before that await so parallel requests cannot all claim the same slot.
+  let starting = 0;
   // Newest start per Client ID wins (#703): each start supersedes older
   // pending flows for the same account, so a stale completion can never
   // overwrite a newer sign-in's credential or config.
@@ -104,7 +107,13 @@ export function createSetupSpotifyHandler({
     const clientId = input.clientId.trim();
     if (!CLIENT_ID.test(clientId)) return json(400, { error: "bad_client_id" });
     prune();
-    if (flows.size >= maxFlows) return json(429, { error: "too_many_signins" });
+    if (flows.size + starting >= maxFlows) return json(429, { error: "too_many_signins" });
+    starting++;
+    try { return await startFlow(clientId); }
+    finally { starting--; }
+  }
+
+  async function startFlow(clientId) {
     const overlap = (latestByClientId.get(clientId) ?? 0) + 1;
     latestByClientId.set(clientId, overlap);
     const flow = { clientId, overlap, generation, expiresAt: elapsedNow() + flowTtlMs, result: { status: "pending" } };
