@@ -108,6 +108,9 @@ test("simultaneous launches keep one server and let the duplicate exit successfu
 test("an unrelated listener remains a port conflict and never opens its page", { ...unix, timeout: 10000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-unrelated-"));
   const listener = createServer((socket) => {
+    // The identity probe can close the rejected connection before this reply
+    // drains; macOS reports that expected peer reset on the accepted socket.
+    socket.on("error", (error) => assert.equal(error.code, "ECONNRESET"));
     socket.on("data", () => socket.end('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"app":"NowPlaying","proof":"made-up"}'));
   });
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));

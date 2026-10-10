@@ -77,11 +77,11 @@ test("reserved sockets cannot widen listening exposure or replace another reques
   assert.throws(() => createHttpServer({ handler, existingServer: {} }), /HTTP server/);
   const handled = createServer(() => {});
   assert.throws(() => createHttpServer({ handler, existingServer: handled }), /without a request handler/);
-  for (const host of ["0.0.0.0", "127.0.0.2"]) {
+  for (const host of ["0.0.0.0", "127.0.0.1"]) {
     const socket = createServer();
     await new Promise((resolve) => socket.listen(0, host, resolve));
     try {
-      assert.throws(() => createHttpServer({ handler, port: socket.address().port, existingServer: socket }), /requested loopback/);
+      assert.throws(() => createHttpServer({ handler, host: "127.0.0.2", port: socket.address().port, existingServer: socket }), /requested loopback/);
     } finally { await new Promise((resolve) => socket.close(resolve)); }
   }
 });
