@@ -76,6 +76,47 @@ function validateOptions({ publicProxyBase, metadataLookup, fallbackAsset, ttlMs
   }
 }
 
+function artworkReference(presence) {
+  return presence.artwork ? JSON.stringify([presence.artwork.provider, presence.artwork.itemId, presence.artwork.imageId, presence.artwork.imageTag]) : "";
+}
+
+function artworkCacheKey(presence, ref) {
+  // The media kind is part of the key so a film, an episode and a song that
+  // share a title and subtitle never reuse each other's artwork (#154).
+  return createHash("sha256").update(JSON.stringify([presence.kind ?? "", ref, presence.artwork?.sourceIndex ?? null, presence.artwork?.type ?? "", presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
+}
+
+async function resolveUploadedArtwork(presence, upload, uploadDisabled, failure) {
+  if (typeof upload !== "function" || !presence.artwork) {
+    return { failure: uploadDisabled && presence.artwork ? "upload_disabled" : failure };
+  }
+  // Copy the server's own cover to a temporary public host (what Discord
+  // Rich Presence for Plex does), so a private server's art still shows.
+  try {
+    const url = await upload(presence.artwork);
+    const checked = classifyArtworkUrl(url);
+    return checked.ok ? { image: checked.url, strategy: "upload", failure }
+      : { failure: url ? `upload_${checked.failure}` : "upload_miss" };
+  } catch (error) {
+    return { failure: ["upload_blocked", "upload_rate_limited", "upload_timeout"].includes(error?.code) ? error.code : "upload_error" };
+  }
+}
+
+async function resolveLookupArtwork(presence, metadataLookup, lookup, failure) {
+  // MusicBrainz only knows music: a film or episode title would match a
+  // random song and show a confidently wrong cover, so only tracks look up.
+  const music = presence.kind === undefined || presence.kind === "track";
+  if (!metadataLookup || !music || !presence.title) return { failure };
+  try {
+    const found = await lookup(Object.freeze({ title: String(presence.title), artist: String(presence.artist ?? presence.subtitle ?? "") }));
+    const checked = classifyArtworkUrl(found);
+    return checked.ok ? { image: checked.url, strategy: "lookup", failure }
+      : { failure: failure ?? `lookup_${found ? checked.failure : "miss"}` };
+  } catch {
+    return { failure: failure ?? "lookup_error" };
+  }
+}
+
 export function createDiscordArtworkResolver({
   publicProxyBase = "",
   metadataLookup = false,
@@ -107,11 +148,8 @@ export function createDiscordArtworkResolver({
 
   async function resolve(presence = {}) {
     const owner = generation;
-    const rememberCurrent = (...args) => { if (owner === generation) remember(...args); };
-    const ref = presence.artwork ? JSON.stringify([presence.artwork.provider, presence.artwork.itemId, presence.artwork.imageId, presence.artwork.imageTag]) : "";
-    // The media kind is part of the key so a film, an episode and a song that
-    // share a title and subtitle never reuse each other's artwork (#154).
-    const key = createHash("sha256").update(JSON.stringify([presence.kind ?? "", ref, presence.artwork?.sourceIndex ?? null, presence.artwork?.type ?? "", presence.artworkUrl ?? "", presence.title ?? "", presence.artist ?? presence.subtitle ?? ""])).digest("hex");
+    const ref = artworkReference(presence);
+    const key = artworkCacheKey(presence, ref);
     const cached = cache.get(key);
     if (cached && cached.expiresAt > now()) {
       cache.delete(key); cache.set(key, cached);
@@ -119,60 +157,26 @@ export function createDiscordArtworkResolver({
     }
     if (cached) cache.delete(key);
 
+    const entry = await resolveStrategies(presence, ref);
+    if (owner === generation) remember(key, entry, entry.strategy === "fallback" ? negativeTtlMs : ttlMs);
+    return finish({ ...entry, cached: false });
+  }
+
+  async function resolveStrategies(presence, ref) {
     let failure = null;
     if (presence.artworkUrl) {
       const checked = classifyArtworkUrl(presence.artworkUrl);
-      if (checked.ok) {
-        const entry = { image: checked.url, strategy: "provider", failure: null };
-        rememberCurrent(key, entry, ttlMs);
-        return finish({ ...entry, cached: false });
-      }
+      if (checked.ok) return { image: checked.url, strategy: "provider", failure: null };
       failure = checked.failure;
     }
     if (publicProxyBase && ref) {
       const opaque = createHash("sha256").update(ref).digest("hex").slice(0, 32);
-      const entry = { image: `${publicProxyBase.replace(/\/+$/, "")}/${opaque}`, strategy: "proxy", failure };
-      rememberCurrent(key, entry, ttlMs);
-      return finish({ ...entry, cached: false });
+      return { image: `${publicProxyBase.replace(/\/+$/, "")}/${opaque}`, strategy: "proxy", failure };
     }
-    // Copy the server's own cover to a temporary public host (what Discord
-    // Rich Presence for Plex does), so a private server's art still shows.
-    if (typeof upload === "function" && presence.artwork) {
-      try {
-        const url = await upload(presence.artwork);
-        const checked = classifyArtworkUrl(url);
-        if (checked.ok) {
-          const entry = { image: checked.url, strategy: "upload", failure };
-          rememberCurrent(key, entry, ttlMs);
-          return finish({ ...entry, cached: false });
-        }
-        failure = url ? `upload_${checked.failure}` : "upload_miss";
-      } catch (error) {
-        failure = ["upload_blocked", "upload_rate_limited", "upload_timeout"].includes(error?.code) ? error.code : "upload_error";
-      }
-    } else if (uploadDisabled && presence.artwork) {
-      failure = "upload_disabled";
-    }
-    // MusicBrainz only knows music: a film or episode title would match a
-    // random song and show a confidently wrong cover, so only tracks look up.
-    const music = presence.kind === undefined || presence.kind === "track";
-    if (metadataLookup && music && presence.title) {
-      try {
-        const found = await lookup(Object.freeze({ title: String(presence.title), artist: String(presence.artist ?? presence.subtitle ?? "") }));
-        const checked = classifyArtworkUrl(found);
-        if (checked.ok) {
-          const entry = { image: checked.url, strategy: "lookup", failure };
-          rememberCurrent(key, entry, ttlMs);
-          return finish({ ...entry, cached: false });
-        }
-        failure = failure ?? `lookup_${found ? checked.failure : "miss"}`;
-      } catch {
-        failure = failure ?? "lookup_error";
-      }
-    }
-    const entry = { image: fallbackAsset, strategy: "fallback", failure };
-    rememberCurrent(key, entry, negativeTtlMs);
-    return finish({ ...entry, cached: false });
+    const uploaded = await resolveUploadedArtwork(presence, upload, uploadDisabled, failure);
+    if (uploaded.image) return uploaded;
+    const found = await resolveLookupArtwork(presence, metadataLookup, lookup, uploaded.failure);
+    return found.image ? found : { image: fallbackAsset, strategy: "fallback", failure: found.failure };
   }
 
   // Manual refresh (#154): drop every cached cover and miss so the next
