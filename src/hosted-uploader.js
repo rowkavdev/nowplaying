@@ -57,7 +57,10 @@ export function createHostedUploader({
   }
   const origin = normalizeHostedUrl(baseUrl);
   let registration = null;
+  let registrationRecovery = null;
   let registering = null;
+  let disconnecting = null;
+  let registrationEpoch = 0;
   let lastSeq = -1;
   let serverClockOffset = 0;
   let lastSent = null; // { key, at }
@@ -103,10 +106,20 @@ export function createHostedUploader({
       const stored = await credentials.load();
       if (stored && !hostedCredentialMatches(stored, origin)) throw new HostedUploadError("credential_destination_mismatch");
       if (validRegistration(stored)) return (registration = { ...stored });
+      // Keep a remotely created key even if its local save fails. Disconnect
+      // needs it to revoke, and a registration retry must not orphan it.
+      if (registrationRecovery) {
+        const device = registrationRecovery;
+        await credentials.save(device);
+        registrationRecovery = null;
+        return (registration = device);
+      }
       const created = await request("/api/register");
       if (!validRegistration(created)) throw new HostedUploadError("invalid_registration");
       const device = { cardId: created.cardId, deviceId: created.deviceId, token: created.token, baseUrl: origin };
+      registrationRecovery = device;
       await credentials.save(device);
+      registrationRecovery = null;
       registration = device;
       return device;
     })().finally(() => { registering = null; });
@@ -180,6 +193,7 @@ export function createHostedUploader({
   }
 
   async function push(presence) {
+    if (disconnecting) return { sent: false, reason: "disconnect_pending" };
     if (status.state === "unauthorized") return { sent: false, reason: "unauthorized" };
     if (status.state === "disconnect_pending") return { sent: false, reason: "disconnect_pending" };
     const generation = ++pushGeneration;
@@ -233,9 +247,20 @@ export function createHostedUploader({
     }
   }
 
-  async function disconnect() {
+  function disconnect() {
+    if (disconnecting) return disconnecting;
     ++pushGeneration;
-    const stored = await credentials.load();
+    ++registrationEpoch;
+    const work = disconnectDevice();
+    disconnecting = work.finally(() => { disconnecting = null; });
+    return disconnecting;
+  }
+
+  async function disconnectDevice() {
+    // A card-link request can register outside the upload loop. Include that
+    // flight before revoking, so it cannot save a key after success is reported.
+    if (registering) await registering.catch(() => {});
+    const stored = registrationRecovery ?? await credentials.load();
     pending = null; lastSent = null;
     if (stored && !hostedCredentialMatches(stored, origin)) throw new HostedUploadError("credential_destination_mismatch");
     if (validRegistration(stored)) {
@@ -258,13 +283,16 @@ export function createHostedUploader({
       await credentials.clearIfToken(stored.token);
     }
     registration = null;
+    registrationRecovery = null;
     status = { state: "idle", lastError: null, lastSuccessAt: null };
     return { disconnected: true };
   }
 
   async function cardUrl() {
-    if (status.state === "disconnect_pending") return null;
+    if (disconnecting || status.state === "disconnect_pending") return null;
+    const epoch = registrationEpoch;
     const device = await ensureRegistered();
+    if (epoch !== registrationEpoch || disconnecting) return null;
     return device.login ? `${origin}/u/${device.login}.svg` : `${origin}/card/${device.cardId}.svg`;
   }
 
