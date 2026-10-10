@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { createMusicBrainzLookup } from "./musicbrainz-lookup.js";
-import { createLitterboxUploader } from "./discord-artwork-upload.js";
+import { createTemporaryCoverUploader } from "./discord-artwork-upload.js";
 
 const ASSET_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 const SECRET_PARAM = /(^|[_-])(token|key|apikey|api_key|auth|sig|signature|secret|password|pass|session|s|t|u)$/i;
@@ -195,7 +195,7 @@ export function createDiscordArtworkResolver({
 
 // The server's own cover is copied to a temporary public host unless the user
 // turned that off (discord.artworkUpload: false), then MusicBrainz if chosen.
-export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup, coverSource, fetchImpl, createUpload = createLitterboxUploader } = {}) {
+export function artworkResolverOptions(discordSettings = {}, { createLookup = createMusicBrainzLookup, coverSource, fetchImpl, createUpload = createTemporaryCoverUploader } = {}) {
   const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
   const upload = discordSettings.artworkUpload !== false && typeof coverSource === "function"
     ? { upload: createUpload({ coverSource, ...(fetchImpl ? { fetchImpl } : {}) }) } : {};

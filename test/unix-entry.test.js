@@ -4,17 +4,22 @@ import { createServer } from "node:net";
 import { rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createCredentialStore } from "../src/credential-store.js";
 import { createLinuxCredentialAdapter } from "../src/linux-credential-adapter.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
+import { appPaths } from "../src/app-paths.js";
 
 // The Linux/macOS entry point (#215), run for real with a throwaway HOME.
 // First run serves the WebUI without touching the keychain until sign-in.
 const ENTRY = fileURLToPath(new URL("../scripts/nowplaying.js", import.meta.url));
 const unix = { skip: process.platform === "win32" };
+
+function recoveryPath(home) {
+  return join(dirname(appPaths({ home, env: {} }).configFile), "startup-recovery.json");
+}
 
 function run(home, args, extraEnv = {}) {
   const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: "", XDG_STATE_HOME: "", ...extraEnv };
@@ -54,7 +59,7 @@ test("a second desktop launch reopens the existing app; headless duplicates neve
   const running = run(home, ["start", "--no-setup", "--no-tray"], env);
   try {
     await waitForOutput(running, /NowPlaying Settings:/);
-    const recoveryFile = join(home, ".config", "nowplaying", "startup-recovery.json");
+    const recoveryFile = recoveryPath(home);
     const before = await readFile(recoveryFile, "utf8");
     for (let attempt = 0; attempt < 4; attempt++) {
       const duplicate = run(home, ["start", "--no-setup", "--no-tray"], env);
@@ -79,8 +84,8 @@ test("a second desktop launch reopens the existing app; headless duplicates neve
 test("simultaneous launches keep one server and let the duplicate exit successfully", { ...unix, timeout: 15000 }, async () => {
   for (const previousFailures of [0, 2]) {
     const home = await mkdtemp(join(tmpdir(), "np-unix-race-"));
-    await mkdir(join(home, ".config", "nowplaying"), { recursive: true });
-    await writeFile(join(home, ".config", "nowplaying", "startup-recovery.json"), JSON.stringify({ version: 1, failures: previousFailures, subsystem: "provider" }));
+    await mkdir(dirname(recoveryPath(home)), { recursive: true });
+    await writeFile(recoveryPath(home), JSON.stringify({ version: 1, failures: previousFailures, subsystem: "provider" }));
     const env = { NOWPLAYING_PORT: String(await unusedPort()) };
     const launches = [run(home, ["start", "--no-setup", "--no-tray"], env), run(home, ["start", "--no-setup", "--no-tray"], env)];
     try {
@@ -89,7 +94,7 @@ test("simultaneous launches keep one server and let the duplicate exit successfu
       assert.match(launches[completed.index].output().stdout, /already running/);
       const running = launches[1 - completed.index];
       await waitForOutput(running, /NowPlaying Settings:/);
-      const recovery = JSON.parse(await readFile(join(home, ".config", "nowplaying", "startup-recovery.json"), "utf8"));
+      const recovery = JSON.parse(await readFile(recoveryPath(home), "utf8"));
       assert.equal(recovery.failures, previousFailures + 1, "only the winning process adds one pending startup to the existing history");
       assert.equal((await fetch(`http://127.0.0.1:${env.NOWPLAYING_PORT}/settings`)).status, 200);
     } finally {
@@ -103,6 +108,9 @@ test("simultaneous launches keep one server and let the duplicate exit successfu
 test("an unrelated listener remains a port conflict and never opens its page", { ...unix, timeout: 10000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-unrelated-"));
   const listener = createServer((socket) => {
+    // The identity probe can close the rejected connection before this reply
+    // drains; macOS reports that expected peer reset on the accepted socket.
+    socket.on("error", (error) => assert.equal(error.code, "ECONNRESET"));
     socket.on("data", () => socket.end('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{"app":"NowPlaying","proof":"made-up"}'));
   });
   await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
@@ -150,11 +158,11 @@ test("unknown commands and options exit 2", unix, async () => {
   }
 });
 
-test("a damaged private instance identity reports recovery instructions without a stack trace", unix, async () => {
+test("a damaged private instance identity reports recovery instructions without a stack trace", { ...unix, timeout: 10000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), "np-unix-damaged-instance-"));
   try {
-    await mkdir(join(home, ".config", "nowplaying"), { recursive: true });
-    await writeFile(join(home, ".config", "nowplaying", "desktop-instance-secret"), "broken");
+    await mkdir(dirname(recoveryPath(home)), { recursive: true });
+    await writeFile(join(dirname(recoveryPath(home)), "desktop-instance-secret"), "broken");
     const cli = run(home, ["start", "--no-setup", "--no-tray"], { NOWPLAYING_PORT: String(await unusedPort()) });
     assert.equal(await cli.exited, 1);
     assert.match(cli.output().stderr, /identity is damaged.*Remove the desktop-instance-secret/);
