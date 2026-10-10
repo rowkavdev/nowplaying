@@ -81,7 +81,7 @@ export async function findDesktopInstance({ port, secret, fetchImpl = fetch, att
         const expected = Buffer.from(proof(secret, challenge));
         const actual = Buffer.from(typeof body.proof === "string" ? body.proof : "");
         if (body.app === "NowPlaying" && actual.length === expected.length && timingSafeEqual(actual, expected)) return origin;
-      } else await response.body?.cancel();
+      } else cancelBody(response.body);
     } catch { /* Busy, starting, or an unrelated listener: never trust it. */ }
     if (attempt + 1 < attempts) await pause(50);
   }
@@ -90,6 +90,10 @@ export async function findDesktopInstance({ port, secret, fetchImpl = fetch, att
 
 function proof(secret, challenge) {
   return createHmac("sha256", secret).update(`nowplaying-desktop:${challenge}`).digest("hex");
+}
+
+function cancelBody(target) {
+  try { Promise.resolve(target?.cancel?.()).catch(() => {}); } catch {}
 }
 
 async function limitedJson(response) {
@@ -106,6 +110,7 @@ async function limitedJson(response) {
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally {
-    await reader.cancel().catch(() => {});
+    cancelBody(reader);
+    try { reader.releaseLock?.(); } catch { /* Cleanup must not change identity validation. */ }
   }
 }
