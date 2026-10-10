@@ -16,7 +16,18 @@ const MAX_FRAME_BYTES = 64 * 1024;
 export function discordIpcPaths({ platform = process.platform, env = process.env } = {}) {
   if (platform === "win32") return Array.from({ length: 10 }, (_, i) => `\\\\?\\pipe\\discord-ipc-${i}`);
   const base = env.XDG_RUNTIME_DIR || env.TMPDIR || env.TMP || env.TEMP || tmpdir();
-  return Array.from({ length: 10 }, (_, i) => join(base, `discord-ipc-${i}`));
+  const directories = [base];
+  // Preserve native socket precedence. Flatpak clients expose a bounded set of
+  // documented sandbox paths; no directory scan or symlink creation is needed.
+  // https://github.com/flathub/com.discordapp.Discord/blob/master/discord.sh
+  // https://github.com/flathub/dev.vencord.Vesktop#discord-rich-presence
+  if (platform === "linux" && env.XDG_RUNTIME_DIR) {
+    directories.push(join(env.XDG_RUNTIME_DIR, "app", "com.discordapp.Discord"));
+    for (const id of ["dev.vencord.Vesktop", "io.github.milkshiift.GoofCord", "xyz.armcord.ArmCord"]) {
+      directories.push(join(env.XDG_RUNTIME_DIR, ".flatpak", id, "xdg-run"));
+    }
+  }
+  return directories.flatMap((directory) => Array.from({ length: 10 }, (_, i) => join(directory, `discord-ipc-${i}`)));
 }
 
 export function encodeFrame(op, payload) {

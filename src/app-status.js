@@ -135,9 +135,10 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
     const serverHealthy = s.server.state === "connected" && !problem;
     const discordHealthy = !s.discord.enabled || s.discord.state === "ready";
     const discordFailed = s.discord.enabled && ["degraded", "failed", "closed"].includes(s.discord.state);
+    const artworkFailed = s.discord.enabled && s.discord.artwork?.source === "fallback" && ["upload_error", "upload_blocked", "upload_rate_limited", "upload_timeout", "resolver_error"].includes(s.discord.artwork.reason);
     const hosting = hostedOutput(s.hosted);
-    const health = serverHealthy && discordHealthy && ["healthy", "disabled"].includes(hosting) ? "healthy"
-      : (s.server.state === "starting" && hosting !== "failed" && !problem && !discordFailed) || (serverHealthy && discordHealthy && hosting === "starting") ? "starting" : "degraded";
+    const health = serverHealthy && discordHealthy && !artworkFailed && ["healthy", "disabled"].includes(hosting) ? "healthy"
+      : !artworkFailed && ((s.server.state === "starting" && hosting !== "failed" && !problem && !discordFailed) || (serverHealthy && discordHealthy && hosting === "starting")) ? "starting" : "degraded";
     const sensitiveValues = [config.serverUrl, s.server.address, s.server.user, playing?.title, playing?.subtitle].filter((value) => typeof value === "string");
     return createDiagnosticRecord({
       version: s.version ?? undefined,
@@ -149,6 +150,7 @@ export function createAppStatus({ config, version = null, now = () => Date.now()
       errors: [failure, problem?.reason, s.discord.error, s.hosted.enabled && hosting === "failed" ? `hosted_${s.hosted.error ?? "upload_failed"}` : null].filter((value) => typeof value === "string"),
       sensitiveValues,
       build: build ?? undefined,
+      discordArtwork: s.discord.enabled ? s.discord.artwork : undefined,
     });
   }
 
@@ -224,8 +226,22 @@ function artworkStatus(value) {
 function word(value) { return typeof value === "string" && /^[a-z_]{1,32}$/.test(value) ? value : "unknown"; }
 function code(value) { return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,47}$/.test(value) ? value : null; }
 function iso(value) {
-  const time = value instanceof Date ? value.getTime() : value;
-  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+  let time = value instanceof Date ? value.getTime() : value;
+  if (typeof value === "string") {
+    // Accept the ISO timestamp returned by the real output clients, with an
+    // explicit zone. Date.parse alone also accepts unrelated local date text
+    // and normalizes impossible calendar dates such as February 30.
+    const parts = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+    if (!parts) return null;
+    const [year, month, day] = parts.slice(1).map(Number);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+    if (!days || day < 1 || day > days || Number(value.slice(11, 13)) > 23) return null;
+    time = Date.parse(value);
+  }
+  if (!Number.isFinite(time)) return null;
+  const date = new Date(time);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
 function publicHostedCard(value) {

@@ -1,4 +1,5 @@
 import { formatDiscordActivity } from "./discord.js";
+import { isDiscordImage } from "./discord-artwork.js";
 
 export function createDiscordController({ client, settings = {}, artwork } = {}) {
   if (!client || typeof client.publish !== "function") {
@@ -20,8 +21,9 @@ export function createDiscordController({ client, settings = {}, artwork } = {})
     } catch {
       return { activity, status: Object.freeze({ strategy: "fallback", failure: "resolver_error" }) };
     }
+    if (!resolved || typeof resolved !== "object") return { activity, status: Object.freeze({ strategy: "fallback", failure: "resolver_error" }) };
     const status = Object.freeze({ strategy: resolved.strategy, failure: resolved.failure ?? null });
-    if (resolved.strategy === "fallback" || typeof resolved.image !== "string" || !resolved.image) return { activity, status };
+    if (!isDiscordImage(resolved.image) || (resolved.strategy === "fallback" && settings.largeImage !== undefined)) return { activity, status };
     return { activity: Object.freeze({ ...activity, largeImage: resolved.image }), status };
   }
 

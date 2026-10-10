@@ -22,6 +22,7 @@ test("previews the exact Discord payload without publishing", () => {
 
   assert.deepEqual(controller.preview(playing), {
     type: "listening",
+    name: "Example track",
     details: "Playing Example track",
     state: "by Example artist",
     largeImage: FALLBACK_ARTWORK_URL,
@@ -104,4 +105,18 @@ test("does not resolve artwork when the activity is cleared", async () => {
   assert.equal(result.activity, null);
   assert.equal(resolved, 0);
   assert.throws(() => createDiscordController({ client: { publish: async () => true }, artwork: {} }), /artwork.resolve is required/);
+});
+
+test("uses a resolver's fallback image when no explicit fallback is configured", async () => {
+  const controller = createDiscordController({ client: { publish: async () => true }, artwork: { resolve: async () => ({ image: "https://images.example.com/fallback.png", strategy: "fallback" }) } });
+  assert.equal((await controller.publish(playing)).activity.largeImage, "https://images.example.com/fallback.png");
+});
+
+test("malformed artwork results keep the fallback and do not discard the activity", async () => {
+  for (const resolved of [null, undefined, { image: "http://192.168.1.4/private.png", strategy: "provider" }]) {
+    const controller = createDiscordController({ client: { publish: async () => true }, artwork: { resolve: async () => resolved } });
+    const result = await controller.publish(playing);
+    assert.equal(result.published, true);
+    assert.equal(result.activity.largeImage, FALLBACK_ARTWORK_URL);
+  }
 });

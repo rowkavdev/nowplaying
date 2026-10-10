@@ -29,6 +29,16 @@ test("common staging contains a non-terminal desktop entry and branding", linuxO
   assert.match(entry, /^Exec=\/usr\/bin\/nowplaying start$/m);
   assert.match(entry, /^Icon=nowplaying$/m);
   assert.match(readFileSync(join(stage, "usr/bin/nowplaying"), "utf8"), /exec \/opt\/nowplaying\/nowplaying "\$@"/);
+  writeFileSync(join(bundle, "app/package-info.json"), JSON.stringify({ packageType: "portable" }));
+  const build = { commitSha: "a".repeat(40) };
+  writeFileSync(join(bundle, "app/build-info.json"), JSON.stringify(build));
+  for (const kind of ["deb", "rpm", "arch"]) {
+    const packageStage = join(dir, kind);
+    execFileSync("bash", [join(root, "scripts/stage-linux-package.sh"), bundle, packageStage, kind]);
+    assert.deepEqual(JSON.parse(readFileSync(join(packageStage, "opt/nowplaying/app/package-info.json"), "utf8")), { packageType: kind });
+    assert.deepEqual(JSON.parse(readFileSync(join(packageStage, "opt/nowplaying/app/build-info.json"), "utf8")), build);
+  }
+  assert.deepEqual(JSON.parse(readFileSync(join(bundle, "app/package-info.json"), "utf8")), { packageType: "portable" }, "native packaging must not mutate the portable input");
 });
 
 test("native builder rejects invalid package version and unknown format", linuxOnly, () => {

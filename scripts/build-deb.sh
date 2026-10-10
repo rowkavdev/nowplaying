@@ -30,7 +30,7 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/DEBIAN" "$out"
 chmod 755 "$stage"
-bash "$(dirname "$0")/stage-linux-package.sh" "$bundle" "$stage"
+bash "$(dirname "$0")/stage-linux-package.sh" "$bundle" "$stage" deb
 
 size_kb=$(du -sk "$stage/opt" "$stage/usr" | awk '{ sum += $1 } END { print sum }')
 cat > "$stage/DEBIAN/control" <<CONTROL

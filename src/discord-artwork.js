@@ -9,7 +9,7 @@ const LOCAL_SUFFIXES = [".local", ".lan", ".home", ".internal", ".localdomain", 
 
 // Shown when no real cover can be used. The NowPlaying Discord app has no
 // uploaded art assets, so an asset key like "media" renders as a "?" in
-// Discord. A public HTTPS image always works (#268).
+// Discord. Use a public HTTPS image that Discord can fetch (#268).
 export const FALLBACK_ARTWORK_URL = "https://raw.githubusercontent.com/rowkavdev/nowplaying/main/assets/discord-fallback.png";
 
 // An uploaded Discord asset key, or a public HTTPS image URL.
@@ -81,6 +81,7 @@ export function createDiscordArtworkResolver({
   metadataLookup = false,
   lookup,
   upload,
+  uploadDisabled = false,
   fallbackAsset = FALLBACK_ARTWORK_URL,
   ttlMs = 6 * 60 * 60_000,
   negativeTtlMs = 10 * 60_000,
@@ -145,10 +146,12 @@ export function createDiscordArtworkResolver({
           rememberCurrent(key, entry, ttlMs);
           return finish({ ...entry, cached: false });
         }
-        failure = failure ?? (url ? `upload_${checked.failure}` : "upload_miss");
-      } catch {
-        failure = failure ?? "upload_error";
+        failure = url ? `upload_${checked.failure}` : "upload_miss";
+      } catch (error) {
+        failure = ["upload_blocked", "upload_rate_limited", "upload_timeout"].includes(error?.code) ? error.code : "upload_error";
       }
+    } else if (uploadDisabled && presence.artwork) {
+      failure = "upload_disabled";
     }
     // MusicBrainz only knows music: a film or episode title would match a
     // random song and show a confidently wrong cover, so only tracks look up.
@@ -192,6 +195,7 @@ export function artworkResolverOptions(discordSettings = {}, { createLookup = cr
   const proxy = typeof discordSettings.artworkProxy === "string" ? discordSettings.artworkProxy : "";
   const upload = discordSettings.artworkUpload !== false && typeof coverSource === "function"
     ? { upload: createUpload({ coverSource, ...(fetchImpl ? { fetchImpl } : {}) }) } : {};
-  if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false, ...upload });
-  return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup(), ...upload });
+  const disabled = discordSettings.artworkUpload === false ? { uploadDisabled: true } : {};
+  if (discordSettings.artworkLookup !== "musicbrainz") return Object.freeze({ publicProxyBase: proxy, metadataLookup: false, ...upload, ...disabled });
+  return Object.freeze({ publicProxyBase: proxy, metadataLookup: true, lookup: createLookup(), ...upload, ...disabled });
 }

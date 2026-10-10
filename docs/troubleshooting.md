@@ -68,9 +68,10 @@ nowplaying clears Discord as soon as the media server reports nothing playing, o
 
 Discord fetches images itself, so it can only show public HTTPS artwork. Covers from a private media server can't be used there. See [Discord artwork](artwork.md#discord-artwork) for the order nowplaying tries.
 
-- Check `discord.artwork` in the app status or diagnostics. `source` says where the image came from, and `reason` says why it fell back, for example `private_host` (the server's own URL isn't public) or `lookup_miss` (no public cover found for this track).
-- Films and TV episodes never use the public cover lookup, so they show the default image unless an artwork proxy is set up.
-- Covers are cached for six hours, and misses for ten minutes. After fixing tags or adding artwork, use **Refresh album art** in the Discord settings to look again now.
+- Check **Album art** on the status page. The API exposes `discord.artwork`; downloaded diagnostics include the same safe words under `discordArtwork`. `source` identifies the selected image and `reason` explains the fallback, such as `upload_blocked` or `lookup_miss`. Discord can be connected while cover uploading has failed.
+- An image-host HTTP 403 is reported as `upload_blocked`: the external host rejected the upload, not your Plex sign-in or Discord authentication. Check your connection or select MusicBrainz in **Settings > Discord**. NowPlaying does not silently switch to another upload host.
+- Films and TV episodes never use the MusicBrainz cover lookup. Enable **Show my server's cover** or configure an artwork proxy to use their cover instead of the default icon.
+- Covers are cached for six hours, and misses or upload failures for ten minutes. After fixing tags, adding artwork or recovering your connection, use **Refresh album art** in **Settings > Discord** to clear both the local cover cache and Discord's artwork cache and try again immediately.
 
 ## Windows app or tray does not start
 

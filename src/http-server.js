@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { createServer } from "node:http";
+import { createServer, Server } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 
 const SECURITY_HEADERS = Object.freeze({
@@ -24,7 +24,7 @@ export const SESSION_HEADER = "x-nowplaying-session";
 // session checks because the handler authenticates them itself (the YouTube
 // extension bridge sends a pairing token from a browser-extension origin).
 // They still must be JSON and within the body limit.
-export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024, sessionSecret, openWritePaths = [] } = {}) {
+export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, shutdownMs = 10000, maxBodyBytes = 16 * 1024, sessionSecret, openWritePaths = [], existingServer } = {}) {
   if (typeof handler !== "function") throw new TypeError("handler: expected a function");
   if (!isLoopbackHost(host)) throw new TypeError("host: expected a loopback address");
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError("port must be an integer from 0 to 65535");
@@ -32,12 +32,18 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
   if (!Number.isInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 1024 * 1024) throw new RangeError("maxBodyBytes must be an integer from 1 to 1048576");
   if (sessionSecret !== undefined && (typeof sessionSecret !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(sessionSecret))) throw new TypeError("sessionSecret: expected 32+ URL-safe characters");
   if (!Array.isArray(openWritePaths) || openWritePaths.some((path) => typeof path !== "string" || !/^\/[a-z0-9/_-]+$/.test(path))) throw new TypeError("openWritePaths: expected exact paths");
+  if (existingServer !== undefined) {
+    if (!(existingServer instanceof Server) || existingServer.listenerCount("request") !== 0) throw new TypeError("existingServer: expected an HTTP server without a request handler");
+    const address = existingServer.address();
+    if (address && (typeof address === "string" || !isLoopbackHost(address.address) || (host !== "localhost" && address.address !== host) || (port !== 0 && address.port !== port))) throw new TypeError("existingServer: expected the requested loopback address and port");
+  }
   const openPaths = new Set(openWritePaths);
   const sessionCookie = sessionSecret ? `${SESSION_COOKIE}=${sessionSecret}; Path=/; HttpOnly; SameSite=Strict` : undefined;
   const writeRejection = (request) => openPaths.has(pathOf(request.url))
     ? requireJson(request.headers)
     : rejectUnsafeWrite(request.headers) ?? (sessionSecret && !hasSession(request.headers, sessionSecret) ? { status: 403, message: "Forbidden" } : null);
-  const server = createServer(async (request, response) => {
+  const server = existingServer ?? createServer();
+  server.on("request", async (request, response) => {
     if (!isLoopbackAuthority(request.headers.host)) {
       response.writeHead(421, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
       response.end("Misdirected Request");
@@ -79,7 +85,12 @@ export function createHttpServer({ handler, host = "127.0.0.1", port = 47832, sh
   });
   return Object.freeze({
     server,
-    async listen() { await new Promise((resolve, reject) => server.listen(port, host, resolve).once("error", reject)); return server.address(); },
+    async listen() {
+      // Desktop startup reserves the socket before crash-loop accounting;
+      // attaching the real handler keeps that same kernel-owned listener.
+      if (!server.listening) await new Promise((resolve, reject) => server.listen(port, host, resolve).once("error", reject));
+      return server.address();
+    },
     async close() {
       const timer = setTimeout(() => server.closeAllConnections(), shutdownMs);
       try { await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); }

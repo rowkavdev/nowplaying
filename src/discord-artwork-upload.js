@@ -31,14 +31,26 @@ export function createLitterboxUploader({ coverSource, fetchImpl = fetch, expiry
     form.set("reqtype", "fileupload");
     form.set("time", `${expiryHours}h`);
     form.set("fileToUpload", new Blob([image.bytes], { type: image.type }), `cover.${image.type === "image/png" ? "png" : image.type === "image/webp" ? "webp" : "jpg"}`);
-    const response = await fetchImpl(LITTERBOX_API, { method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+    let response;
+    try {
+      response = await fetchImpl(LITTERBOX_API, { method: "POST", body: form, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      throw Object.assign(new Error("upload failed"), { code: error?.name === "TimeoutError" ? "upload_timeout" : "upload_error" });
+    }
     if (!response.ok) {
       // The failed reply body is never read; release it without waiting or
       // letting cleanup replace the real error.
       try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
-      throw new Error("upload failed");
+      const code = response.status === 403 ? "upload_blocked" : response.status === 429 ? "upload_rate_limited" : "upload_error";
+      throw Object.assign(new Error("upload failed"), { code });
     }
-    const text = new TextDecoder().decode(await readBoundedBytes(response, MAX_REPLY_BYTES, "artwork upload reply")).trim();
+    let text;
+    try {
+      text = new TextDecoder().decode(await readBoundedBytes(response, MAX_REPLY_BYTES, "artwork upload reply")).trim();
+    } catch (error) {
+      if (error?.name === "TimeoutError") throw Object.assign(new Error("upload failed"), { code: "upload_timeout" });
+      throw error;
+    }
     const checked = classifyArtworkUrl(text);
     if (!checked.ok) throw new Error("upload returned no public image URL");
     return checked.url;

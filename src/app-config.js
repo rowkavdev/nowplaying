@@ -211,10 +211,10 @@ function defaultDiscordTransport(clientId) {
 // Discord runs only when setup turned it on and the build has an application
 // ID. Discord not running is fine: the client retries in the background.
 // Artwork: a public HTTPS image from the server is used as is; private or
-// local server images fall back to the NowPlaying icon image. No title or artist
-// leaves the machine unless the config has artworkLookup "musicbrainz" (the
-// default for new setups, off for configs written before it existed).
-export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, fetchImpl = fetch, coverSource, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings, { ...(coverSource ? { coverSource } : {}), fetchImpl })), intervalMs, stuckAfterMs, now } = {}) {
+// Private server covers can use the optional sanitized cover uploader. Without
+// a usable public cover, Discord gets the NowPlaying icon. Metadata lookup sends
+// title and artist only when artworkLookup "musicbrainz" is explicitly enabled.
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, fetchImpl = fetch, coverSource, clearCoverSource, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings, { ...(coverSource ? { coverSource } : {}), fetchImpl })), intervalMs, stuckAfterMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
@@ -226,13 +226,17 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.
   async function refreshArtwork() {
+    if (typeof clearCoverSource === "function") await clearCoverSource();
     const dropped = typeof artwork?.clear === "function" ? artwork.clear() : 0;
     await loop.tick().catch(() => null);
     return dropped;
   }
   // The status page shows which artwork source Discord got and why it fell
   // back (#154), as short words only - never a URL or host.
-  const connection = () => ({ ...loop.status(), artwork: typeof artwork?.status === "function" ? artwork.status() : null });
+  const connection = () => {
+    const state = loop.status();
+    return { ...state, artwork: state.artwork ?? (typeof artwork?.status === "function" ? artwork.status() : null) };
+  };
   return Object.freeze({ status: "on", connection, stop: () => loop.stop(), refreshArtwork });
 }
 
@@ -359,7 +363,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
-    try { return startDiscordFromConfig(settings, discordProvider, { ...(multi?.artwork ? { coverSource: (ref) => multi.artwork.resolve(ref) } : {}), fetchImpl, ...discordOptions }); }
+    try { return startDiscordFromConfig(settings, discordProvider, { ...(multi?.artwork ? { coverSource: (ref) => multi.artwork.resolve(ref), clearCoverSource: () => multi.artwork.clear() } : {}), fetchImpl, ...discordOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, refreshArtwork: async () => 0 }); }
   };
   // Discord changes from the settings page are saved to config.json first,
@@ -583,6 +587,10 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
     // Why the card's last cover is missing: a short allow-listed word, never
     // a URL, token or error text.
     status() { return Object.freeze({ ...lastCard }); },
+    async clear() {
+      await Promise.all([...artworkSources.values()].map((source) => source.clear()));
+      lastCard = { state: "none", reason: "not_requested" };
+    },
   });
   return Object.freeze({ ...multi, artwork });
 }
@@ -613,6 +621,7 @@ function createServerArtwork(server, secret, fetchImpl) {
   } else return null;
   let service = null;
   return Object.freeze({
+    async clear() { if (service) (await service.catch(() => null))?.clear(); },
     async resolve(ref) {
       service ??= (async () => {
         const { createDefaultArtworkSanitizer } = await import("./artwork-sanitizer-runtime.js");

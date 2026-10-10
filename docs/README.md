@@ -15,10 +15,13 @@ Two audiences, two homes:
 | [Hosted card deployment](hosted-card.md) | Running the card endpoint: routes, headers, caching, health checks | Current |
 | [Hosted card: what leaves your PC](hosted-upload.md) | Exactly which fields the app pushes to the card service | Current |
 | [Updates](updates.md) | Update policy, channels, verification, atomic install and rollback | Current |
-| [Testing a dev build](testing-dev-build.md) | Checklist for trying the `dev` pre-release on a clean Windows machine | Current |
+| [Testing a dev build](testing-dev-build.md) | Checklist for trying the `dev` pre-release on Windows, macOS and Linux | Current |
 | [Troubleshooting](troubleshooting.md) | Diagnostics by symptom, log locations and privacy-safe reporting | Current |
 | [Analytics](analytics.md) | Aggregate-only analytics and the download badge | Current |
 | [Artwork](artwork.md) | Artwork fetching, sanitizing, caching and embedding | Current |
+| [Install on Linux](wiki/Install-on-Linux.md) | Experimental RPM, DEB, Arch and portable installation, desktop requirements and troubleshooting | Current dev builds |
+| [Linux native packages](linux-native-packages.md) | Contributor build commands and development package identity | Current |
+| [Linux desktop testing](linux-desktop-testing.md) | Desktop acceptance scope and remaining manual checks | Current |
 | [Windows packaging](windows-packaging.md) | Installer and portable ZIP layout, and why native files sit beside the EXE | Current |
 | [Deployment](deployment.md) | Self-hosting design notes: network boundaries, polling, supervision, containers | Partly design target; the hosted card and Windows app sections predate what shipped |
 | [Releases and versioning](releasing.md) | SemVer, immutable artifacts, checksums, provenance and migrations | Current |

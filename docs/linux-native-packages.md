@@ -1,5 +1,7 @@
 # Native Linux desktop packages
 
+For download verification, installation, desktop dependencies and troubleshooting, see [Install on Linux](wiki/Install-on-Linux.md). This page documents contributor packaging.
+
 The builders consume our own CI's generated x86_64 Node bundle. That input
 must be trusted and must not change while packaging runs. Symlink validation
 rejects accidental links outside the bundle, then flattens internal links.
@@ -26,7 +28,14 @@ This slice rejects non-x86_64 hosts and bundles rather than mislabeling them.
 ## Development release identity
 
 Rolling development packages carry `+dev.<headsha>` in package metadata so
-upgrades can identify the commit. The installed `nowplaying --version` reports
-the base version from the bundled package.json, not that package-manager suffix.
-Use package metadata and the published checksum/attestation for exact build
-identity; do not infer the commit from the CLI's base version alone.
+upgrades can identify the commit. POSIX bundles embed the base version, full
+commit SHA, build time, development channel and unsigned status. Native package
+staging preserves that build identity and marks the installation as `deb`,
+`rpm` or `arch`; an extracted bundle reports `portable`. The status API and
+diagnostics expose the running build identity. A source checkout reports
+`source` without inventing build metadata.
+
+The installed `nowplaying --version` still reports the base app version, not
+the package-manager suffix. Use the running status/diagnostics commit alongside
+package metadata and the published checksum/attestation for exact identity;
+do not infer the commit from the CLI's base version alone.

@@ -6,6 +6,8 @@ set -euo pipefail
 [[ "$(uname -s)" = Linux ]] || { echo "Linux only: native Linux packaging" >&2; exit 2; }
 bundle="${1:?bundle directory required}"
 stage="${2:?staging directory required}"
+kind="${3:-}"
+case "$kind" in deb|rpm|arch) ;; '') ;; *) echo 'Unknown package format' >&2; exit 2 ;; esac
 [[ -x "$bundle/nowplaying" && -x "$bundle/runtime/node" ]] || { echo 'Not a built bundle' >&2; exit 2; }
 [[ -f "$bundle/app/assets/brand/png/icon-512.png" ]] || { echo 'Bundle branding missing' >&2; exit 2; }
 mkdir -p "$stage/opt" "$stage/usr/bin" "$stage/usr/share/applications" "$stage/usr/share/icons/hicolor/512x512/apps"
@@ -18,6 +20,9 @@ while IFS= read -r -d '' link; do
   [[ "$target" = "$bundle/"* ]] || { echo 'Bundle symlink escapes package' >&2; exit 2; }
 done < <(find "$bundle" -type l -print0)
 cp -aL "$bundle" "$stage/opt/nowplaying"
+if [[ -n "$kind" ]]; then
+  printf '{"packageType":"%s"}\n' "$kind" > "$stage/opt/nowplaying/app/package-info.json"
+fi
 cat > "$stage/usr/bin/nowplaying" <<'WRAP'
 #!/bin/sh
 exec /opt/nowplaying/nowplaying "$@"

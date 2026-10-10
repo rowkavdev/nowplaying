@@ -47,7 +47,7 @@ Discord Rich Presence runs locally and communicates with the user's Discord IPC 
 
 ## Status text
 
-Discord shows `<artist> on <service>` by default, for example "fakemink on Spotify". Films and episodes keep Discord's own app name unless you set a status text. Change it in Settings > Discord > Status text, or set `discord.name` in `config.json`. Leave it empty for the default.
+For music, Discord shows `<song> - <artist>` by default, for example "Holocene - Bon Iver" from Plex. Films and episodes keep Discord's own app name unless you set a status text. Change it in Settings > Discord > Status text, or set `discord.name` in `config.json`. Leave it empty for the default. Saved custom templates keep their wording, including `{artist} on {service}` if you prefer it.
 
 Write fields in braces: `{artist}`, `{title}`, `{subtitle}`, `{album}`, `{year}`, `{series}`, `{season}`, `{episode}`, `{episodeCode}`, `{service}` (Spotify, Navidrome, Plex and so on), `{provider}`, `{mediaType}`, `{state}`, `{stateLabel}`, `{position}`, `{duration}` and `{progressPercent}`. Other text is kept as typed. Write `{{` or `}}` for a literal brace. A field that is not in this list is rejected when you save. The text can be 128 characters at most. With hidden titles on, `{artist}` is blank.
 

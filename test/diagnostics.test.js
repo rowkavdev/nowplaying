@@ -66,6 +66,14 @@ test("rejects unsafe structured labels instead of copying free-form data", () =>
   assert.deepEqual(record.enabledOutputs, ["discord"]);
 });
 
+test("Discord artwork diagnostics expose fixed source and failure words only", () => {
+  assert.deepEqual(createDiagnosticRecord({ discordArtwork: { source: "fallback", reason: "upload_blocked", url: "https://secret.example/cover.png", title: "Private Song" } }).discordArtwork, { source: "fallback", reason: "upload_blocked" });
+  assert.deepEqual(createDiagnosticRecord({ discordArtwork: { source: "upload", reason: null } }).discordArtwork, { source: "upload", reason: null });
+  const report = createDiagnosticRecord({ discordArtwork: { source: "private_song", reason: "secret_token" } });
+  assert.deepEqual(report.discordArtwork, { source: "unknown", reason: "unknown" });
+  assert.doesNotMatch(JSON.stringify(report), /private_song|secret_token/);
+});
+
 test("requires sensitiveValues to be an array", () => {
   assert.throws(() => redactDiagnosticText("error", { sensitiveValues: "secret" }), /expected an array/);
 });

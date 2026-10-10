@@ -29,7 +29,7 @@ export function redactDiagnosticText(value, { sensitiveValues = [] } = {}) {
 }
 
 /** Build an allow-listed, JSON-serializable diagnostic record. */
-export function createDiagnosticRecord({ version, platform, packageType, enabledOutputs = [], provider, health, updater, tray, errors = [], sensitiveValues = [], build } = {}) {
+export function createDiagnosticRecord({ version, platform, packageType, enabledOutputs = [], provider, health, updater, tray, errors = [], sensitiveValues = [], build, discordArtwork } = {}) {
   return Object.freeze({
     schemaVersion: 1,
     version: safeLabel(version),
@@ -42,7 +42,15 @@ export function createDiagnosticRecord({ version, platform, packageType, enabled
     tray: safeLabel(tray),
     errors: Object.freeze(errors.map((error) => redactDiagnosticText(error, { sensitiveValues }))),
     build: safeBuild(build),
+    ...(discordArtwork && typeof discordArtwork === "object" ? { discordArtwork: safeArtwork(discordArtwork) } : {}),
   });
+}
+
+const ARTWORK_SOURCES = new Set(["none", "provider", "proxy", "upload", "lookup", "fallback"]);
+const URL_FAILURES = ["invalid", "not_https", "credentials", "private_host", "secret_query", "too_long", "unsupported_format"];
+const ARTWORK_FAILURES = new Set([...URL_FAILURES, ...URL_FAILURES.map((reason) => `upload_${reason}`), ...URL_FAILURES.map((reason) => `lookup_${reason}`), "upload_error", "upload_miss", "upload_blocked", "upload_rate_limited", "upload_timeout", "upload_disabled", "lookup_error", "lookup_miss", "resolver_error"]);
+function safeArtwork(value) {
+  return Object.freeze({ source: ARTWORK_SOURCES.has(value.source) ? value.source : "unknown", reason: value.reason == null ? null : ARTWORK_FAILURES.has(value.reason) ? value.reason : "unknown" });
 }
 
 // Build details come from the packaged build-info.json; anything that

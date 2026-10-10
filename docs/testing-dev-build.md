@@ -85,16 +85,19 @@ Every dev build also ships `nowplaying-dev-macos-arm64.zip` (Apple Silicon). The
 - [ ] Settings > "Launch app on system startup" on: `~/Library/LaunchAgents/dev.rowkav.nowplaying.plist` exists. Log out and back in; nowplaying starts on its own. Turn it off and log in again; it doesn't.
 - [ ] Stop nowplaying (Ctrl+C if started from a terminal). To remove it, delete the folder and the LaunchAgents plist.
 
-## 9. Linux (dev tarball)
+## 9. Linux (experimental packages and portable tarball)
 
-Every dev build also ships `nowplaying-dev-linux-x64.tar.gz`. It is a portable bundle - no package, no root.
+Use [Install on Linux](wiki/Install-on-Linux.md) for download verification, RPM/DEB/Arch package commands, portable setup and desktop requirements. The [Linux desktop acceptance checklist](linux-desktop-testing.md) covers tray behavior, restart, autostart and upgrades.
 
-- [ ] Download `nowplaying-dev-linux-x64.tar.gz` and `SHA256SUMS`. Run `sha256sum -c SHA256SUMS --ignore-missing`; the tarball line says OK.
-- [ ] Extract: `tar -xzf nowplaying-dev-linux-x64.tar.gz`. Move the `nowplaying` folder anywhere.
-- [ ] Run `./nowplaying start`. With no saved config it prints a Settings link; open it. Sections 3-5 above apply in the browser (skip tray-only items).
-- [ ] Settings > "Launch app on system startup" on: `~/.config/autostart/nowplaying.desktop` exists and `desktop-file-validate` (from desktop-file-utils) passes it. Log out and back in; nowplaying starts on its own. Turn it off and log in again; it doesn't.
-- [ ] Stop nowplaying. To remove it, delete the folder and the autostart entry.
+- [ ] Verify the downloaded package or `nowplaying-dev-linux-x64.tar.gz` against `SHA256SUMS`.
+- [ ] Install the native package through the distribution package manager, or extract the portable bundle and install the documented desktop dependencies.
+- [ ] Launch NowPlaying as your desktop user. With no saved config, Settings opens in the browser. Sections 3-5 above apply; check the native tray on Linux too.
+- [ ] Sign in with an unlocked Secret Service store and confirm the sign-in survives an app restart.
+- [ ] Play audio in Plexamp or another connected player. Check the card title, artist, cover and progress; pause, seek and change tracks.
+- [ ] Open native or Flatpak Discord and check the music status text, cover and timer. Confirm clear/idle behavior after playback stops.
+- [ ] Toggle **Start NowPlaying at login**, sign out/back in, and confirm behavior both on and off.
+- [ ] Upgrade using the same package manager or replace the portable bundle; confirm settings, saved sign-ins and playback still work.
 
 ## Reporting a problem
 
-Open an issue with the build number, your Windows version, the step that failed and what you saw. Leave out server addresses, usernames and tokens.
+Open an issue with the build number, your operating system and desktop environment, package format, the step that failed and what you saw. Leave out server addresses, usernames and tokens.

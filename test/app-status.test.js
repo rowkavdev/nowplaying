@@ -1,11 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createAppStatus } from "../src/app-status.js";
+import { createDiscordClient } from "../src/discord-client.js";
 import { createStatusPageHandler } from "../src/status-page-handler.js";
 import { createCardHandler } from "../src/http-handler.js";
 import { runInNewContext } from "node:vm";
 
 const config = { provider: "jellyfin", serverUrl: "http://user:pw@192.168.1.5:8096/jf?api_key=secret", identity: { id: "u1", displayName: "Rowan" } };
+
+test("status preserves the successful publish timestamp from the real Discord client contract", async () => {
+  const timestamp = Date.parse("2026-10-10T14:30:45.123Z");
+  const discord = createDiscordClient({ transport: { connect: async () => {}, setActivity: async () => {}, clearActivity: async () => {} }, now: () => timestamp });
+  const status = createAppStatus({ config });
+  status.setDiscord(() => ({ enabled: true, ...discord.status() }));
+  assert.equal(status.snapshot().discord.lastPublishedAt, null);
+  assert.equal(await discord.publish({ details: "Example Song", state: "Example Artist" }), true);
+  assert.equal(status.snapshot().discord.state, "ready");
+  assert.equal(status.snapshot().discord.lastPublishedAt, "2026-10-10T14:30:45.123Z");
+  await discord.close();
+});
+
+test("status timestamps accept ISO zones and dates and safely drop invalid values", () => {
+  const status = createAppStatus({ config });
+  for (const [value, expected] of [[new Date(1000), "1970-01-01T00:00:01.000Z"], [1000, "1970-01-01T00:00:01.000Z"], ["2026-10-10T15:30:45+01:00", "2026-10-10T14:30:45.000Z"], ["2024-02-29T00:00:00.1Z", "2024-02-29T00:00:00.100Z"]]) {
+    status.setDiscord(() => ({ lastPublishedAt: value }));
+    assert.equal(status.snapshot().discord.lastPublishedAt, expected);
+  }
+  for (const value of [null, undefined, NaN, Infinity, 8.64e15 + 1, new Date(NaN), {}, "not a date", "1000", "2026-10-10", "2026-10-10T15:30:45", "2026-02-29T00:00:00Z", "2026-02-30T00:00:00Z", "2026-13-10T00:00:00Z", "2026-10-10T24:00:00Z", "2026-10-10T00:00:00+25:00"]) {
+    status.setDiscord(() => ({ lastPublishedAt: value }));
+    assert.equal(status.snapshot().discord.lastPublishedAt, null, String(value));
+  }
+});
 
 test("status starts as checking and records a good poll", async () => {
   let t = 1000;

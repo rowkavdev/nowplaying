@@ -43,7 +43,8 @@ On each intended desktop (KDE, GNOME with indicator support, XFCE):
 5. Close the browser. Presence and the WebUI keep running. Settings/Logs reopen
    from the tray; during first-run those commands return to setup instead.
 6. Quit from the tray. Confirm app and tray processes exit and the port closes.
-7. Launch twice: document any duplicate-instance behavior before release.
+7. Launch twice: the second launch should reopen the existing Settings page
+   and exit successfully, with one app instance and no port-in-use warning.
 8. Toggle start-at-login, sign out/back in, and confirm behavior both on and off.
 9. Upgrade the dev package; preserve credentials, configuration and working cards.
 
