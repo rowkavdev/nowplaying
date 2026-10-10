@@ -28,6 +28,8 @@ export function createSpotifyProvider({ getAccessToken, forgetAccessToken = () =
       // 204: nothing is playing, or a private session.
       if (response.status === 204) return { state: "idle" };
       if (!response.ok) {
+        // Best-effort discard: cleanup must not delay or replace the status error.
+        try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
         const error = Object.assign(new Error(`Spotify now-playing request failed: ${response.status}`), { status: response.status });
         // The cached access token was revoked or went stale early (password
         // change, clock set back). Drop it so the next poll refreshes instead
