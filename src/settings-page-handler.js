@@ -82,7 +82,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </select></p>
 <p class="row"><label for="discord-upload">Show my server's cover</label>
 <input type="checkbox" id="discord-upload" name="artworkUpload" aria-describedby="discord-upload-help"></p>
-<p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to litterbox.catbox.moe, where it is kept for 72 hours. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
+<p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to Litterbox (72 hours), or tmpfiles.org (48 hours) if the first host fails. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
 <p class="row"><label for="discord-artwork">If that fails</label>
 <select id="discord-artwork" name="artworkLookup" aria-describedby="discord-artwork-help">
 <option value="musicbrainz">Look up the cover on MusicBrainz</option>
