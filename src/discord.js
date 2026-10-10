@@ -12,7 +12,7 @@ const STATUS_DISPLAY_TYPES = new Set(["name", "state", "details"]);
 
 export const discordDefaults = Object.freeze({
   // The text after "Listening to" on Discord. Music only by default; see activityName().
-  name: "{artist} on {service}",
+  name: "{title} - {artist}",
   statusDisplayType: "name",
   details: "{title}",
   state: "{subtitle}",
@@ -104,13 +104,13 @@ function trimDiscordText(value) {
   return chars.join("");
 }
 
-// The default name only applies to music with a known artist: "fakemink on
-// Spotify", or just the artist when the source is unknown. Films and episodes
-// keep Discord's own app name unless a name template was chosen.
+// Music defaults to "Song - Artist", without a dangling separator when one
+// field is missing. Films and episodes keep Discord's own app name unless a
+// name template was chosen.
 function activityName(presence, input, settings, values) {
   if (input.name === undefined || input.name === discordDefaults.name) {
-    if (VIDEO_KINDS.has(presence.kind) || !values.artist) return "";
-    return values.service ? `${values.artist} on ${values.service}` : values.artist;
+    if (VIDEO_KINDS.has(presence.kind) || presence.state === "idle") return "";
+    return [values.title, values.artist].filter(Boolean).join(" - ");
   }
   return formatTemplate(settings.name, values);
 }

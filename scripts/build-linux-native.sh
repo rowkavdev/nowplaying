@@ -23,7 +23,7 @@ case "$kind" in
 esac
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
-bash "$root/scripts/stage-linux-package.sh" "$bundle" "$stage/payload"
+bash "$root/scripts/stage-linux-package.sh" "$bundle" "$stage/payload" "$kind"
 if [[ "$kind" = rpm ]]; then
   mkdir -p "$stage/rpm/"{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
   tar -czf "$stage/rpm/SOURCES/payload.tar.gz" -C "$stage/payload" .

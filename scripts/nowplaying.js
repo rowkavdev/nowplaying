@@ -15,6 +15,9 @@ import { createHostedCredentials } from "../src/hosted-credentials.js";
 import { createPlatformCredentialAdapter } from "../src/platform-credential-adapter.js";
 import { createLinuxStartup, xdgAutostartDir } from "../src/linux-startup.js";
 import { createMacosStartup, launchAgentsDir } from "../src/macos-startup.js";
+import { readPosixPackageInfo } from "../src/posix-package-info.js";
+import { AlreadyRunningError, DesktopInstanceError, findDesktopInstance, loadDesktopInstanceSecret, withDesktopInstance } from "../src/desktop-instance.js";
+import { createHttpServer } from "../src/http-server.js";
 import {
   loadOrCreateDeviceId,
   openLocalSettingsUrl,
@@ -37,6 +40,8 @@ const command = process.argv[2] ?? "help";
 const args = process.argv.slice(3);
 let recovery;
 let liveApp = null;
+let instanceSecret;
+let appPort;
 
 if (command === "--version" || command === "version") {
   console.log(JSON.parse(await readFile(manifestFile, "utf8")).version);
@@ -65,6 +70,8 @@ async function start() {
   await logger.event("startup", "starting");
   let app;
   try {
+    appPort = resolveAppPort();
+    instanceSecret = await loadDesktopInstanceSecret(join(dirname(paths.configFile), "desktop-instance-secret"));
     app = await guardedStart(paths);
     liveApp = app;
     if (app.firstRun && !args.includes("--no-setup"))
@@ -75,11 +82,15 @@ async function start() {
         code: `SAFE_MODE_${String(recovery?.recovery?.subsystem ?? "unknown").toUpperCase()}`,
       });
   } catch (error) {
+    if (error instanceof AlreadyRunningError) {
+      await reopenExisting(error.url, logger);
+      return;
+    }
     await logger.event("startup", "failed", {
       level: "error",
       code: error?.startupCode ?? "START_FAILED",
     });
-    if (error instanceof StartupError) {
+    if (error instanceof StartupError || error instanceof DesktopInstanceError) {
       // Startup messages name the Windows command; point at this one instead.
       console.error(
         error.message.replaceAll("`nowplaying.exe ", "`nowplaying "),
@@ -120,6 +131,13 @@ async function start() {
     });
     if (await tray.ready) await logger.event("tray", "ok");
   }
+}
+
+async function reopenExisting(url, logger) {
+  console.log(`NowPlaying is already running. Settings: ${url}/settings`);
+  if (!args.includes("--no-setup"))
+    (process.platform === "linux" ? openLinuxWebUiUrl : openLocalSettingsUrl)(`${url}/settings`);
+  await logger.event("startup", "already-running");
 }
 
 async function version() {
@@ -168,19 +186,44 @@ function platformStartup() {
 // that never stayed up, the next one runs in safe mode.
 async function guardedStart(paths) {
   recovery?.cancel();
+  // Reserve the real app socket first. The kernel chooses exactly one
+  // launcher to update crash recovery, including simultaneous launches.
+  const reserved = createHttpServer({
+    port: appPort,
+    handler: withDesktopInstance(() => ({ status: 503, headers: { "Retry-After": "1" }, body: "NowPlaying is starting. Please retry shortly." }), instanceSecret),
+  });
+  try { await reserved.listen(); }
+  catch (error) {
+    if (error?.code === "EADDRINUSE") {
+      const existing = await findDesktopInstance({ port: appPort, secret: instanceSecret, attempts: 5 });
+      if (existing) throw new AlreadyRunningError(existing);
+      throw new StartupError("PORT_IN_USE", `Port ${appPort} is already in use. Close the other program using it and try again.`);
+    }
+    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `The OS won't let NowPlaying use port ${appPort}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
+    throw error;
+  }
   const store = createStartupRecoveryStore({
     file: join(dirname(paths.configFile), "startup-recovery.json"),
   });
-  recovery = await guardStartup({
-    store,
-    start: ({ safeMode }) => startFromConfig(paths, { safeMode }),
-  });
+  try {
+    recovery = await guardStartup({
+      store,
+      start: ({ safeMode }) => startFromConfig(paths, { safeMode, createServer: (options) => {
+        reserved.server.removeAllListeners("request");
+        return createHttpServer({ ...options, existingServer: reserved.server, handler: withDesktopInstance(options.handler, instanceSecret) });
+      } }),
+    });
+  } catch (error) {
+    await reserved.close().catch(() => {});
+    throw error;
+  }
   return recovery.app;
 }
 
-async function startFromConfig(paths, { safeMode = false } = {}) {
+async function startFromConfig(paths, { safeMode = false, createServer } = {}) {
   const adapter = createPlatformCredentialAdapter();
   const deviceId = await loadOrCreateDeviceId(paths.deviceIdFile);
+  const { packageType, build } = await readPosixPackageInfo(new URL("../", import.meta.url));
   const app = await startAppFromConfig({
     deviceId,
     onConfigured: () => {
@@ -189,12 +232,14 @@ async function startFromConfig(paths, { safeMode = false } = {}) {
     configFile: paths.configFile,
     credentialStore: createCredentialStore({ adapter }),
     hostedCredentials: createHostedCredentials({ adapter }),
-    port: resolveAppPort(),
+    port: appPort,
     version: await version(),
-    packageType: "source",
+    packageType,
+    build,
     safeMode,
     logFile: paths.logFile,
     startup: platformStartup(),
+    createServer,
   });
   if (app.firstRun) {
     console.log(`NowPlaying Settings: ${app.url}/settings`);

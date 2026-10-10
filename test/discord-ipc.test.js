@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -11,9 +11,10 @@ const APP = "123456789012345678";
 const unix = { skip: process.platform === "win32" };
 
 // A fake Discord: records frames and answers like the real client.
-async function fakeDiscord({ onHandshake = "ready", onCommand = "ok" } = {}) {
+async function fakeDiscord({ onHandshake = "ready", onCommand = "ok", socketSubdir = "", socketIndex = 0 } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "np-ipc-"));
-  const path = join(dir, "discord-ipc-0");
+  await mkdir(join(dir, socketSubdir), { recursive: true });
+  const path = join(dir, socketSubdir, `discord-ipc-${socketIndex}`);
   const frames = [];
   const sockets = new Set();
   const server = createServer((socket) => {
@@ -35,7 +36,7 @@ async function fakeDiscord({ onHandshake = "ready", onCommand = "ok" } = {}) {
   });
   await new Promise((resolve) => server.listen(path, resolve));
   return {
-    path, frames, sockets,
+    dir, path, frames, sockets,
     close: () => { for (const socket of sockets) socket.destroy(); return new Promise((resolve) => server.close(resolve)); },
   };
 }
@@ -58,8 +59,32 @@ test("frames round-trip, split across chunks", () => {
 });
 
 test("finds the socket per platform", () => {
-  assert.equal(discordIpcPaths({ platform: "win32" })[0], "\\\\?\\pipe\\discord-ipc-0");
-  assert.equal(discordIpcPaths({ platform: "linux", env: { XDG_RUNTIME_DIR: "/run/user/1000" } })[9], join("/run/user/1000", "discord-ipc-9"));
+  assert.deepEqual(discordIpcPaths({ platform: "win32" }), Array.from({ length: 10 }, (_, i) => `\\\\?\\pipe\\discord-ipc-${i}`));
+  const env = { XDG_RUNTIME_DIR: "/run/user/1000", TMPDIR: "/tmp/other" };
+  const linux = discordIpcPaths({ platform: "linux", env });
+  assert.deepEqual(linux.slice(0, 10), Array.from({ length: 10 }, (_, i) => join(env.XDG_RUNTIME_DIR, `discord-ipc-${i}`)));
+  assert.ok(linux.includes(join(env.XDG_RUNTIME_DIR, "app", "com.discordapp.Discord", "discord-ipc-9")));
+  for (const id of ["dev.vencord.Vesktop", "io.github.milkshiift.GoofCord", "xyz.armcord.ArmCord"]) {
+    assert.ok(linux.includes(join(env.XDG_RUNTIME_DIR, ".flatpak", id, "xdg-run", "discord-ipc-0")));
+  }
+  assert.equal(linux.length, 50, "the search remains bounded");
+  assert.equal(new Set(linux).size, linux.length);
+  assert.deepEqual(discordIpcPaths({ platform: "darwin", env }), linux.slice(0, 10));
+  assert.deepEqual(discordIpcPaths({ platform: "linux", env: { TMPDIR: "/tmp/custom" } }), Array.from({ length: 10 }, (_, i) => join("/tmp/custom", `discord-ipc-${i}`)));
+});
+
+test("connects to Flatpak Discord and Vesktop sockets without a host symlink", unix, async () => {
+  for (const socketSubdir of [join("app", "com.discordapp.Discord"), join(".flatpak", "dev.vencord.Vesktop", "xdg-run")]) {
+    const discord = await fakeDiscord({ socketSubdir, socketIndex: 9 });
+    const paths = discordIpcPaths({ platform: "linux", env: { XDG_RUNTIME_DIR: discord.dir } });
+    const client = createDiscordIpcClient({ paths, timeoutMs: 100 });
+    try {
+      await client.login({ clientId: APP });
+      await client.setActivity({ type: "listening", details: "Example Song" });
+      assert.equal(client.connected, true);
+      assert.equal(discord.frames.at(-1).payload.args.activity.details, "Example Song");
+    } finally { await client.destroy(); await discord.close(); }
+  }
 });
 
 test("maps the activity onto Discord's wire shape", () => {

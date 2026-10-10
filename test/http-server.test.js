@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 import { createHttpServer, PAGE_CSP } from "../src/http-server.js";
 
 const SECURITY_HEADERS = Object.freeze({
@@ -54,6 +54,36 @@ test("adapts handler responses onto a real Node HTTP server with invariant secur
     assert.equal(result.body, "/healthz");
     assertSecurityHeaders(result.headers);
   } finally { await app.close(); }
+});
+
+test("attaches to a reserved loopback socket and preserves host, session and close behavior", async () => {
+  const socket = createServer();
+  await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
+  const port = socket.address().port;
+  const sessionSecret = "s".repeat(48);
+  const app = createHttpServer({ port, existingServer: socket, sessionSecret, handler: async () => ({ status: 200, headers: { "Content-Type": "text/plain" }, body: "ready" }) });
+  try {
+    assert.equal((await app.listen()).port, port, "no bind-close-bind gap during handoff");
+    assert.equal((await get(port)).body, "ready");
+    assert.equal((await get(port, "/", "attacker.invalid")).status, 421);
+    const write = await fetch(`http://127.0.0.1:${port}/`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    assert.equal(write.status, 403);
+  } finally { await app.close(); }
+  assert.equal(socket.listening, false);
+});
+
+test("reserved sockets cannot widen listening exposure or replace another request handler", async () => {
+  const handler = async () => ({ status: 204, headers: {}, body: "" });
+  assert.throws(() => createHttpServer({ handler, existingServer: {} }), /HTTP server/);
+  const handled = createServer(() => {});
+  assert.throws(() => createHttpServer({ handler, existingServer: handled }), /without a request handler/);
+  for (const host of ["0.0.0.0", "127.0.0.2"]) {
+    const socket = createServer();
+    await new Promise((resolve) => socket.listen(0, host, resolve));
+    try {
+      assert.throws(() => createHttpServer({ handler, port: socket.address().port, existingServer: socket }), /requested loopback/);
+    } finally { await new Promise((resolve) => socket.close(resolve)); }
+  }
 });
 
 test("sanitizes unexpected adapter failures and preserves security headers", async () => {

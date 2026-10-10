@@ -211,10 +211,10 @@ function defaultDiscordTransport(clientId) {
 // Discord runs only when setup turned it on and the build has an application
 // ID. Discord not running is fine: the client retries in the background.
 // Artwork: a public HTTPS image from the server is used as is; private or
-// local server images fall back to the NowPlaying icon image. No title or artist
-// leaves the machine unless the config has artworkLookup "musicbrainz" (the
-// default for new setups, off for configs written before it existed).
-export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, fetchImpl = fetch, coverSource, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings, { ...(coverSource ? { coverSource } : {}), fetchImpl })), intervalMs, stuckAfterMs, now } = {}) {
+// Private server covers can use the optional sanitized cover uploader. Without
+// a usable public cover, Discord gets the NowPlaying icon. Metadata lookup sends
+// title and artist only when artworkLookup "musicbrainz" is explicitly enabled.
+export function startDiscordFromConfig(config, provider, { env = process.env, builtInClientId, createTransport = defaultDiscordTransport, fetchImpl = fetch, coverSource, clearCoverSource, createArtwork = (settings) => createDiscordArtworkResolver(artworkResolverOptions(settings, { ...(coverSource ? { coverSource } : {}), fetchImpl })), intervalMs, stuckAfterMs, now } = {}) {
   if (!config.discord?.enabled) return Object.freeze({ status: "off", stop: async () => {}, refreshArtwork: async () => 0 });
   const clientId = resolveDiscordClientId({ env, ...(builtInClientId !== undefined ? { builtIn: builtInClientId } : {}) });
   if (!clientId) return Object.freeze({ status: "no_app_id", stop: async () => {}, refreshArtwork: async () => 0 });
@@ -226,13 +226,17 @@ export function startDiscordFromConfig(config, provider, { env = process.env, bu
   loop.start();
   // Refresh artwork: forget cached covers, then update Discord straight away.
   async function refreshArtwork() {
+    if (typeof clearCoverSource === "function") await clearCoverSource();
     const dropped = typeof artwork?.clear === "function" ? artwork.clear() : 0;
     await loop.tick().catch(() => null);
     return dropped;
   }
   // The status page shows which artwork source Discord got and why it fell
   // back (#154), as short words only - never a URL or host.
-  const connection = () => ({ ...loop.status(), artwork: typeof artwork?.status === "function" ? artwork.status() : null });
+  const connection = () => {
+    const state = loop.status();
+    return { ...state, artwork: state.artwork ?? (typeof artwork?.status === "function" ? artwork.status() : null) };
+  };
   return Object.freeze({ status: "on", connection, stop: () => loop.stop(), refreshArtwork });
 }
 
@@ -288,16 +292,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   try { config = await loadAppConfig(configFile); }
   catch (error) {
     if (error?.startupCode !== "CONFIG_MISSING" || !configFile) throw error;
-    if (typeof credentialStore.save !== "function" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId ?? "")) throw new StartupError("SETUP_UNAVAILABLE", "A credential store and stable device ID are needed to connect a server. Run `nowplaying setup` or install the desktop app.");
-    const services = createSettingsConnectedServices({ file: configFile, credentialStore, hostedCredentials, onConfigured, fetchImpl, ...(spotifySignIn ? { spotifySignIn } : {}), ...(hostedSignIn ? { hostedSignIn } : {}) });
-    const management = createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: services.serial, prepareConfig: services.prepareFirstServer, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) });
-    const handler = createFirstRunSettingsHandler({ servers: async (request) => (await services.handler(request)) ?? management.handler(request) });
-    const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
-    let address;
-    try { address = await server.listen(); }
-    catch (listenError) { if (listenError?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use.`); throw listenError; }
-    const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
-    return Object.freeze({ firstRun: true, url: `http://${authority}:${address.port}`, close: () => server.close() });
+    return startFirstRunSettings({ configFile, credentialStore, deviceId, version, hostedCredentials, onConfigured, fetchImpl, spotifySignIn, hostedSignIn, discoverServers, signIn, createServer, host, port });
   }
   // Safe mode (#122) is offline: no sign-in read and no server polling, so a
   // broken sign-in or an unreachable server can't keep the start crashing. The
@@ -317,24 +312,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // The status page (local only) sees what's really playing; the card,
   // Discord and hosted uploads get the privacy-filtered version.
   const provider = withPrivacy(tracked, () => current);
-  // Spotify (#135) feeds the local card, its preview and the hosted card,
-  // never Discord (Rowan's call). When it and the media server are both
-  // playing, whichever started most recently shows. A Spotify problem never
-  // stops the start; it just isn't shown.
-  let spotify = null;
-  if (!safeMode && config.spotify) {
-    try { spotify = createSpotifySource(config, credentialStore, { fetchImpl, backoff: providerBackoff }); } catch { spotify = null; }
-  }
-  // YouTube (#136): the browser extension posts to /bridge/youtube. Same
-  // rules as Spotify: card only, never Discord, most recent start wins, and
-  // a problem here never stops the start.
-  let youtube = null;
-  if (!safeMode) {
-    try {
-      const token = await loadYouTubePairingToken(credentialStore);
-      youtube = { bridge: createYouTubeBridge({ token }), token };
-    } catch { youtube = null; }
-  }
+  const { spotify, youtube } = await createOptionalSources(config, credentialStore, { safeMode, fetchImpl, providerBackoff });
   let cardSource = tracked;
   if (spotify) cardSource = combinePresence({ primary: cardSource, secondary: spotify });
   if (youtube) cardSource = combinePresence({ primary: cardSource, secondary: youtube.bridge.provider });
@@ -359,7 +337,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   };
   const launchDiscord = (settings) => {
     if (safeMode) return paused;
-    try { return startDiscordFromConfig(settings, discordProvider, { ...(multi?.artwork ? { coverSource: (ref) => multi.artwork.resolve(ref) } : {}), fetchImpl, ...discordOptions }); }
+    try { return startDiscordFromConfig(settings, discordProvider, { ...(multi?.artwork ? { coverSource: (ref) => multi.artwork.resolve(ref), clearCoverSource: () => multi.artwork.clear() } : {}), fetchImpl, ...discordOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, refreshArtwork: async () => 0 }); }
   };
   // Discord changes from the settings page are saved to config.json first,
@@ -481,13 +459,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     onSignedOut: () => settings.disconnectHosted(),
     fallback: logsHandler,
   });
-  const services = typeof credentialStore.save === "function" ? createSettingsConnectedServices({ file: configFile, credentialStore, hostedCredentials, onConfigured, settingsStore, fetchImpl, ...(spotifySignIn ? { spotifySignIn } : {}), ...(hostedSignIn ? { hostedSignIn } : {}) }) : null;
-  const management = deviceId && typeof credentialStore.save === "function"
-    ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: settingsStore.serial, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
-    : null;
-  const managementFallback = async (request) => (await services?.handler(request)) ?? (await management?.handler(request)) ?? devicesHandler(request);
-  const pageHandler = createSettingsPageHandler({ settings, fallback: managementFallback, platform });
-  const handler = youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
+  const handler = createConfiguredSettingsHandler({ credentialStore, configFile, hostedCredentials, onConfigured, settingsStore, fetchImpl, spotifySignIn, hostedSignIn, deviceId, version, discoverServers, signIn, devicesHandler, settings, platform, youtube });
   // Saves need the cookie the app's own pages set, so another local program
   // or web page can't change settings.
   // The bridge checks its own pairing token and extension origin, so it
@@ -496,15 +468,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // it skips the WebUI session check the way the YouTube bridge does.
   const writePaths = [...(youtube ? [YOUTUBE_BRIDGE_PATH] : []), ...(shutdown ? [SHUTDOWN_PATH] : [])];
   const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url"), openWritePaths: writePaths });
-  let address;
-  try {
-    address = await server.listen();
-  } catch (error) {
-    if (error?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use. Close the other program using it and try again.`);
-    // Reserved ports and OS permissions can reject a bind on any platform.
-    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `The OS won't let NowPlaying use port ${port}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
-    throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
-  }
+  const address = await listenConfiguredServer(server, port);
   const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
   discord = launchDiscord(config);
   status.setDiscord(() => discord.status === "on"
@@ -520,6 +484,62 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     await server.close();
   };
   return Object.freeze({ config, servers: () => (multi ? multi.servers() : Object.freeze([])), url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
+}
+
+async function startFirstRunSettings({ configFile, credentialStore, deviceId, version, hostedCredentials, onConfigured, fetchImpl, spotifySignIn, hostedSignIn, discoverServers, signIn, createServer, host, port }) {
+  if (typeof credentialStore.save !== "function" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId ?? "")) throw new StartupError("SETUP_UNAVAILABLE", "A credential store and stable device ID are needed to connect a server. Run `nowplaying setup` or install the desktop app.");
+  const services = createSettingsConnectedServices({ file: configFile, credentialStore, hostedCredentials, onConfigured, fetchImpl, ...(spotifySignIn ? { spotifySignIn } : {}), ...(hostedSignIn ? { hostedSignIn } : {}) });
+  const management = createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: services.serial, prepareConfig: services.prepareFirstServer, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) });
+  const handler = createFirstRunSettingsHandler({ servers: async (request) => (await services.handler(request)) ?? management.handler(request) });
+  const server = createServer({ host, port, handler, sessionSecret: randomBytes(32).toString("base64url") });
+  let address;
+  try { address = await server.listen(); }
+  catch (listenError) { if (listenError?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use.`); throw listenError; }
+  const authority = address.family === "IPv6" ? `[${address.address}]` : address.address;
+  return Object.freeze({ firstRun: true, url: `http://${authority}:${address.port}`, close: () => server.close() });
+}
+
+async function createOptionalSources(config, credentialStore, { safeMode, fetchImpl, providerBackoff }) {
+  // Spotify (#135) feeds the local card, its preview and the hosted card,
+  // never Discord (Rowan's call). When it and the media server are both
+  // playing, whichever started most recently shows. A Spotify problem never
+  // stops the start; it just isn't shown.
+  let spotify = null;
+  if (!safeMode && config.spotify) {
+    try { spotify = createSpotifySource(config, credentialStore, { fetchImpl, backoff: providerBackoff }); } catch { spotify = null; }
+  }
+  // YouTube (#136): the browser extension posts to /bridge/youtube. Same
+  // rules as Spotify: card only, never Discord, most recent start wins, and
+  // a problem here never stops the start.
+  let youtube = null;
+  if (!safeMode) {
+    try {
+      const token = await loadYouTubePairingToken(credentialStore);
+      youtube = { bridge: createYouTubeBridge({ token }), token };
+    } catch { youtube = null; }
+  }
+  return { spotify, youtube };
+}
+
+function createConfiguredSettingsHandler({ credentialStore, configFile, hostedCredentials, onConfigured, settingsStore, fetchImpl, spotifySignIn, hostedSignIn, deviceId, version, discoverServers, signIn, devicesHandler, settings, platform, youtube }) {
+  const services = typeof credentialStore.save === "function" ? createSettingsConnectedServices({ file: configFile, credentialStore, hostedCredentials, onConfigured, settingsStore, fetchImpl, ...(spotifySignIn ? { spotifySignIn } : {}), ...(hostedSignIn ? { hostedSignIn } : {}) }) : null;
+  const management = deviceId && typeof credentialStore.save === "function"
+    ? createSettingsServers({ file: configFile, credentialStore, deviceId, version: version ?? "0", onConfigured, fileQueue: settingsStore.serial, ...(discoverServers ? { discover: discoverServers } : {}), ...(signIn ? { signIn } : {}) })
+    : null;
+  const managementFallback = async (request) => (await services?.handler(request)) ?? (await management?.handler(request)) ?? devicesHandler(request);
+  const pageHandler = createSettingsPageHandler({ settings, fallback: managementFallback, platform });
+  return youtube ? createYouTubeBridgeHandler({ bridge: youtube.bridge, fallback: pageHandler }) : pageHandler;
+}
+
+async function listenConfiguredServer(server, port) {
+  try {
+    return await server.listen();
+  } catch (error) {
+    if (error?.code === "EADDRINUSE") throw new StartupError("PORT_IN_USE", `Port ${port} is already in use. Close the other program using it and try again.`);
+    // Reserved ports and OS permissions can reject a bind on any platform.
+    if (error?.code === "EACCES") throw new StartupError("PORT_BLOCKED", `The OS won't let NowPlaying use port ${port}. Set NOWPLAYING_PORT to another port (1024 to 65535) and try again.`);
+    throw new StartupError("SERVER_START_FAILED", "Couldn't start the local card server.");
+  }
 }
 
 export function classifyArtworkFailure(error) {
@@ -583,6 +603,10 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
     // Why the card's last cover is missing: a short allow-listed word, never
     // a URL, token or error text.
     status() { return Object.freeze({ ...lastCard }); },
+    async clear() {
+      await Promise.all([...artworkSources.values()].map((source) => source.clear()));
+      lastCard = { state: "none", reason: "not_requested" };
+    },
   });
   return Object.freeze({ ...multi, artwork });
 }
@@ -613,6 +637,7 @@ function createServerArtwork(server, secret, fetchImpl) {
   } else return null;
   let service = null;
   return Object.freeze({
+    async clear() { if (service) (await service.catch(() => null))?.clear(); },
     async resolve(ref) {
       service ??= (async () => {
         const { createDefaultArtworkSanitizer } = await import("./artwork-sanitizer-runtime.js");

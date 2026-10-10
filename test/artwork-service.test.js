@@ -36,6 +36,30 @@ test("negative-caches missing artwork without exposing provider URLs", async () 
   assert.equal(calls, 1);
 });
 
+test("manual clear retries a recovered cover immediately instead of reusing a cached miss", async () => {
+  let available = false, calls = 0;
+  const service = createArtworkService({ cache: createArtworkCache(), fetchImpl: async () => { calls += 1; return response(available ? 200 : 404); } });
+  assert.equal(await service.resolve(artwork, config), null);
+  available = true;
+  service.clear();
+  assert.match(await service.resolve(artwork, config), /^data:image\/png;base64,/);
+  assert.equal(calls, 2);
+});
+
+test("an older in-flight cover cannot repopulate the cache after a manual clear", async () => {
+  let release, started, calls = 0;
+  const held = new Promise((resolve) => { release = resolve; });
+  const entered = new Promise((resolve) => { started = resolve; });
+  const service = createArtworkService({ cache: createArtworkCache(), fetchImpl: async () => { if (++calls === 1) { started(); await held; return response(404); } return response(200); } });
+  const old = service.resolve(artwork, config);
+  await entered;
+  service.clear();
+  release();
+  assert.equal(await old, null);
+  assert.match(await service.resolve(artwork, config), /^data:image\/png;base64,/);
+  assert.equal(calls, 2);
+});
+
 test("returns null without a provider request when presence has no artwork", async () => {
   const service = createArtworkService({ cache: createArtworkCache(), fetchImpl: async () => { throw new Error("must not fetch"); } });
   assert.equal(await service.resolve(null, config), null);

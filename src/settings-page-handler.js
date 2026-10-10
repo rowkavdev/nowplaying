@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { normalizeCard } from "./setup-config.js";
 import { HOSTED_DEVICES_SCRIPT } from "./hosted-devices.js";
-import { ONBOARDING_HTML, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
+import { ONBOARDING_HTML, ONBOARDING_CSS, SERVER_CSS, SERVER_SCRIPT, SERVICE_SCRIPT, serverPanel, servicePanel } from "./settings-onboarding-page.js";
 
 // Startup copy is platform-aware (#677): the control drives a Windows
 // shortcut, a macOS LaunchAgent or an XDG autostart entry depending on the
@@ -72,8 +72,8 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="recent">Show what I played last</option>
 </select></p>
 <p class="row"><label for="discord-name">Status text</label>
-<input type="text" id="discord-name" name="name" maxlength="128" placeholder="{artist} on {service}" aria-describedby="discord-name-help"></p>
-<p class="hint" id="discord-name-help">What Discord shows in your status, next to your name. Leave it empty for "{artist} on {service}". Fields you can use: {artist}, {title}, {subtitle}, {album}, {year}, {series}, {season}, {episode}, {episodeCode}, {service} (Spotify, Navidrome and so on), {provider}, {mediaType}, {state}, {stateLabel}, {position}, {duration} and {progressPercent}. Anything else you type is kept as it is. To show a literal brace, write {{ or }}.</p>
+<input type="text" id="discord-name" name="name" maxlength="128" placeholder="{title} - {artist}" aria-describedby="discord-name-help"></p>
+<p class="hint" id="discord-name-help">What Discord shows in your status, next to your name. Leave it empty for "{title} - {artist}" on music. Films and episodes use the app name. Fields you can use: {artist}, {title}, {subtitle}, {album}, {year}, {series}, {season}, {episode}, {episodeCode}, {service} (Spotify, Navidrome and so on), {provider}, {mediaType}, {state}, {stateLabel}, {position}, {duration} and {progressPercent}. Anything else you type is kept as it is. To show a literal brace, write {{ or }}.</p>
 <p class="row"><label for="discord-status-type">Status shows</label>
 <select id="discord-status-type" name="statusDisplayType">
 <option value="name">The status text above</option>
@@ -1045,7 +1045,7 @@ function response(status, body, headers = {}) { return Object.freeze({ status, h
 // No-config first run uses the same server panel and assets as configured Settings.
 export function createFirstRunSettingsHandler({ servers } = {}) {
   if (typeof servers !== "function") throw new TypeError("servers handler required");
-  const assets = { "/settings": [ONBOARDING_HTML, "text/html; charset=utf-8", true], "/settings.css": [CSS, "text/css; charset=utf-8"], "/status.css": ["body{font:15px/1.5 Segoe UI,system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#f6f6f8;color:#1b1b1f}section{background:#fff;padding:16px;border:1px solid #ddd;border-radius:8px;margin:16px 0}button{font:inherit;padding:6px 12px;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#444}}", "text/css; charset=utf-8"], "/servers.js": [`${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, "text/javascript; charset=utf-8"] };
+  const assets = { "/settings": [ONBOARDING_HTML, "text/html; charset=utf-8", true], "/settings.css": [CSS, "text/css; charset=utf-8"], "/onboarding.css": [ONBOARDING_CSS, "text/css; charset=utf-8"], "/status.css": ["body{font:15px/1.5 Segoe UI,system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;background:#f6f6f8;color:#1b1b1f}section{background:#fff;padding:16px;border:1px solid #ddd;border-radius:8px;margin:16px 0}button{font:inherit;padding:6px 12px;cursor:pointer}@media(prefers-color-scheme:dark){body{background:#17171a;color:#eee}section{background:#222226;border-color:#444}}", "text/css; charset=utf-8"], "/servers.js": [`${SERVER_SCRIPT}\n${SERVICE_SCRIPT}`, "text/javascript; charset=utf-8"] };
   return async (request) => {
     const path = new URL(request?.url || "/", "http://127.0.0.1").pathname;
     if (path === "/") return { status: 302, headers: { Location: "/settings" }, body: "" };

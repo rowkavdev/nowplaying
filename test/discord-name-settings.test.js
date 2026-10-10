@@ -39,6 +39,8 @@ test("the page has the status text field with its tokens and brace help", async 
   const page = (await h({ url: "/settings" })).body;
   assert.match(page, /<label for="discord-name">Status text<\/label>/);
   assert.match(page, /id="discord-name"[^>]*aria-describedby="discord-name-help"/);
+  assert.match(page, /id="discord-name"[^>]*placeholder="\{title\} - \{artist\}"/);
+  assert.match(page, /Leave it empty for "\{title\} - \{artist\}" on music/);
   assert.match(page, /\{artist\}[^<]*\{service\}/);
   assert.match(page, /\{\{ or \}\}/);
   assert.match(page, /<option value="state">/);

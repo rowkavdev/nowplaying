@@ -38,6 +38,13 @@ export function createDiscordPresenceLoop({
   let closing = false;
   let running = null;
   let stuck = null;
+  let lastArtwork;
+
+  async function publish(controller, presence) {
+    const result = await controller.publish(presence);
+    if (result.artwork) lastArtwork = result.artwork;
+    return result;
+  }
 
   // Stuck sessions (#153) are treated like nothing playing: media servers can
   // keep reporting "playing" for minutes after the player has gone, with the
@@ -85,12 +92,12 @@ export function createDiscordPresenceLoop({
     if (active) {
       lastActive = presence;
       idleSince = null;
-      if (isStalled(presence)) return Object.freeze({ action: "publish", stalled: true, ...(await frozen.publish({ ...presence, state: "paused" })) });
-      return Object.freeze({ action: "publish", ...(await live.publish(presence)) });
+      if (isStalled(presence)) return Object.freeze({ action: "publish", stalled: true, ...(await publish(frozen, { ...presence, state: "paused" })) });
+      return Object.freeze({ action: "publish", ...(await publish(live, presence)) });
     }
     idleSince ??= now();
-    if (idleBehavior === "show" && presence) return Object.freeze({ action: "publish", ...(await live.publish(presence)) });
-    if (idleBehavior === "recent" && lastActive) return Object.freeze({ action: "recent", ...(await frozen.publish({ ...lastActive, state: "paused" })) });
+    if (idleBehavior === "show" && presence) return Object.freeze({ action: "publish", ...(await publish(live, presence)) });
+    if (idleBehavior === "recent" && lastActive) return Object.freeze({ action: "recent", ...(await publish(frozen, { ...lastActive, state: "paused" })) });
     if (idleBehavior === "grace" && lastActive && now() - idleSince < graceMs) return Object.freeze({ action: "grace" });
     return Object.freeze({ action: "clear", published: await live.clear() });
   }
@@ -108,7 +115,7 @@ export function createDiscordPresenceLoop({
 
   return Object.freeze({
     tick,
-    status: () => (typeof client.status === "function" ? client.status() : Object.freeze({ state: stopped ? "stopped" : "unknown" })),
+    status: () => Object.freeze({ ...(typeof client.status === "function" ? client.status() : { state: stopped ? "stopped" : "unknown" }), ...(lastArtwork ? { artwork: lastArtwork } : {}) }),
     start() {
       if (!stopped) return;
       stopped = false;

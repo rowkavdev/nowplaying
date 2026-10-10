@@ -17,6 +17,27 @@ test("recognises each server from its public, unauthenticated response", () => {
   assert.equal(classifyPlex({ status: 200, text: "<html>" }), null);
 });
 
+test("recognises Plex's JSON identity and rejects invalid identities", () => {
+  const identity = { MediaContainer: { size: 0, claimed: true, machineIdentifier: "abc123", version: "1.43.4.10903-e5521bd8c" } };
+  assert.deepEqual(classifyPlex({ status: 200, text: JSON.stringify(identity) }), { provider: "plex", id: "abc123", version: "1.43.4.10903-e5521bd8c", name: "Plex Media Server" });
+  for (const text of ["{invalid", "null", "[]", '{"MediaContainer":[]}', '{"MediaContainer":{"machineIdentifier":123}}', '{"MediaContainer":{"machineIdentifier":""}}', '{"machineIdentifier":"abc123"}', '<MediaContainer/><Other machineIdentifier="abc123"/>']) {
+    assert.equal(classifyPlex({ status: 200, text }), null, text);
+  }
+  for (const status of [401, 403, 500]) assert.equal(classifyPlex({ status, text: JSON.stringify(identity) }), null);
+});
+
+test("discovers Plex when its identity endpoint honors the JSON Accept preference", async () => {
+  const servers = await discoverLocalServers({
+    fetchImpl: async (url, init) => {
+      if (!url.endsWith(":32400/identity")) throw new TypeError("not available");
+      assert.match(init.headers.Accept, /^application\/json/);
+      return reply(200, JSON.stringify({ MediaContainer: { machineIdentifier: "example-server", version: "1.43.4" } }));
+    },
+    discoverLan: async () => [], discoverPlex: async () => [], networkHosts: [],
+  });
+  assert.deepEqual(servers, [{ provider: "plex", baseUrl: "http://127.0.0.1:32400", id: "example-server", version: "1.43.4", name: "Plex Media Server" }]);
+});
+
 test("probes loopback only, without credentials or redirects, and skips failures", async () => {
   const seen = [];
   const fetchImpl = async (url, init) => {

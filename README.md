@@ -7,7 +7,7 @@
 [![Coverage](https://codecov.io/gh/rowkavdev/nowplaying/graph/badge.svg?branch=main)](https://app.codecov.io/gh/rowkavdev/nowplaying)
 [![License: AGPL-3.0](https://img.shields.io/github/license/rowkavdev/nowplaying)](LICENSE)
 
-Your media server knows what you are playing. nowplaying turns that into a card for your GitHub README and a status in Discord, without exposing your server to the internet. It runs on your Windows PC and reads playback from Plex, Jellyfin, Emby or Navidrome. Spotify and a paired YouTube extension can also feed the card.
+Your media server knows what you are playing. nowplaying turns that into a card for your GitHub README and a status in Discord, without exposing your server to the internet. It runs on your PC and reads playback from Plex, Jellyfin, Emby or Navidrome. Spotify and a paired YouTube extension can also feed the card.
 
 | Music | Film | TV |
 | :---: | :---: | :---: |
@@ -15,9 +15,11 @@ Your media server knows what you are playing. nowplaying turns that into a card 
 
 *Example cards, not live playback. [More states and styles](docs/card-examples.md).*
 
-> **Windows development build:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. macOS and Linux desktop apps are not supported yet.
+> **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
 
 ## Get it running
+
+On Linux, follow [Install on Linux](docs/wiki/Install-on-Linux.md) to choose an RPM, DEB, Arch package or portable tarball. The Windows steps are below; both use the same browser Settings and playback setup.
 
 1. Download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS` from the [dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev). The [portable ZIP](docs/wiki/Install-on-Windows.md#portable-zip) is an alternative. In PowerShell, compare the installer hash with its line in `SHA256SUMS`:
 
@@ -44,7 +46,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 ## Privacy is set on your PC
 
 - **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork or listening history. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
-- **Sign-ins stay in Windows Credential Manager.** `%LOCALAPPDATA%\nowplaying\config.json` holds settings and server addresses, not passwords or tokens. Don't post that file without checking it.
+- **Sign-ins stay in the operating system credential store:** Windows Credential Manager or Linux Secret Service. Settings and server addresses are in `%LOCALAPPDATA%\nowplaying\config.json` on Windows or `~/.config/nowplaying/config.json` on Linux, with XDG directory overrides respected. These files do not contain passwords or tokens; check server addresses before sharing them.
 - **Settings > Privacy** can hide titles, artwork, progress or whole media types before they reach the card or Discord. A hidden type looks like nothing playing. [Privacy guide](docs/wiki/Privacy-and-safe-configuration.md).
 - **Discord cover art is uploaded to a temporary host.** Discord can't reach a private Plex, Jellyfin or Emby address, so "Show my server's cover" is on for a new setup and sends the cover to litterbox.catbox.moe, which deletes it after 72 hours. An existing install keeps it off until you tick it in Settings > Discord, and you can untick it there at any time. [Details](docs/artwork.md#discord-cover-upload).
 - **Local Settings binds to `127.0.0.1`.** The hosted card doesn't require a public port or inbound access to your PC. A public README card is visible to anyone who opens it; [GitHub may cache its image](docs/wiki/Add-a-README-card.md#if-the-readme-looks-stale).
@@ -53,7 +55,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 Open **Settings** from the tray icon to manage servers, Discord, hosted cards, privacy and the card's appearance. The local status page shows connections and logs. [Customization](docs/customization.md) · [Updates and release channels](docs/wiki/Updates-and-release-channels.md) · [Troubleshooting](docs/wiki/Troubleshooting.md).
 
-If something fails on a dev build, [open an issue](https://github.com/rowkavdev/nowplaying/issues/new) with the build number, Windows version, what you tried and what happened. Leave out server addresses and tokens.
+If something fails on a dev build, [open an issue](https://github.com/rowkavdev/nowplaying/issues/new) with the build number, operating system and desktop environment, package format, what you tried and what happened. Leave out server addresses and tokens.
 
 ## Develop
 
@@ -67,7 +69,7 @@ npm test
 npm run build
 ```
 
-The source exports provider adapters and the card renderer for other deployments. [Provider API](docs/providers.md) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md). The Windows app is the supported desktop path; running the polling app on macOS or Linux is not supported yet.
+The source exports provider adapters and the card renderer for other deployments. [Provider API](docs/providers.md) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md). Linux desktop packages and the portable tarball are experimental development builds; see the [Linux acceptance checklist](docs/linux-desktop-testing.md) for what still needs real desktop testing.
 
 ## License
 

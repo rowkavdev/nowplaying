@@ -22,13 +22,20 @@ case "$(uname -m)" in
   *) echo "build-posix.sh: unsupported arch: $(uname -m)" >&2; exit 2 ;;
 esac
 
+node_binary="${NOWPLAYING_NODE_BINARY:-$(command -v node)}"
+[[ -f "$node_binary" && -x "$node_binary" ]] || { echo 'Selected Node runtime must be an executable file (NOWPLAYING_NODE_BINARY).' >&2; exit 2; }
+if [[ "$os" = linux ]]; then
+  bash scripts/check-linux-node-runtime.sh "$node_binary"
+fi
+
 bundle="dist/$os/nowplaying"
 rm -rf "dist/$os"
 mkdir -p "$bundle/runtime" "$bundle/app"
 
-cp "$(command -v node)" "$bundle/runtime/node"
+cp -L "$node_binary" "$bundle/runtime/node"
 cp -r src scripts assets package.json "$bundle/app/"
 cp -r node_modules "$bundle/app/node_modules"
+node scripts/write-posix-build-info.js "$bundle/app"
 cp NOTICE README.md LICENSE "$bundle/"
 # The Info modal handler reads ../NOTICE, ../README.md and ../LICENSE
 # relative to app/src - they must ship alongside src, as in the Windows

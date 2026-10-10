@@ -159,8 +159,16 @@ export function classifyJellyfinOrEmby({ status, text }) {
 }
 
 export function classifyPlex({ status, text }) {
-  if (status !== 200 || !/<MediaContainer\b[^>]*\bmachineIdentifier="[^"]+"/.test(text)) return null;
-  return { provider: "plex", version: /\bversion="([^"]+)"/.exec(text)?.[1], id: /\bmachineIdentifier="([^"]+)"/.exec(text)?.[1], name: "Plex Media Server" };
+  if (status !== 200) return null;
+  // The probe prefers JSON, but older servers and proxies may return XML.
+  const container = parseJson(text)?.MediaContainer;
+  if (container && typeof container === "object" && !Array.isArray(container) && cleanId(container.machineIdentifier)) {
+    return { provider: "plex", version: container.version, id: container.machineIdentifier, name: "Plex Media Server" };
+  }
+  const xml = /<MediaContainer\b[^>]*>/.exec(text)?.[0];
+  const id = xml && /\bmachineIdentifier="([^"]+)"/.exec(xml)?.[1];
+  if (!cleanId(id)) return null;
+  return { provider: "plex", version: /\bversion="([^"]+)"/.exec(xml)?.[1], id, name: "Plex Media Server" };
 }
 
 function parseJson(text) { try { return JSON.parse(text); } catch { return null; } }

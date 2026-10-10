@@ -43,6 +43,27 @@ test("an upload that fails falls back to the icon and reports a short class", as
   assert.equal((await junk.resolve({ artwork: ref })).strategy, "fallback");
 });
 
+test("upload failures take precedence over an unusable private cover URL", async () => {
+  for (const [status, failure] of [[403, "upload_blocked"], [429, "upload_rate_limited"], [502, "upload_error"]]) {
+    const resolver = createDiscordArtworkResolver(artworkResolverOptions({ artworkLookup: "off" }, {
+      coverSource: async () => ({ dataUri }), fetchImpl: async () => new Response("private upstream details", { status }),
+    }));
+    const result = await resolver.resolve({ artwork: ref, artworkUrl: "http://192.168.1.4/cover?token=secret" });
+    assert.equal(result.strategy, "fallback");
+    assert.equal(result.failure, failure);
+    assert.doesNotMatch(JSON.stringify(result), /secret|private upstream/);
+  }
+  const timedOut = createDiscordArtworkResolver(artworkResolverOptions({}, { coverSource: async () => ({ dataUri }), fetchImpl: async () => { throw new DOMException("private timeout details", "TimeoutError"); } }));
+  assert.equal((await timedOut.resolve({ artwork: ref })).failure, "upload_timeout");
+  const bodyTimeout = createDiscordArtworkResolver(artworkResolverOptions({}, { coverSource: async () => ({ dataUri }), fetchImpl: async () => new Response(new ReadableStream({ start(controller) { controller.error(new DOMException("private timeout details", "TimeoutError")); } })) }));
+  assert.equal((await bodyTimeout.resolve({ artwork: ref })).failure, "upload_timeout");
+});
+
+test("an opted-out private cover explains how to enable actual album art", async () => {
+  const resolver = createDiscordArtworkResolver(artworkResolverOptions({ artworkUpload: false }));
+  assert.equal((await resolver.resolve({ artwork: ref, artworkUrl: "http://192.168.1.4/cover" })).failure, "upload_disabled");
+});
+
 test("it is on unless turned off, and a missing cover is a miss", async () => {
   let calls = 0;
   const fetchImpl = async () => { calls += 1; return new Response("https://litter.catbox.moe/x.png"); };

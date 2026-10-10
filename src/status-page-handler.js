@@ -17,7 +17,7 @@ const PAGE = `<!doctype html>
 <dl><dt>Server</dt><dd id="server-type">-</dd><dt>Address</dt><dd id="server-address">-</dd><dt>Signed in as</dt><dd id="server-user">-</dd><dt>Connection</dt><dd id="server-state">-</dd><dt>Last checked</dt><dd id="server-poll">-</dd></dl>
 <div id="servers-block" hidden><h3>All servers</h3><ul id="servers"></ul></div></section>
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
-<dl><dt>Status</dt><dd id="discord-state">-</dd><dt>Last update</dt><dd id="discord-last">-</dd></dl></section>
+<dl><dt>Status</dt><dd id="discord-state">-</dd><dt>Last update</dt><dd id="discord-last">-</dd><dt>Album art</dt><dd id="discord-artwork">-</dd></dl><p id="discord-artwork-help" class="hint" hidden></p></section>
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card upload</h2>
 <dl><dt>Status</dt><dd id="hosted-state">-</dd><dt>Last upload</dt><dd id="hosted-last">-</dd></dl></section>
 </div><section aria-labelledby="h-card"><h2 id="h-card">Your card</h2>
@@ -89,6 +89,25 @@ const SCRIPT = `"use strict";
 const SERVER_WORDS = { connected: ["Connected", "ok"], starting: ["Checking...", "warn"], unreachable: ["Can't reach the server", "bad"], authentication_failed: ["Sign-in rejected - run setup again", "bad"], error: ["Server returned an error", "bad"], safe_mode: ["Safe mode - server checks are off. Run setup again from the tray", "warn"] };
 const HOSTED_WORDS = { off: ["Turned off", ""], connected: ["Uploading", "ok"], idle: ["Starting upload...", "warn"], starting: ["Starting upload...", "warn"], retrying: ["Upload failed - retrying. Check your connection or hosted service", "bad"], unauthorized: ["Sign-in rejected - reconnect in Settings", "bad"], no_credentials: ["Not signed in - connect in Settings", "bad"], disconnect_pending: ["Remote deletion pending - retry in Settings", "bad"], unknown: ["Upload status unavailable", "bad"] };
 const DISCORD_WORDS = { ready: ["Connected", "ok"], disconnected: ["Waiting for Discord to open", "warn"], degraded: ["Having trouble reaching Discord", "warn"], closed: ["Stopped", "warn"], off: ["Turned off", ""], no_app_id: ["Not set up", "warn"], failed: ["Couldn't start", "bad"], unknown: ["Unknown", "warn"] };
+const ARTWORK_WORDS = { provider: "Public server image", proxy: "Artwork proxy", upload: "Server cover", lookup: "MusicBrainz cover", fallback: "NowPlaying icon", none: "Waiting for artwork" };
+const UPLOAD_FAILURE_WORDS = { upload_blocked: "The image host blocked the cover upload.", upload_rate_limited: "The image host asked NowPlaying to wait before uploading again.", upload_timeout: "The cover upload timed out.", upload_error: "The cover upload failed.", upload_miss: "No server cover is available." };
+function artworkView(discord) {
+  if (!discord.enabled) return { label: "Turned off", help: "", failed: false };
+  const source = discord.artwork?.source;
+  const reason = discord.artwork?.reason;
+  const label = Object.hasOwn(ARTWORK_WORDS, source) ? ARTWORK_WORDS[source] : "Artwork status unavailable";
+  const fallback = source === "fallback";
+  if (reason === "upload_disabled" || (fallback && !reason)) return { label, failed: false, help: "To show album covers, enable Show my server's cover in Settings > Discord, then choose Refresh album art. Check Privacy if artwork is hidden." };
+  if (typeof reason === "string" && reason.startsWith("upload_")) {
+    const problem = UPLOAD_FAILURE_WORDS[reason] || "The cover upload failed.";
+    const retry = reason === "upload_miss" ? "Check the cover on your media server." : "NowPlaying retries automatically. Check your connection or choose MusicBrainz in Settings > Discord.";
+    return { label, failed: fallback && reason !== "upload_miss", help: problem + " Using " + label.toLowerCase() + ". " + retry + " Use Refresh album art to try again." };
+  }
+  if (fallback && reason === "resolver_error") return { label, failed: true, help: "Album art couldn't be loaded. Using the NowPlaying icon. Check Settings > Discord, then choose Refresh album art." };
+  if (fallback && typeof reason === "string" && reason.startsWith("lookup_")) return { label, failed: false, help: "No public cover was found. Check the track's tags or enable Show my server's cover in Settings > Discord, then choose Refresh album art." };
+  if (fallback && reason) return { label, failed: false, help: "Discord needs a public image. Enable Show my server's cover or choose MusicBrainz in Settings > Discord, then choose Refresh album art." };
+  return { label, help: "", failed: false };
+}
 function set(id, value, tone) { const el = document.getElementById(id); el.textContent = value ?? "-"; el.className = tone || ""; }
 function ago(iso) {
   if (!iso) return "never";
@@ -141,6 +160,7 @@ async function load() {
     const s = await res.json();
     const server = SERVER_WORDS[s.server.state] || SERVER_WORDS.error;
     const discord = s.discord.enabled ? (DISCORD_WORDS[s.discord.state] || DISCORD_WORDS.unknown) : DISCORD_WORDS.off;
+    const artwork = artworkView(s.discord);
     const rows = Array.isArray(s.servers) ? s.servers : [];
     const failedServer = rows.length > 1 && rows.some((row) => row.state === "error" || row.state === "unavailable");
     const hosted = s.hosted && s.hosted.enabled ? (HOSTED_WORDS[s.hosted.state] || HOSTED_WORDS.unknown) : HOSTED_WORDS.off;
@@ -148,7 +168,7 @@ async function load() {
     const hostedHealthy = !s.hosted || !s.hosted.enabled || s.hosted.state === "connected";
     const healthy = !failedServer && s.server.state === "connected" && (!s.discord.enabled || s.discord.state === "ready") && hostedHealthy;
     const starting = !failedServer && (!s.discord.enabled || !["degraded", "failed", "closed"].includes(s.discord.state)) && (s.server.state === "starting" && (hostedHealthy || hostedStarting) || (hostedStarting && s.server.state === "connected"));
-    set("summary", healthy ? "Everything is working." : starting ? "Starting up..." : "Something needs attention - see below.", healthy ? "ok" : starting ? "warn" : "bad");
+    set("summary", healthy && artwork.failed ? "Connected, but album art needs attention - see below." : healthy ? "Everything is working." : starting ? "Starting up..." : "Something needs attention - see below.", healthy && !artwork.failed ? "ok" : starting || (healthy && artwork.failed) ? "warn" : "bad");
     set("playing", s.playing ? s.playing.title + (s.playing.state === "paused" ? " (paused)" : "") : "Nothing playing");
     set("playing-subtitle", s.playing?.subtitle || "");
     set("server-type", s.server.type);
@@ -166,6 +186,10 @@ async function load() {
     })));
     set("discord-state", discord[0] + (s.discord.error ? " (" + s.discord.error + ")" : ""), discord[1]);
     set("discord-last", s.discord.enabled ? ago(s.discord.lastPublishedAt) : "-");
+    set("discord-artwork", artwork.label, artwork.failed ? "warn" : "");
+    const artworkHelp = document.getElementById("discord-artwork-help");
+    artworkHelp.hidden = !artwork.help;
+    artworkHelp.textContent = artwork.help;
     set("hosted-state", hosted[0], hosted[1]);
     set("hosted-last", s.hosted && s.hosted.enabled ? ago(s.hosted.lastSuccessAt) : "-");
     showCards(s.hosted);
