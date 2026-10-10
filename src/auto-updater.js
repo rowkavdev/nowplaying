@@ -9,17 +9,22 @@ export function createAutoUpdater({ currentVersion, repository, token, targetDir
   if (channel !== undefined && !["stable", "beta"].includes(channel)) throw new TypeError("channel: expected stable or beta");
   if (onUpdate !== undefined && typeof onUpdate !== "function") throw new TypeError("onUpdate: expected a function");
   let running;
+  let installedResult;
   async function check() {
     if (mode === "off") return Object.freeze({ status: "disabled" });
     if (running) return running;
+    // Files changed, but this process still runs the old code. Keep the first
+    // rollback backup and require restart before another install-mode check.
+    if (installedResult) return installedResult;
     running = (async () => {
       const update = await checkForUpdate({ currentVersion, repository, token, channel, platform, fetchImpl });
       if (!update.available) return Object.freeze({ status: "current", version: update.currentVersion });
       if (mode === "notify") { await onUpdate?.(update); return Object.freeze({ status: "available", ...update }); }
       const verified = await downloadVerifiedUpdate({ update, token, fetchImpl });
       const installed = await installVerifiedUpdate({ update: verified, targetDir });
+      installedResult = Object.freeze({ status: "installed", ...installed });
       await onUpdate?.({ ...update, ...installed });
-      return Object.freeze({ status: "installed", ...installed });
+      return installedResult;
     })().finally(() => { running = undefined; });
     return running;
   }
