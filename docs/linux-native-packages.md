@@ -11,7 +11,23 @@ Staged directories are 755 and files 644, with only the app launcher, bundled
 Node and /usr/bin wrapper executable (755). The desktop entry opens the app
 without a terminal; the tray opens the existing loopback WebUI.
 
-Build commands, after `bash scripts/build-posix.sh linux`:
+Build the portable payload with a standalone Node Linux executable. The
+builder defaults to `node` on `PATH`; use `NOWPLAYING_NODE_BINARY` to select
+an official Node binary when the distribution's Node executable links to
+system `libnode`, OpenSSL, zlib, or other libraries. `readelf` from binutils
+is required to validate Linux input. Only glibc and the standard C++ runtime
+libraries are allowed, matching the native package dependencies. The build
+fails before replacing existing output when unsupported dependencies are
+found; it does not download a runtime automatically.
+
+```sh
+NOWPLAYING_NODE_BINARY=/path/to/official-node/bin/node bash scripts/build-posix.sh linux
+```
+
+Use the runtime for the target architecture and the supported Node version
+from `package.json`. The packaged launcher smoke test checks that it runs.
+
+Native build commands, after creating that portable payload:
 
 ```
 bash scripts/build-linux-native.sh deb dist/linux/nowplaying 0.2.1+dev out

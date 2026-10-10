@@ -116,6 +116,8 @@ area:release:
           - "scripts/release-notes.js"
           - "scripts/dedupe-changelog.js"
           - "scripts/build-posix.sh"
+          - "scripts/check-linux-node-runtime.sh"
+          - "test/posix-node-runtime*.js"
           - "scripts/write-posix-build-info.js"
           - "src/posix-package-info.js"
           - "test/posix-package-info*.js"
