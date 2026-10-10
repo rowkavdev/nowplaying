@@ -58,3 +58,10 @@ test("statusDisplayType is sent even when there is no name (no artist, or an emp
   assert.equal(noArtist.statusDisplayType, "state");
   assert.equal(formatDiscordActivity(song(), { name: "", statusDisplayType: "details" }).statusDisplayType, "details");
 });
+
+test("the {mediaType} token renders the normalized kind in the Discord name (#1119)", () => {
+  for (const kind of ["track", "movie", "episode", "show", "unknown"]) {
+    const presence = createPresence({ state: "playing", kind, title: "T", provider: "plex", updatedAt: "2026-10-02T12:00:00Z" });
+    assert.equal(formatDiscordActivity(presence, { name: "{mediaType}" }).name, kind);
+  }
+});

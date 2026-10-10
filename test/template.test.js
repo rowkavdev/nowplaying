@@ -135,3 +135,9 @@ test("{service} for a provider id that names an Object.prototype property is pla
     assert.equal(service, id.charAt(0).toUpperCase() + id.slice(1));
   }
 });
+
+test("mediaType comes from the normalized presence kind, raw field as fallback (#1119)", () => {
+  assert.equal(createTemplateValues({ kind: "track", state: "playing" }).mediaType, "track");
+  assert.equal(createTemplateValues({ kind: "movie", state: "playing" }).mediaType, "movie");
+  assert.equal(createTemplateValues({ mediaType: "episode", state: "paused" }).mediaType, "episode");
+});

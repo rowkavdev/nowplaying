@@ -75,7 +75,9 @@ export function createTemplateValues(presence, { labels = {} } = {}) {
     episode: presence.episode == null ? "" : String(presence.episode),
     episodeCode: episodeCode(presence.season, presence.episode),
     provider: presence.provider ?? "",
-    mediaType: presence.mediaType ?? "",
+    // Normalized presence carries the kind; the raw mediaType field is the
+    // fallback for older callers passing a plain object.
+    mediaType: presence.kind ?? presence.mediaType ?? "",
     state: presence.state ?? "",
     stateLabel: stateLabels[presence.state] ?? presence.state ?? "",
     position: formatDuration(presence.positionMs),
