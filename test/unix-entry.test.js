@@ -32,12 +32,26 @@ function run(home, args, extraEnv = {}) {
   return { child, exited, output: () => ({ stdout, stderr }) };
 }
 
+// Draws a random ephemeral port instead of taking a kernel-assigned one.
+// listen(0) makes the just-freed port immediately re-allocatable, so on a
+// loaded CI runner a parallel test file can be assigned it for its own app
+// before the child binds it. That app has a different instance secret, the
+// identity proof fails, and both launches exit 1 reporting the port conflict
+// (the flake seen on main CI). A random draw removes the just-freed bias.
 async function unusedPort() {
-  const listener = createServer();
-  await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
-  const port = listener.address().port;
-  await new Promise((resolve) => listener.close(resolve));
-  return port;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const port = 49152 + Math.floor(Math.random() * 16384);
+    const listener = createServer();
+    const free = await new Promise((resolve) => {
+      listener.once("error", () => resolve(false));
+      listener.once("listening", () => resolve(true));
+      listener.listen(port, "127.0.0.1");
+    });
+    if (!free) continue;
+    await new Promise((resolve) => listener.close(resolve));
+    return port;
+  }
+  throw new Error("could not find a free ephemeral port");
 }
 
 async function waitForOutput(cli, pattern) {
@@ -110,32 +124,54 @@ test("a second desktop launch reopens the existing app; headless duplicates neve
   } finally { await stop(running); await rm(home, { recursive: true, force: true }); }
 });
 
-test("simultaneous launches keep one server and let the duplicate exit successfully", { ...unix, timeout: 15000 }, async () => {
-  for (const previousFailures of [0, 2]) {
-    const home = await mkdtemp(join(tmpdir(), "np-unix-race-"));
-    await mkdir(dirname(recoveryPath(home)), { recursive: true });
-    await writeFile(recoveryPath(home), JSON.stringify({ version: 1, failures: previousFailures, subsystem: "provider" }));
-    const env = { NOWPLAYING_PORT: String(await unusedPort()) };
-    const launches = [run(home, ["start", "--no-setup", "--no-tray"], env), run(home, ["start", "--no-setup", "--no-tray"], env)];
-    try {
-      // Only the loser exits; the winner keeps running by design. Bound the
-      // wait for the loser so a wedged launch fails instead of hanging.
-      const completed = await withTimeout(
-        Promise.race(launches.map(async (cli, index) => ({ index, code: await cli.exited }))),
-        10000,
-        () => `neither launch exited: ${JSON.stringify(launches.map((cli) => cli.output()))}`,
-      );
-      assert.equal(completed.code, 0, JSON.stringify(launches.map((cli) => cli.output())));
-      assert.match(launches[completed.index].output().stdout, /already running/);
-      const running = launches[1 - completed.index];
-      await waitForOutput(running, /NowPlaying Settings:/);
-      const recovery = JSON.parse(await readFile(recoveryPath(home), "utf8"));
-      assert.equal(recovery.failures, previousFailures + 1, "only the winning process adds one pending startup to the existing history");
-      assert.equal((await fetch(`http://127.0.0.1:${env.NOWPLAYING_PORT}/settings`)).status, 200);
-    } finally {
-      await Promise.all(launches.map((cli) => stop(cli)));
-      await rm(home, { recursive: true, force: true });
+// One round of the launch race. Returns "port-conflict" when a foreign
+// process grabbed the drawn port before either launch and both correctly
+// refused to start: the two children share this round's HOME, so a winner
+// would pass the loser's identity proof, and only an outside listener can
+// produce two conflicts.
+async function simultaneousLaunch(previousFailures) {
+  const home = await mkdtemp(join(tmpdir(), "np-unix-race-"));
+  await mkdir(dirname(recoveryPath(home)), { recursive: true });
+  await writeFile(recoveryPath(home), JSON.stringify({ version: 1, failures: previousFailures, subsystem: "provider" }));
+  const env = { NOWPLAYING_PORT: String(await unusedPort()) };
+  const launches = [run(home, ["start", "--no-setup", "--no-tray"], env), run(home, ["start", "--no-setup", "--no-tray"], env)];
+  try {
+    // Only the loser exits; the winner keeps running by design. Bound the
+    // wait for the loser so a wedged launch fails instead of hanging.
+    const completed = await withTimeout(
+      Promise.race(launches.map(async (cli, index) => ({ index, code: await cli.exited }))),
+      10000,
+      () => `neither launch exited: ${JSON.stringify(launches.map((cli) => cli.output()))}`,
+    );
+    if (completed.code === 1 && /already in use/.test(launches[completed.index].output().stderr)) {
+      const other = launches[1 - completed.index];
+      if ((await awaitExit(other)) === 1 && /already in use/.test(other.output().stderr)) return "port-conflict";
     }
+    assert.equal(completed.code, 0, JSON.stringify(launches.map((cli) => cli.output())));
+    assert.match(launches[completed.index].output().stdout, /already running/);
+    const running = launches[1 - completed.index];
+    await waitForOutput(running, /NowPlaying Settings:/);
+    const recovery = JSON.parse(await readFile(recoveryPath(home), "utf8"));
+    assert.equal(recovery.failures, previousFailures + 1, "only the winning process adds one pending startup to the existing history");
+    assert.equal((await fetch(`http://127.0.0.1:${env.NOWPLAYING_PORT}/settings`)).status, 200);
+    return "ok";
+  } finally {
+    await Promise.all(launches.map((cli) => stop(cli)));
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+test("simultaneous launches keep one server and let the duplicate exit successfully", { ...unix, timeout: 60000 }, async () => {
+  for (const previousFailures of [0, 2]) {
+    // A foreign process can still grab the drawn port in the probe-to-launch
+    // window on a loaded CI runner. Both launches then report the conflict,
+    // which is the correct response to an outside listener, so retry the
+    // round on a fresh port before calling it a launch-race regression.
+    let outcome = "port-conflict";
+    for (let attempt = 0; attempt < 4 && outcome === "port-conflict"; attempt++) {
+      outcome = await simultaneousLaunch(previousFailures);
+    }
+    assert.equal(outcome, "ok", "every launch round lost its port to an outside listener");
   }
 });
 
