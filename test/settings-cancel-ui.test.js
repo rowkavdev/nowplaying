@@ -21,7 +21,7 @@ function page() {
     return elements.get(id);
   };
   const fetches = []; const pollTimers = [];
-  const document = { activeElement: null, getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", children: [], append(...children) { this.children.push(...children); }, addEventListener() {} }) };
+  const document = { activeElement: null, getElementById: node, createElement: (tag) => ({ tag, href: "", target: "", rel: "", textContent: "", children: [], append(...children) { this.children.push(...children); }, addEventListener(event, fn) { this[event]=fn; } }) };
   runInNewContext(SERVER_SCRIPT, {
     document,
     fetch: (path, options) => { const request = deferred(); fetches.push({ path, options, ...request }); return request.promise; },
@@ -336,4 +336,32 @@ test("scan completion restores keyboard focus before hiding Cancel scan", async 
  fetches[1].resolve(json({servers:[],cancelled:true}));await scan;
  assert.equal(node("cancel-discovery").hidden,true);
  assert.equal(focused,true,"hidden scan control must not retain keyboard focus");
+});
+
+
+test("discovered servers show Connected after sign-in and Connect after removal", async () => {
+  const { node, fetches } = page();
+  const plex={provider:"plex",id:"me",name:"Me",baseUrl:"http://127.0.0.1:32400"};
+  const discovered=[{provider:"plex",name:"Plex server",baseUrl:"http://localhost:32400/"},{provider:"jellyfin",baseUrl:"http://localhost:8096"}];
+  fetches[0].resolve(json({servers:[],discovered})); await tick();
+  assert.equal(node("discovered-list").children[0].children[1].textContent,"Connect");
+  node("server-url").value=plex.baseUrl;
+  node("server-provider").value="plex";
+  node("manual-connect").click({currentTarget:node("manual-connect")});
+  const start=node("signin-button").click();
+  fetches[1].resolve(json({status:"signed_in",identity:{displayName:"Me"}})); await tick();
+  fetches[2].resolve(json({servers:[plex,{provider:"navidrome",id:"other",name:"Other",baseUrl:"http://localhost:4533"}],discovered})); await start;
+  const connected=node("discovered-list").children[0].children[1];
+  assert.equal(connected.textContent,"Connected"); assert.equal(connected.disabled,true);
+  assert.equal(node("discovered-list").children[1].children[1].textContent,"Connect");
+  // Removing a saved server must make its discovered address connectable again.
+  // The listener has restarted, so its cached discovery list is now empty.
+  // Test the page refresh directly because this fixture does not bind DOM actions.
+  const removed = node("servers-list").children[0].children[1];
+  assert.equal(removed.textContent,"Remove");
+  const removing=removed.click();
+  fetches[3].resolve(json({removed:true,tokenRemoved:true})); await tick();
+  fetches[4].resolve(json({servers:[{provider:"navidrome",id:"other",name:"Other",baseUrl:"http://localhost:4533"}],discovered:[]})); await removing;
+  assert.equal(node("discovered-list").children[0].children[1].textContent,"Connect");
+  assert.notEqual(node("discovered-list").children[0].children[1].disabled,true);
 });
