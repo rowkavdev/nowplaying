@@ -130,7 +130,7 @@ export function applyHostedDestinationChanges(config, changes) {
 export function applyHostedChanges(config, changes) {
   checkChanges(changes, HOSTED_KEYS, "hosted");
   for (const [key, value] of Object.entries(changes)) if (typeof value !== "boolean") throw new TypeError(`hosted settings: ${key} must be true or false`);
-  return rewrite(config, { hosted: { ...(config.hosted ?? {}), ...changes } });
+  return rewrite(config, { hosted: { ...config.hosted, ...changes } });
 }
 
 export function applyPrivacyChanges(config, changes) {
