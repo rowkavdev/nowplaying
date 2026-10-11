@@ -19,7 +19,7 @@ What it never does:
 | `POST` / `DELETE` | `/api/revoke` | Delete the device token and any stored state. |
 | `GET` / `HEAD` | `/card/<cardId>.svg` | Public SVG. Options: `theme`, `width`, `show` (same as the local card; add `notime` to `show` to hide the elapsed and total clock). |
 | | | Layout options, all optional: `padding` (12-48), `radius` (0-24), `titleSize` (14-30), `subtitleSize` (10-20), `progressHeight` (2-12), `textAlign` (`start`/`middle`/`end`), `fieldOrder` (`state`, `title`, `subtitle` once each, comma-separated), `progressPosition` (`bottom`/`text`), `progressWidth` (`content`/`full`), `direction` (`ltr`/`rtl`/`auto`). Out-of-range or repeated values return 400 `invalid_layout`. Set only in the URL, never sent by the app. |
-| | | Look options, all optional: `fontFamily` (`system`/`serif`/`mono`/`humanist`), `fontStack` (custom font names only), `statusStyle` (`plain`/`caps`/`dot`), `progressStyle` (`square`/`rounded`), `border` (`none`/`thin`), `background` (`solid`/`transparent`). Same 400 `invalid_layout` rule, same URL-only rule. The hosted card never draws artwork. |
+| | | Look options, all optional: `fontFamily` (`system`/`serif`/`mono`/`humanist`), `fontStack` (custom font names only), `statusStyle` (`plain`/`caps`/`dot`), `progressStyle` (`square`/`rounded`), `border` (`none`/`thin`), `background` (`solid`/`transparent`). Same 400 `invalid_layout` rule, same URL-only rule. Hosted cards can draw an optional sanitized `artworkDataUri` PNG, up to 48 KiB and 256 × 256 pixels. Raw artwork URLs are rejected; images expire with playback state. Cover layout options belong in the card URL. |
 | `GET` / `HEAD` | `/u/<github-login>.svg` | The signed-in user's card, same options as above. |
 | `GET` | `/healthz` | Liveness. |
 
