@@ -21,11 +21,12 @@ const FIELD_LABELS = Object.freeze({
   subtitle: "Artist or show name",
   durationMs: "Length",
   positionMs: "Position in the track",
+  artworkDataUri: "Small cover image (public, metadata removed)",
 });
 
 export const ALWAYS_SENT = Object.freeze(["A format version", "An update counter", "The time of the update"]);
 export const NEVER_SENT = Object.freeze([
-  "Artwork or artwork links",
+  "Artwork links",
   "Your media server address, username or server name",
   "Provider names, IDs or credentials",
   "Your Discord details",
@@ -37,11 +38,12 @@ const PROTOCOL = new Set(["v", "seq", "observedAt"]);
 export function hostedUploadPreview(settings = {}) {
   const payloads = SAMPLES.map((presence) => projectHostedState(presence, settings, { seq: 1, now: Date.parse("2026-01-01T00:00:01.000Z") }));
   const keys = new Set(payloads.flatMap((p) => Object.keys(p)).filter((k) => !PROTOCOL.has(k)));
+  if (settings.shareArtwork && settings.show?.artwork !== false && !settings.privacy?.hideArtwork && !settings.privacy?.redactTitles && payloads.some(p => p.state !== "idle")) keys.add("artworkDataUri");
   const sent = Object.keys(FIELD_LABELS).filter((k) => keys.has(k)).map((key) => ({ key, label: FIELD_LABELS[key] }));
   const unknown = [...keys].filter((k) => !(k in FIELD_LABELS));
   // A new projection field must get a label here before it can ship.
   if (unknown.length) throw new Error(`hosted preview has no label for: ${unknown.join(", ")}`);
-  const withheld = Object.keys(FIELD_LABELS).filter((k) => !keys.has(k)).map((key) => ({ key, label: FIELD_LABELS[key] }));
+  const withheld = Object.keys(FIELD_LABELS).filter((k) => !keys.has(k) && (k !== "artworkDataUri" || settings.shareArtwork === true)).map((key) => ({ key, label: FIELD_LABELS[key] }));
   return { sent, withheld, alwaysSent: ALWAYS_SENT, neverSent: NEVER_SENT, sample: payloads[0] };
 }
 

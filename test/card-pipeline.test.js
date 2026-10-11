@@ -13,7 +13,7 @@ test("polls, applies privacy, resolves allowed artwork and renders", async () =>
   const result = await resolveCard({ theme: "paper", width: 320 });
   assert.equal(result.presence.title, "Private media");
   assert.equal(result.options.artworkDataUri, "data:image/png;base64,eA==");
-  assert.deepEqual(calls, [[artwork, { baseUrl: "https://plex.test" }]]);
+  assert.deepEqual(calls, [[artwork, { baseUrl: "https://plex.test" }, { width: 192, height: 288 }]]);
 });
 
 test("privacy can suppress artwork before the artwork service", async () => {

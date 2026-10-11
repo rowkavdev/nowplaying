@@ -30,6 +30,7 @@ import { createHostedLoop } from "./hosted-loop.js";
 import { createHostedUploader, DEFAULT_HOSTED_URL } from "./hosted-uploader.js";
 import { withProviderBackoff } from "./provider-backoff.js";
 import { createMultiServerProvider } from "./multi-server.js";
+import { createPublicCardArtwork } from "./artwork-public.js";
 import { createArtworkCache } from "./artwork-cache.js";
 import { createArtworkService } from "./artwork-service.js";
 import { applyPrivacy } from "./privacy.js";
@@ -42,7 +43,7 @@ import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, l
 
 const MAX_CONFIG_BYTES = 16 * 1024;
 const CONFIG_KEYS = new Set(["version", "servers", "discord", "hosted", "privacy", "card", "spotify"]);
-const HOSTED_KEYS = new Set(["enabled", "url"]);
+const HOSTED_KEYS = new Set(["enabled", "url", "artwork"]);
 
 export class StartupError extends Error {
   constructor(startupCode, message) {
@@ -82,7 +83,7 @@ export function parseAppConfig(text) {
       discordTimestamps: parsed.discord?.timestamps,
       discordName: parsed.discord?.name,
       discordStatusDisplayType: parsed.discord?.statusDisplayType,
-      ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url } : {}),
+      ...(parsed.hosted ? { hostedEnabled: parsed.hosted.enabled, hostedUrl: parsed.hosted.url, hostedArtwork: parsed.hosted.artwork } : {}),
       ...(parsed.privacy !== undefined ? { privacy: parsed.privacy } : {}),
       ...(parsed.card !== undefined ? { card: parsed.card } : {}),
       ...(parsed.spotify !== undefined ? { spotify: parsed.spotify } : {}),
@@ -247,17 +248,18 @@ export function hostedUploadSettings(config) {
   const theme = config?.card?.theme ?? "midnight-blue";
   return Object.freeze({
     privacy: privacyPolicyFromConfig(config),
-    show: Object.freeze({ progress: config?.card?.showProgress ?? theme !== "compact", subtitle: theme !== "compact" }),
+    shareArtwork: config?.hosted?.artwork === true,
+    show: Object.freeze({ artwork: theme !== "compact", progress: config?.card?.showProgress ?? theme !== "compact", subtitle: theme !== "compact" }),
   });
 }
 
 // Hosted card upload (#140) runs only when the config turns it on. It pushes
 // privacy-filtered state to the hosted service and is independent of Discord:
 // a host that's down or unreachable never affects presence.
-export function startHostedFromConfig(config, provider, { credentials, fetchImpl = fetch, settings = {}, intervalMs, createUploader = createHostedUploader } = {}) {
+export function startHostedFromConfig(config, provider, { credentials, fetchImpl = fetch, settings = {}, resolveArtwork, intervalMs, createUploader = createHostedUploader } = {}) {
   if (!config.hosted?.enabled) return Object.freeze({ status: "off", stop: async () => {}, cardUrl: async () => null, connection: () => null });
   if (typeof credentials?.load !== "function") return Object.freeze({ status: "no_credentials", stop: async () => {}, cardUrl: async () => null, connection: () => null });
-  const uploader = createUploader({ baseUrl: config.hosted.url ?? DEFAULT_HOSTED_URL, credentials, fetchImpl, settings });
+  const uploader = createUploader({ baseUrl: config.hosted.url ?? DEFAULT_HOSTED_URL, credentials, fetchImpl, settings, resolveArtwork });
   const loop = createHostedLoop({ getPresence: () => provider.getPresence(), uploader, ...(intervalMs ? { intervalMs } : {}) });
   loop.start();
   return Object.freeze({ status: "on", stop: () => loop.stop(), cardUrl: () => uploader.cardUrl(), connection: () => uploader.status(), disconnect: () => uploader.disconnect(), privacyChanged: () => loop.privacyChanged() });
@@ -321,7 +323,12 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // video shows as "Watching"; YouTube Music stays "Listening". Shorts never
   // reach the bridge.
   const discordProvider = youtube ? withPrivacy(combinePresence({ primary: tracked, secondary: youtubeForDiscord(youtube.bridge.provider) }), () => current) : provider;
-  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, artworkService: multi?.artwork, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
+  const publicArtwork = createPublicCardArtwork({ fetchImpl });
+  const cardArtwork = {
+    resolve: (ref, config, rendition) => ref?.publicUrl ? publicArtwork.resolve(ref.publicUrl, rendition) : multi?.artwork.resolve(ref, config, rendition) ?? null,
+    clear: async () => { publicArtwork.clear(); await multi?.artwork.clear(); },
+  };
+  const resolveCard = createResilientCardResolver({ resolveCard: createCardPipeline({ provider: cardProvider, artworkService: cardArtwork, defaults: () => cardRenderOptions(current.card) }), diagnostics: true });
   let discord;
   // Safe mode (#122, after repeated failed starts): only the local card and
   // status page run. Discord and hosted uploads, which poll in the background,
@@ -332,7 +339,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   let hosted = offHosted;
   const launchHosted = (settings) => {
     if (safeMode) return paused;
-    try { return startHostedFromConfig(settings, cardProvider, { credentials: hostedCredentials, fetchImpl, settings: () => hostedUploadSettings(current), ...hostedOptions }); }
+    try { return startHostedFromConfig(settings, cardProvider, { credentials: hostedCredentials, fetchImpl, settings: () => hostedUploadSettings(current), resolveArtwork: (ref, presence) => cardArtwork.resolve(ref, null, presence.kind === "track" ? { width: 256, height: 256 } : { width: 192, height: 288 }), ...hostedOptions }); }
     catch { return Object.freeze({ status: "failed", stop: async () => {}, cardUrl: async () => null, connection: () => null }); }
   };
   const launchDiscord = (settings) => {
@@ -403,12 +410,21 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       // Choose a sample only when the source itself is idle. A privacy-hidden
       // movie/episode must stay idle instead of becoming sample music.
       try { presence = await cardSource.getPresence(); } catch { presence = null; }
-      if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
+      const sample = !presence || presence.state === "idle";
+      if (sample) presence = PREVIEW_SAMPLE;
       const privacy = privacyPolicyFromConfig(current);
       presence = applyPrivacy(presence, privacy);
-      // A plain grey square stands in for artwork so placement and size
-      // show in the preview; real art is fetched for /card.svg (#449).
-      const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: privacy.hideArtwork || presence.state === "idle" ? null : PREVIEW_ARTWORK });
+      let artworkDataUri = null;
+      if (!privacy.hideArtwork && presence.state !== "idle" && card.theme !== "compact") {
+        if (sample) {
+          const { previewArtwork } = await import("./setup-preview.js");
+          artworkDataUri = await previewArtwork("music");
+        } else if (presence.artwork || presence.artworkUrl) {
+          const art = await cardArtwork.resolve(presence.artwork ?? { publicUrl: presence.artworkUrl }, null, presence.kind === "track" ? { width: 256, height: 256 } : { width: 192, height: 288 });
+          artworkDataUri = typeof art === "string" ? art : art?.dataUri ?? null;
+        }
+      }
+      const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri });
       const automaticWidth = cardPresets[card.theme ?? "midnight-blue"].layout.artworkWidth ?? (presence.kind === "track" ? 100 : 68);
       return svg.replace("<svg ", `<svg data-preview-artwork-width="${card.artworkWidth ?? automaticWidth}" `);
     },
@@ -558,7 +574,6 @@ export function classifyArtworkFailure(error) {
   return "error";
 }
 
-const PREVIEW_ARTWORK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPo6p8BAANYAbKMazHIAAAAAElFTkSuQmCC";
 const PREVIEW_SAMPLE = Object.freeze({ state: "playing", kind: "track", title: "Sample track", subtitle: "Sample artist", positionMs: 83_000, durationMs: 214_000 });
 const OFFLINE_PROVIDER = Object.freeze({ getPresence: async () => ({ state: "idle" }) });
 
@@ -592,11 +607,11 @@ async function createServersProvider(config, credentialStore, fetchImpl, provide
   let lastCard = { state: "none", reason: "not_requested" };
   const artwork = Object.freeze({
     // Artwork is a nice-to-have: any failure shows the card without it.
-    async resolve(ref) {
+    async resolve(ref, _config, rendition = {}) {
       const source = ref && typeof ref === "object" && Number.isInteger(ref.sourceIndex) ? artworkSources.get(ref.sourceIndex) : null;
       if (!source) { lastCard = { state: "none", reason: "no_source" }; return null; }
       try {
-        const value = await source.resolve(ref);
+        const value = await source.resolve(ref, rendition);
         lastCard = value ? { state: "ok", reason: null } : { state: "none", reason: "no_image" };
         return value;
       } catch (error) {
@@ -642,12 +657,12 @@ function createServerArtwork(server, secret, fetchImpl) {
   let service = null;
   return Object.freeze({
     async clear() { if (service) (await service.catch(() => null))?.clear(); },
-    async resolve(ref) {
+    async resolve(ref, rendition = {}) {
       service ??= (async () => {
         const { createDefaultArtworkSanitizer } = await import("./artwork-sanitizer-runtime.js");
         return createArtworkService({ cache: createArtworkCache(), sanitizer: createDefaultArtworkSanitizer(), fetchImpl, timeoutMs: 3000 });
       })().catch((error) => { service = null; throw error; });
-      const dataUri = await (await service).resolve(ref, providerConfig);
+      const dataUri = await (await service).resolve(ref, providerConfig, rendition);
       if (!dataUri) return null;
       return { dataUri, tint: await tintFor(dataUri) };
     },

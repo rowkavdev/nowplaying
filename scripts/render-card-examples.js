@@ -4,6 +4,7 @@
 // Default output: docs/assets/cards/. Test: test/card-examples.test.js.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { previewArtwork } from "../src/setup-preview.js";
 import { renderCard } from "../src/card.js";
 
 export const EXAMPLES = [
@@ -64,7 +65,8 @@ export async function renderExamples(dir) {
   await mkdir(dir, { recursive: true });
   const written = {};
   for (const example of EXAMPLES) {
-    const svg = renderCard(example.presence, example.options);
+    const art = ["studio", "editorial", "terminal"].includes(example.options.theme) ? await previewArtwork("music") : null;
+    const svg = renderCard(example.presence, { ...example.options, artworkDataUri: art });
     await writeFile(join(dir, example.file), svg, "utf8");
     written[example.file] = svg;
   }

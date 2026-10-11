@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="280" height="134" role="img" aria-labelledby="title desc">
   <title id="title">Now playing: Lost</title><desc id="desc">S04E05 · The Constant</desc>
-  <defs><clipPath id="txt"><rect x="22" y="0" width="236" height="134"/></clipPath></defs>
+  <defs><clipPath id="txt"><rect x="22" y="0" width="236" height="134"/></clipPath><clipPath id="card-frame"><rect width="280" height="134" rx="10"/></clipPath></defs>
   <rect x="0.5" y="0.5" width="279" height="133" rx="10" fill="#ffffff" stroke="#c7d2df"/>
-  
-  
+
+
+
+
+
+
+
   <text x="24" y="30" fill="#0969da" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-weight="500" letter-spacing="0">Now playing</text>
   <text x="256" y="30" text-anchor="end" fill="#526173" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="11" font-variant-numeric="tabular-nums">20:00 / 43:00</text>
   <text x="24" y="64" fill="#172033" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">Lost</text>

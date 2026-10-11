@@ -36,7 +36,7 @@ By default each PC gets its own card link with a random ID. If you have more tha
 
 ## Privacy
 
-You choose what the card can ever receive. With a media type hidden or privacy set to private, the card only ever gets "nothing playing". Your server address, username and artwork never leave your PC. Full detail: [Privacy and safe configuration](Privacy-and-safe-configuration) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
+You choose what the card can ever receive. With a media type hidden or privacy set to private, the card only ever gets "nothing playing". Your server address and username never leave your PC. **Include cover art** optionally shares a small image; artwork URLs are never sent. Full detail: [Privacy and safe configuration](Privacy-and-safe-configuration) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
 
 ## If the README looks stale
 

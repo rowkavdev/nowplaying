@@ -117,7 +117,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <details class="drpp-accordion" id="settings-card"><summary><span class="section-copy"><span>Card Settings</span><small>Choose a style and make it your own.</small></span></summary>
 <form id="card-form" hidden>
 <section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
-<p class="hint">Choose a style, then adjust the width. The preview updates as you go; press Save when you're happy. Hosted cards use the same style without cover art.</p>
+<p class="hint">Choose a style, then adjust the width. The preview updates as you go; press Save when you're happy. To show covers on your README too, enable Include cover art under Hosted Card Settings.</p>
 <div class="preview"><p class="preview-label">Live preview</p><img id="card-preview" alt="Preview of your card with these settings" hidden><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
 <div class="card-style-grid" role="group" aria-label="Card styles">${Object.entries(cardPresets).map(([key, preset]) => `<button type="button" class="card-style" data-card-theme="${key}" aria-pressed="${key === "midnight-blue"}"><img src="/card-styles/${key}.svg" width="280" height="140" alt="" loading="lazy"><strong>${preset.label}</strong><small>${preset.description}</small></button>`).join("")}</div>
 <p class="row"><label for="card-theme">Style</label>
@@ -229,8 +229,10 @@ ${Object.entries(cardPresets).map(([key, preset]) => `<option value="${key}">${p
 <details class="drpp-accordion" id="settings-hosted"><summary><span class="section-copy"><span>Hosted Card Settings</span><small>Put your card in a GitHub README.</small></span></summary>
 <form id="hosted-form">
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card</h2>
-<p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in, artwork or Discord details. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
+<p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in or Discord details. Cover art is only uploaded if you enable it below. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
 <p class="row"><label><input type="checkbox" id="hosted-enabled" name="enabled"> Upload my card to the hosted service</label></p>
+<p class="row"><label><input type="checkbox" id="hosted-artwork" name="artwork"> Include cover art</label></p>
+<p class="hint">Adds album covers and posters to your public card. Images are resized and stripped of metadata on this PC; server addresses and artwork links are never sent. Hide artwork and Hide titles override this setting.</p>
 <dl id="hosted-details" hidden><dt>Upload</dt><dd id="hosted-state">-</dd><dt>Card link</dt><dd><a id="hosted-url" href="#">-</a> <button type="button" id="copy-url" aria-label="Copy hosted card address">Copy</button></dd>
 <dt>README</dt><dd><code id="hosted-markdown">-</code> <button type="button" id="copy-markdown" aria-label="Copy hosted card README Markdown">Copy</button></dd></dl>
 <p><button type="submit" id="hosted-save" aria-label="Save hosted card settings">Save</button> <button type="button" id="hosted-disconnect">Disconnect this PC</button> <span id="hosted-result" role="status" aria-live="polite"></span></p>
@@ -838,8 +840,7 @@ startup.form.addEventListener("submit", async (event) => {
 });
 const HOSTED_WORDS = { connected: ["Connected", "ok"], idle: ["Waiting for something to play", ""], retrying: ["Can't reach the service - retrying", "warn"], unauthorized: ["Signed out - save again to reconnect", "bad"], no_credentials: ["Not available in this build", "warn"], failed: ["Couldn't start", "bad"], safe_mode: ["Paused (safe mode)", "warn"], disconnect_pending: ["Uploads stopped; remote card deletion pending. Retry Disconnect this PC when online.", "bad"], off: ["Off", ""] };
 // The hosted card takes its look from the link (#94, #414, #421). Only
-// non-default settings are added. Artwork options are left out because the
-// hosted card never draws artwork.
+// non-default settings are added. Artwork layout applies when the PC shares a cover.
 let hostedCard = null;
 let savedCard = null;
 function hostedLink(base) {
@@ -848,7 +849,7 @@ function hostedLink(base) {
   const defaults = { padding: 24, radius: 10, progressHeight: 4, fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin", background: "solid", ...${JSON.stringify(Object.fromEntries(Object.entries(cardPresets).map(([key, preset]) => [key, preset.layout])))}[savedCard.theme] };
   if (savedCard.theme !== "midnight-blue") query.set("theme", savedCard.theme);
   if (savedCard.width !== 440) query.set("width", String(savedCard.width));
-  if (savedCard.theme !== "compact" && !savedCard.showProgress) query.set("show", "mediaType,state,subtitle");
+  if (savedCard.theme !== "compact" && !savedCard.showProgress) query.set("show", "artwork,mediaType,state,subtitle");
   if (savedCard.theme === "compact" && savedCard.showProgress) query.set("show", "mediaType,progress");
   const progressShown = savedCard.theme === "compact" ? savedCard.showProgress === true : savedCard.showProgress !== false;
   if (savedCard.padding !== undefined && savedCard.padding !== defaults.padding) query.set("padding", String(savedCard.padding));
@@ -859,7 +860,7 @@ function hostedLink(base) {
   if (progressShown && savedCard.progressPosition && savedCard.progressPosition !== "bottom") query.set("progressPosition", savedCard.progressPosition);
   if (progressShown && savedCard.progressWidth && savedCard.progressWidth !== "content") query.set("progressWidth", savedCard.progressWidth);
   if (savedCard.direction && savedCard.direction !== "ltr") query.set("direction", savedCard.direction);
-  // artShape is left out: the hosted card never draws artwork.
+  for (const key of ["artworkPosition", "artworkWidth", "artworkHeight", "artShape"]) if (savedCard[key] != null && savedCard[key] !== (defaults[key] ?? ({ artworkPosition: "left", artShape: "square" })[key])) query.set(key, String(savedCard[key]));
   const LOOK_DEFAULTS = { fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin", background: "solid" };
   for (const [key, fallback] of Object.entries(LOOK_DEFAULTS)) if (savedCard[key] && savedCard[key] !== (defaults[key] ?? fallback)) query.set(key, savedCard[key]);
   if (savedCard.fontStack) query.set("fontStack", savedCard.fontStack);
@@ -871,6 +872,7 @@ function hostedSay(text, tone) { const el = document.getElementById("hosted-resu
 function showHosted(h) {
   if (!h) { hosted.form.hidden = true; return; }
   hosted.enabled.checked = h.enabled;
+  document.getElementById("hosted-artwork").checked = h.artwork === true;
   const words = HOSTED_WORDS[h.state] || HOSTED_WORDS.failed;
   const state = document.getElementById("hosted-state");
   state.textContent = words[0]; state.className = words[1];
@@ -904,7 +906,7 @@ hosted.form.addEventListener("submit", async (event) => {
   hosted.save.disabled = true;
   hostedSay("Saving...", "warn");
   try {
-    showHosted((await send("/api/settings", "PUT", { hosted: { enabled: hosted.enabled.checked } })).hosted);
+    showHosted((await send("/api/settings", "PUT", { hosted: { enabled: hosted.enabled.checked, artwork: document.getElementById("hosted-artwork").checked } })).hosted);
     hostedSay(hosted.enabled.checked ? "Saved. Uploads have started." : "Saved. Uploads have stopped.", "ok");
   } catch {
     hostedSay("Couldn't save. Nothing was changed.", "bad");
@@ -973,7 +975,7 @@ export function createSettingsPageHandler({ settings, fallback, platform = proce
     "/drpp-shell.css": { body: DRPP_SHELL_CSS + SETTINGS_DESIGN_CSS, type: "text/css; charset=utf-8" },
     "/settings.js": { body: `${scriptText}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${drppShellScriptText}`, type: "text/javascript; charset=utf-8" },
   };
-  for (const key of Object.keys(cardPresets)) assets["/card-styles/" + key + ".svg"] = { body: renderCard({ state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 83_000, durationMs: 448_000 }, { theme: key, width: 280 }), type: "image/svg+xml; charset=utf-8" };
+
   // Explicit allowlist only; project files ship alongside src in installed builds.
   const infoFiles = Object.fromEntries(["NOTICE", "README.md", "LICENSE"].map((name) => {
     try { return [name, readFileSync(new URL("../" + name, import.meta.url), "utf8")]; }
@@ -1014,6 +1016,13 @@ export function createSettingsPageHandler({ settings, fallback, platform = proce
   return async function handle(request) {
     const method = request?.method || "GET";
     const url = new URL(request?.url || "/", "http://localhost");
+    const style = /^\/card-styles\/([a-z-]+)\.svg$/.exec(url.pathname)?.[1];
+    if (style && Object.hasOwn(cardPresets, style)) {
+      if (method !== "GET" && method !== "HEAD") return response(405, "Method Not Allowed", { Allow: "GET, HEAD" });
+      const { previewArtwork } = await import("./setup-preview.js");
+      const svg = renderCard({ state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 83_000, durationMs: 448_000 }, { theme: style, width: 440, artworkDataUri: await previewArtwork("music") });
+      return response(200, method === "HEAD" ? "" : svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store" });
+    }
     const asset = assets[url.pathname];
     if (url.pathname.startsWith("/api/info/")) {
       const name = url.pathname.slice("/api/info/".length);

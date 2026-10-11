@@ -13,9 +13,9 @@ Your media server knows what you are playing. nowplaying turns that into a card 
 
 *Example cards, not live playback. [Browse all six styles](docs/card-examples.md).*
 
-| Studio | Editorial | Terminal |
+| Studio | Editorial | Hi-Fi |
 | :---: | :---: | :---: |
-| ![Studio card](docs/assets/cards/studio.svg) | ![Editorial card](docs/assets/cards/editorial.svg) | ![Terminal card](docs/assets/cards/terminal.svg) |
+| ![Studio card](docs/assets/cards/studio.svg) | ![Editorial card](docs/assets/cards/editorial.svg) | ![Hi-Fi card](docs/assets/cards/terminal.svg) |
 
 > **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
 
@@ -47,7 +47,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 ## Privacy is set on your PC
 
-- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork or listening history. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
+- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork links or listening history. **Include cover art** optionally adds a small sanitized image. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
 - **Sign-ins stay in the operating system credential store:** Windows Credential Manager or Linux Secret Service. Settings and server addresses are in `%LOCALAPPDATA%\nowplaying\config.json` on Windows or `~/.config/nowplaying/config.json` on Linux, with XDG directory overrides respected. These files do not contain passwords or tokens; check server addresses before sharing them.
 - **Settings > Privacy** can hide titles, artwork, progress or whole media types before they reach the card or Discord. A hidden type looks like nothing playing. [Privacy guide](docs/wiki/Privacy-and-safe-configuration.md).
 - **Discord cover art is uploaded to a temporary host.** Discord can't reach a private Plex, Jellyfin or Emby address, so "Show my server's cover" is on for a new setup and sends the cover to Litterbox (72-hour retention), with tmpfiles.org (48-hour retention) as a fallback when the first host fails. An existing install keeps it off until you tick it in Settings > Discord, and you can untick it there at any time. [Details](docs/artwork.md#discord-cover-upload).

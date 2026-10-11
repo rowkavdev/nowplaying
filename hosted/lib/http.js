@@ -69,17 +69,16 @@ export function parseCardOptions(searchParams) {
 
 // Card layout from the URL only (#94). Nothing here comes from the PC's
 // ingest payload. Numeric ranges match settings.js card.layout; the choices
-// match what the renderer accepts. Artwork options are left out because the
-// hosted card never draws artwork.
-const LAYOUT_NUMBERS = Object.freeze({ padding: [12, 48], radius: [0, 24], titleSize: [14, 30], subtitleSize: [10, 20], progressHeight: [2, 12] });
-const LAYOUT_CHOICES = Object.freeze({ textAlign: ["start", "middle", "end"], progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"], fontFamily: ["system", "serif", "mono", "humanist"], statusStyle: ["plain", "caps", "dot"], progressStyle: ["square", "rounded"], border: ["none", "thin"], background: ["solid", "transparent"] });
+// match what the renderer accepts. Artwork layout applies when the PC shares a cover.
+const LAYOUT_NUMBERS = Object.freeze({ padding: [12, 48], radius: [0, 24], titleSize: [14, 30], subtitleSize: [10, 20], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] });
+const LAYOUT_CHOICES = Object.freeze({ artworkPosition: ["left", "right"], artShape: ["square", "rounded", "circle"], textAlign: ["start", "middle", "end"], progressPosition: ["bottom", "text"], progressWidth: ["content", "full"], direction: ["ltr", "rtl", "auto"], fontFamily: ["system", "serif", "mono", "humanist"], statusStyle: ["plain", "caps", "dot"], progressStyle: ["square", "rounded"], border: ["none", "thin"], background: ["solid", "transparent"] });
 const CARD_FIELDS = Object.freeze(["state", "title", "subtitle"]);
 function parseLayoutOptions(searchParams) {
   const layout = {};
   for (const [key, [min, max]] of Object.entries(LAYOUT_NUMBERS)) {
     const raw = single(searchParams, key);
     if (raw === null) continue;
-    const value = /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
+    const value = /^\d{1,3}$/.test(raw) ? Number(raw) : NaN;
     if (!Number.isInteger(value) || value < min || value > max) throw new ServiceError(400, "invalid_layout");
     layout[key] = value;
   }
@@ -110,7 +109,7 @@ function single(searchParams, key) {
 }
 
 export function sendCard(req, res, presence, options) {
-  const svg = renderCard(presence, { ...options, show: { ...options.show, artwork: false } });
+  const svg = renderCard(presence, { ...options, artworkDataUri: presence.artworkDataUri ?? null });
   const etag = `"${createHash("sha256").update(svg).digest("base64url").slice(0, 27)}"`;
   res.setHeader("content-type", "image/svg+xml; charset=utf-8");
   res.setHeader("cache-control", "public, max-age=30, s-maxage=30");

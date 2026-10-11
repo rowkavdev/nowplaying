@@ -87,3 +87,17 @@ test("preview, saved local card and copied hosted link agree for each style and 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("wrapped artwork titles keep reordered status, subtitle and timeline below both lines", async () => {
+  const { previewArtwork } = await import("../src/setup-preview.js");
+  const artworkDataUri = await previewArtwork("music");
+  for (const theme of ["studio", "editorial", "terminal"]) {
+    const svg = renderCard({ ...presence, title: "A long album title with several words" }, { theme, width: 280, artworkDataUri, layout: { fieldOrder: ["title", "state", "subtitle"], progressPosition: "text" } });
+    const title = /<text[^>]*y="(\d+)"[^>]*clip-path="url\(#txt\)">(<tspan[\s\S]*?)<\/text>/.exec(svg);
+    assert.ok(title);
+    const lineStep = Number(/dy="(\d+)">[^<]*<\/tspan><\/text>/.exec(svg)?.[1]);
+    assert.ok(lineStep > 0);
+    const statusY = Number(/<text[^>]*y="(\d+)"[^>]*font-size="11"[^>]*>(?:Now playing|NOW PLAYING)<\/text>/.exec(svg)?.[1]);
+    assert.ok(statusY > Number(title[1]) + lineStep, "status follows both title lines");
+  }
+});

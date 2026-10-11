@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="280" height="120" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="130" role="img" aria-labelledby="title desc">
   <title id="title">NOW PLAYING: Lost</title><desc id="desc">S04E05 · The Constant</desc>
-  <defs><clipPath id="txt"><rect x="18" y="0" width="244" height="120"/></clipPath></defs>
-  <rect x="0.5" y="0.5" width="279" height="119" rx="0" fill="#141817" stroke="#4c5952"/>
-  
-  <circle cx="24" cy="22" r="3.5" fill="#b8d3ae"/>
-  <text x="34" y="26" fill="#b8d3ae" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="500" letter-spacing="1.1">NOW PLAYING</text>
-  <text x="260" y="26" text-anchor="end" fill="#a8b8aa" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-variant-numeric="tabular-nums">20:00 / 43:00</text>
-  <text x="20" y="60" fill="#e0e8df" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">Lost</text>
-  <text x="20" y="82" fill="#a8b8aa" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" clip-path="url(#txt)">S04E05 · The Constant</text>
-  <rect x="20" y="100" width="240" height="2" rx="0" fill="#36443b"/><rect x="20" y="100" width="112" height="2" rx="0" fill="#b8d3ae"/>
+  <defs><clipPath id="txt"><rect x="22" y="0" width="236" height="130"/></clipPath><clipPath id="card-frame"><rect width="280" height="130" rx="16"/></clipPath><linearGradient id="deck" x2="0" y2="1"><stop stop-color="#202323"/><stop offset="1" stop-color="#4a504e" stop-opacity=".3"/></linearGradient></defs>
+  <rect x="0.5" y="0.5" width="279" height="129" rx="16" fill="#202323" stroke="#4a504e"/>
+
+  <rect x="1" y="1" width="278" height="128" rx="16" fill="url(#deck)"/>
+
+
+
+
+  <circle cx="28" cy="26" r="3.5" fill="#f4b25b"/>
+  <text x="38" y="30" fill="#f4b25b" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-weight="500" letter-spacing="1.1">NOW PLAYING</text>
+  <text x="256" y="30" text-anchor="end" fill="#c1b49b" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" font-variant-numeric="tabular-nums">20:00 / 43:00</text>
+  <text x="24" y="64" fill="#f4e8d5" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="18" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">Lost</text>
+  <text x="24" y="86" fill="#c1b49b" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" font-weight="400" clip-path="url(#txt)">S04E05 · The Constant</text>
+  <g><rect x="24" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="33.75" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="43.5" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="53.25" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="63" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="72.75" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="82.5" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="92.25" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="102" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="111.75" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="121.5" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="131.25" y="106" width="7.75" height="4" rx="0" fill="#f4b25b"/><rect x="141" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="150.75" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="160.5" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="170.25" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="180" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="189.75" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="199.5" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="209.25" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="219" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="228.75" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="238.5" y="106" width="7.75" height="4" rx="0" fill="#464940"/><rect x="248.25" y="106" width="7.75" height="4" rx="0" fill="#464940"/></g>
 </svg>

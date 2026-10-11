@@ -134,6 +134,7 @@ export function createSetupConfig(input = {}) {
   if (input.discordStatusDisplayType !== undefined && !STATUS_DISPLAY_TYPES.has(input.discordStatusDisplayType)) {
     throw new TypeError("setup config.discordStatusDisplayType must be name, state or details");
   }
+  if (input.hostedArtwork !== undefined && typeof input.hostedArtwork !== "boolean") throw new TypeError("setup config.hostedArtwork must be a boolean");
   if (input.hostedEnabled !== undefined && typeof input.hostedEnabled !== "boolean") {
     throw new TypeError("setup config.hostedEnabled must be a boolean");
   }
@@ -167,7 +168,7 @@ export function createSetupConfig(input = {}) {
     }),
     // Hosted card upload (#140) is off unless the user turns it on.
     ...(input.hostedEnabled !== undefined || hostedUrl ? {
-      hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(hostedUrl ? { url: hostedUrl } : {}) }),
+      hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(input.hostedArtwork === true ? { artwork: true } : {}), ...(hostedUrl ? { url: hostedUrl } : {}) }),
     } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card && Object.keys(card).length ? { card } : {}),

@@ -5,7 +5,7 @@ export const cardThemes = Object.freeze({
   "midnight-blue": Object.freeze({ background: "#0d1117", border: "#30363d", primary: "#f0f6fc", secondary: "#9aa7b7", accent: "#58a6ff", track: "#30363d" }),
   studio: Object.freeze({ background: "#181a1d", border: "#3a3d42", primary: "#f3f3f1", secondary: "#b1b3b7", accent: "#d6c8a9", track: "#393b40" }),
   editorial: Object.freeze({ background: "#f8f5ee", border: "#c8c1b4", primary: "#25241f", secondary: "#625d52", accent: "#77583c", track: "#ddd6c8" }),
-  terminal: Object.freeze({ background: "#141817", border: "#4c5952", primary: "#e0e8df", secondary: "#a8b8aa", accent: "#b8d3ae", track: "#36443b" }),
+  terminal: Object.freeze({ background: "#202323", border: "#4a504e", primary: "#f4e8d5", secondary: "#c1b49b", accent: "#f4b25b", track: "#464940" }),
   paper: Object.freeze({ background: "#ffffff", border: "#c7d2df", primary: "#172033", secondary: "#526173", accent: "#0969da", track: "#d8e0e8" }),
   compact: Object.freeze({ background: "#0d1117", border: "#30363d", primary: "#f0f6fc", secondary: "#9aa7b7", accent: "#58a6ff", track: "#30363d" }),
 });
@@ -89,6 +89,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
     visibility.progress &&= presence.durationMs > 0 && Number.isFinite(presence.positionMs);
   }
   const palette = resolveCardTheme(theme, colors);
+  const featureStyle = ["studio", "editorial", "terminal"].includes(theme);
   if (tint !== null && (typeof tint !== "string" || !COLOR_PATTERN.test(tint))) throw new TypeError("tint must be a six-digit hex color");
   const hasArtwork = visibility.artwork && artworkDataUri !== null;
   // Give titles room at the narrowest card width even when both padding and
@@ -118,7 +119,12 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   }
   const customOrder = fieldOrder.some((field, index) => field !== DEFAULT_FIELD_ORDER[index]);
   const underArtwork = progressSpan === "full" && hasArtwork && visibility.progress ? padding * 2 + artworkHeight + 12 + progressHeight : 0;
-  const height = Math.max(baseHeight, customOrder ? cursor + padding + 2 + (visibility.progress ? progressHeight + 16 : 0) : 0, underArtwork);
+  const titleLines = featureStyle && hasArtwork ? wrapCardTitle(title, Math.max(5, Math.floor(contentWidth / (titleSize * 0.52)))) : null;
+  const extraTitleHeight = titleLines ? (titleLines.length - 1) * (titleSize + 4) : 0;
+  // Reordered fields and the inline timeline follow the entire wrapped title.
+  for (const field of lines.slice(lines.indexOf("title") + 1)) baselines[field] += extraTitleHeight;
+  cursor += extraTitleHeight;
+  const height = Math.max(baseHeight, customOrder || extraTitleHeight ? cursor + padding + 2 + (visibility.progress ? progressHeight + 16 : 0) : 0, underArtwork);
   const titleY = baselines.title;
   const subtitleY = baselines.subtitle;
   const stateY = baselines.state;
@@ -158,6 +164,9 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const barRx = progressStyle === "rounded" ? progressHeight / 2 : 0;
   const defs = [
     `<clipPath id="txt"><rect x="${contentX - 2}" y="0" width="${contentWidth + 4}" height="${height}"/></clipPath>`,
+    `<clipPath id="card-frame"><rect width="${width}" height="${height}" rx="${radius}"/></clipPath>`,
+    theme === "studio" && hasArtwork ? `<linearGradient id="cinema-shade"><stop stop-color="#080b10" stop-opacity=".98"/><stop offset=".6" stop-color="#080b10" stop-opacity=".9"/><stop offset="1" stop-color="#080b10" stop-opacity=".3"/></linearGradient>` : "",
+    theme === "terminal" ? `<linearGradient id="deck" x2="0" y2="1"><stop stop-color="${background}"/><stop offset="1" stop-color="${palette.border}" stop-opacity=".3"/></linearGradient>` : "",
     hasArtwork ? `<clipPath id="art"><rect x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" rx="${artRx}"/></clipPath>` : "",
   ].join("");
   const font = `font-family="${layout.fontStack !== undefined ? `${layout.fontStack.split(",").map((name) => name.trim()).join(",")},${FONTS.system}` : FONTS[fontFamily]}"`;
@@ -168,14 +177,19 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   <title id="title">${escapeXml(status)}: ${escapeXml(title)}</title><desc id="desc">${escapeXml(description)}</desc>
   ${defs ? `<defs>${defs}</defs>` : ""}
   <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" ${fillAttr}${borderStyle === "thin" ? ` stroke="${palette.border}"` : ""}/>
+  ${theme === "studio" && hasArtwork && backgroundStyle !== "transparent" ? `<g clip-path="url(#card-frame)"><image href="${artworkDataUri}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" opacity=".65"/><rect width="${width}" height="${height}" fill="url(#cinema-shade)"/></g>` : ""}
+  ${theme === "terminal" && backgroundStyle !== "transparent" ? `<rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="${radius}" fill="url(#deck)"/>` : ""}
+  ${theme === "terminal" && hasArtwork ? `<circle cx="${artworkX + artworkWidth / 2}" cy="${padding + artworkHeight / 2}" r="${Math.min(artworkWidth, artworkHeight) / 2 + 9}" fill="#0d100f" stroke="#62675e"/>${[2, 5, 8].map(inset => `<circle cx="${artworkX + artworkWidth / 2}" cy="${padding + artworkHeight / 2}" r="${Math.min(artworkWidth, artworkHeight) / 2 + inset}" fill="none" stroke="#383d36"/>`).join("")}` : ""}
+  ${theme === "editorial" && hasArtwork ? `<path d="M${artworkPosition === "left" ? contentX - 12 : artworkX - 12} 12V${height - 12}" stroke="${palette.border}" stroke-dasharray="2 4"/>` : ""}
+  ${theme === "studio" && hasArtwork ? `<rect x="${artworkX - 4}" y="${padding - 4}" width="${artworkWidth + 8}" height="${artworkHeight + 8}" rx="${artRx + 3}" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".22"/>` : ""}
   ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
   ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
   ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="500" letter-spacing="${statusStyle === "caps" ? 1.1 : 0}">${status}</text>` : ""}
   ${showTime ? `<text x="${timeX}" y="${stateY}" text-anchor="${timeAnchor}" fill="${palette.secondary}" ${font} font-size="11" font-variant-numeric="tabular-nums">${timeLabel}</text>` : ""}
-  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">${escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
+  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">${titleLines ? titleLines.map((line, index) => `<tspan x="${textX}" dy="${index ? titleSize + 4 : 0}">${escapeXml(line)}</tspan>`).join("") : escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
   ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="400" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
-  ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${barRx}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${barRx}" fill="${palette.accent}"/>` : ""}
-</svg>`;
+  ${visibility.progress && theme === "terminal" ? `<g>${Array.from({ length: 24 }, (_, i) => { const segmentWidth = Math.max(1, (barWidth - 46) / 24); return `<rect x="${barX + i * (segmentWidth + 2)}" y="${progressY}" width="${segmentWidth}" height="${progressHeight}" rx="0" fill="${(rtl ? 23 - i : i) / 24 < progress / barWidth ? palette.accent : palette.track}"/>`; }).join("")}</g>` : visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${barRx}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${barRx}" fill="${palette.accent}"/>` : ""}
+</svg>`.replace(/[ \t]+$/gm, "");
 }
 
 
@@ -237,4 +251,15 @@ function firstStrongIsRtl(text) {
     if (/\p{L}/u.test(char)) return false;
   }
   return false;
+}
+
+function wrapCardTitle(title, length) {
+  if (title.length <= length) return [title];
+  const words = title.split(/\s+/); const lines = []; let line = "";
+  for (const word of words) {
+    if (line && (line + " " + word).length > length) { lines.push(line); line = word; }
+    else line += (line ? " " : "") + word;
+  }
+  if (line) lines.push(line);
+  return lines.length <= 2 ? lines.map(value => truncate(value, length)) : [lines[0], truncate(lines.slice(1).join(" "), length)];
 }

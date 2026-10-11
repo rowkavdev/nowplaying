@@ -10,9 +10,9 @@ Choose **Appearance** in the settings navigation to open **Card Settings**. Pick
 | --- | --- | --- |
 | Classic | Dark background, sans-serif type, blue progress | `midnight-blue` |
 | Paper | White background and dark type | `paper` |
-| Studio | Smaller rounded cover, warm accent, slim progress | `studio` |
-| Editorial | Warm paper, serif title, square border, cover on the right | `editorial` |
-| Terminal | Monospace type, muted green, square edges | `terminal` |
+| Studio | Full-bleed art, cinema shade, framed cover, two-line title | `studio` |
+| Editorial | Printed sleeve, large cover, serif title, perforated seam | `editorial` |
+| Hi-Fi | Record deck, amber display, segmented timeline | `terminal` |
 | Compact | A single title without artwork or progress | `compact` |
 
 [See the card gallery](card-examples.md). Width can be 280–800 pixels. Hosted cards use these styles without artwork. The preview uses your current playback when available; when nothing is playing, it uses sample media and a placeholder cover.
@@ -25,7 +25,7 @@ Choose **Appearance** in the settings navigation to open **Card Settings**. Pick
 - artwork size, shape and side;
 - line order, alignment and text direction.
 
-Classic, Paper and Editorial choose artwork size by media type; Studio and Terminal use a smaller cover. The size sliders override those defaults. At narrow widths the renderer can reduce the displayed cover to leave room for text. The preview explains when this happens; your saved preference is kept.
+Classic and Paper choose artwork size by media type. Studio uses a framed cover, Editorial a larger sleeve, and Hi-Fi a circular record display. The size sliders override those defaults. At narrow widths the renderer can reduce the displayed cover to leave room for text. The preview explains when this happens; your saved preference is kept.
 
 Selecting a style resets these appearance controls to that style's defaults. It keeps the current width and reading direction. **Back to defaults** restores Classic at 440 pixels. Both actions are drafts until you press **Save**.
 

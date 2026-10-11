@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import sharp from "sharp";
+import { previewArtwork } from "../src/setup-preview.js";
 import { cardPresets } from "../src/card.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 import { cardSettingsView } from "../src/app-settings.js";
@@ -25,7 +26,7 @@ async function assertRaster(svg, width) {
   const { info } = await sharp(Buffer.from(svg)).png().toBuffer({ resolveWithObject: true });
   assert.equal(info.width, width);
   assert.ok(info.height >= 74 && info.height < 500);
-  assert.doesNotMatch(svg, /(?:NaN|Infinity|undefined)/);
+  assert.doesNotMatch(svg.replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g, ""), /(?:NaN|Infinity|undefined)/);
   for (const match of svg.matchAll(/<(?:rect|image)\b[^>]*\bwidth="(-?[\d.]+)"[^>]*\bheight="(-?[\d.]+)"/g)) {
     assert.ok(Number(match[1]) >= 0 && Number(match[2]) >= 0, "no negative artwork or bar dimensions");
   }
@@ -45,10 +46,15 @@ test("simulated music, films and TV render through the running app in every styl
   const dir = await mkdtemp(join(tmpdir(), "np-media-simulation-"));
   const file = join(dir, "config.json");
   await writeFile(file, serializeSetupConfig(BASE));
-  const cover = await sharp({ create: { width: 120, height: 180, channels: 3, background: "#53616f" } }).png().toBuffer();
+  const covers = Object.fromEntries(await Promise.all(MEDIA.map(async media => {
+    const source = process.env.CARD_SIMULATION_COVERS
+      ? await readFile(join(process.env.CARD_SIMULATION_COVERS, `${media.key}-cover.jpg`))
+      : Buffer.from((await previewArtwork(media.key === "music" ? "music" : media.key === "movie" ? "film" : "episode")).split(",")[1], "base64");
+    return [media.key, await sharp(source).png().toBuffer()];
+  })));
   let media = MEDIA[0], state = "playing", artwork = true, brokenArt = false;
   const fixtureFetch = async url => {
-    if (String(url).includes("/Images/")) return brokenArt ? new Response("missing", { status: 404 }) : new Response(cover, { headers: { "Content-Type": "image/png" } });
+    if (String(url).includes("/Images/")) return brokenArt ? new Response("missing", { status: 404 }) : new Response(covers[media.key] ?? covers.music, { headers: { "Content-Type": "image/png" } });
     return Response.json(state === "idle" ? [] : [{ UserId: "simulation", NowPlayingItem: { ...media.item, ...(artwork ? { Id: media.key, ImageTags: { Primary: "fixture-v1" } } : {}) }, PlayState: { PositionTicks: 830_000_000, IsPaused: state === "paused" } }]);
   };
   const provider = createJellyfinProvider({ baseUrl: BASE.serverUrl, apiKey: "fixture-token", fetchImpl: fixtureFetch });

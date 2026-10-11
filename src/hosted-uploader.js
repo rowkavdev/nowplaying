@@ -1,4 +1,5 @@
 import { readBoundedJson } from "./bounded-response.js";
+import { compactHostedArtwork } from "./hosted-artwork.js";
 import { projectHostedState } from "./hosted-projection.js";
 
 // Pushes privacy-filtered playback state from the desktop app to the hosted
@@ -47,6 +48,7 @@ export function createHostedUploader({
   baseUrl = DEFAULT_HOSTED_URL,
   credentials,
   settings = {},
+  resolveArtwork,
   fetchImpl = fetch,
   now = () => Date.now(),
   elapsedNow = () => performance.now(),
@@ -158,7 +160,14 @@ export function createHostedUploader({
   async function send(presence, isCurrent) {
     const at = now();
     // `settings` can be a function so privacy and card changes apply without a restart.
-    const probe = projectHostedState(presence, typeof settings === "function" ? settings() : settings, { seq: 0, now: at + serverClockOffset });
+    const currentSettings = () => typeof settings === "function" ? settings() : settings;
+    let artworkDataUri = null;
+    const allowed = () => { const s = currentSettings(); return s.shareArtwork === true && s.show?.artwork !== false && !s.privacy?.hideArtwork && !s.privacy?.redactTitles && s.privacy?.mode !== "private" && !s.privacy?.suppressMediaKinds?.includes(presence.kind) && presence.state !== "idle"; };
+    if (allowed() && (presence.artwork || presence.artworkUrl) && typeof resolveArtwork === "function") {
+      try { artworkDataUri = await compactHostedArtwork(await resolveArtwork(presence.artwork ?? { publicUrl: presence.artworkUrl }, presence)); } catch { /* A missing cover must not stop playback uploads. */ }
+    }
+    if (!isCurrent()) return { sent: false, reason: "superseded" };
+    const probe = projectHostedState(presence, currentSettings(), { seq: 0, now: at + serverClockOffset, artworkDataUri });
     const key = changeKey(probe);
     if (!due(key, at, probe.positionMs)) return { sent: false, reason: "unchanged" };
     const device = await ensureRegistered();
@@ -168,6 +177,9 @@ export function createHostedUploader({
     let correctedSeq = false;
     while (true) {
       if (!isCurrent()) return { sent: false, reason: "superseded" };
+      // Registration and retries can outlive a Settings save. Reapply the
+      // latest privacy choices immediately before each network write.
+      payload = projectHostedState(presence, currentSettings(), { seq: payload.seq, now: payload.observedAt, artworkDataUri });
       try { await request("/api/ingest", { token: device.token, body: payload }); break; }
       catch (error) {
         // Never promote a rejected old payload above a newer local push.
@@ -188,7 +200,7 @@ export function createHostedUploader({
       }
     }
     if (!isCurrent()) return { sent: false, reason: "superseded" };
-    lastSent = { key, at, positionMs: probe.positionMs ?? null, playing: probe.state === "playing" };
+    lastSent = { key: changeKey(payload), at, positionMs: payload.positionMs ?? null, playing: payload.state === "playing" };
     return { sent: true };
   }
 

@@ -11,7 +11,7 @@ import { validateTemplate } from "./template.js";
 // step (temp file + rename) so a crash never leaves half a file.
 
 const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior", "name", "statusDisplayType"]);
-const HOSTED_KEYS = new Set(["enabled"]);
+const HOSTED_KEYS = new Set(["enabled", "artwork"]);
 const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
 
@@ -28,7 +28,7 @@ export function discordSettingsView(config) {
 }
 
 export function hostedSettingsView(config) {
-  return Object.freeze({ enabled: config.hosted?.enabled === true });
+  return Object.freeze({ enabled: config.hosted?.enabled === true, ...(config.hosted?.artwork === true ? { artwork: true } : {}) });
 }
 
 export function privacySettingsView(config) {
@@ -98,7 +98,7 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     discordTimestamps: discord.timestamps,
     discordName: discord.name,
     discordStatusDisplayType: discord.statusDisplayType,
-    ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
+    ...(hosted ? { hostedEnabled: hosted.enabled, hostedArtwork: hosted.artwork, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card ? { card } : {}),
     // Settings changes never drop the Spotify connection (#135).
@@ -126,10 +126,11 @@ export function applyHostedDestinationChanges(config, changes) {
   return rewrite(config, { hosted: { enabled: true, ...(changes.url ? { url: changes.url } : {}) } });
 }
 
-// Only on/off: the service address stays whatever setup or config.json says.
+// The service address stays whatever setup or config.json says.
 export function applyHostedChanges(config, changes) {
   checkChanges(changes, HOSTED_KEYS, "hosted");
-  return rewrite(config, { hosted: { ...(config.hosted ?? {}), enabled: changes.enabled } });
+  for (const [key, value] of Object.entries(changes)) if (typeof value !== "boolean") throw new TypeError(`hosted settings: ${key} must be true or false`);
+  return rewrite(config, { hosted: { ...(config.hosted ?? {}), ...changes } });
 }
 
 export function applyPrivacyChanges(config, changes) {

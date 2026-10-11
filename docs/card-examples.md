@@ -1,6 +1,6 @@
 # Card styles
 
-Choose **Settings → Appearance → Card Settings**. These examples come directly from the shipped local SVG renderer, with cover art disabled. Local cards can also show your server's sanitized cover or poster. Hosted README cards use the same styles but omit artwork and detailed episode metadata.
+Choose **Settings → Appearance → Card Settings**. These examples come directly from the shipped local SVG renderer, with sample cover art for Studio, Editorial and Hi-Fi. Local cards show your server's cover or poster. Hosted README cards can include sanitized artwork when **Include cover art** is enabled; detailed episode metadata stays local.
 
 ## Classic
 
@@ -16,21 +16,21 @@ White background, clear dark text.
 
 ## Studio
 
-Smaller type and cover, rounded corners and a warm accent.
+Full-bleed artwork under a dark cinema shade, a framed cover and a two-line title.
 
 ![Studio card showing Blue Monday by New Order](assets/cards/studio.svg)
 
 ## Editorial
 
-Serif title, warm paper and square edges. Local artwork sits on the right.
+A large cover, serif title, warm paper and a perforated sleeve seam.
 
 ![Editorial card showing Blue Monday by New Order](assets/cards/editorial.svg)
 
-## Terminal
+## Hi-Fi
 
 Monospace type with a muted green palette.
 
-![Terminal card showing Blue Monday by New Order](assets/cards/terminal.svg)
+![Hi-Fi card showing Blue Monday by New Order](assets/cards/terminal.svg)
 
 ## Compact
 

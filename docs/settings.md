@@ -37,3 +37,7 @@ Logs and Settings can include local server details. Check them before sharing a 
 ## About and updates
 
 **Info** opens the README, license and open-source attribution shipped with the app. The header shows the installed version when available. Use [updates and release channels](wiki/Updates-and-release-channels.md) for update behavior; Settings does not provide a manual update button.
+
+### Cover art
+
+The live preview uses the current album cover or poster. With nothing playing, it uses sample artwork. Hosted cards need **Hosted Card Settings → Include cover art** enabled separately. This shares a small sanitized image publicly, never your server address or the artwork URL. Hide artwork and Hide titles override hosted cover sharing. Compact is intentionally text-only.
