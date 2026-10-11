@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import sharp from "sharp";
 import { previewArtwork } from "../src/setup-preview.js";
@@ -21,6 +21,7 @@ const MEDIA = [
 ];
 const BASE = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "simulation", displayName: "Simulation" }, credentialStored: true, discordEnabled: false, hostedEnabled: false };
 const output = process.env.CARD_SIMULATION_OUTPUT;
+const outputRoot = output ? resolve(output) : null;
 
 async function assertRaster(svg, width) {
   const { info } = await sharp(Buffer.from(svg)).png().toBuffer({ resolveWithObject: true });
@@ -99,7 +100,9 @@ test("simulated music, films and TV render through the running app in every styl
       assert.doesNotMatch(hosted, /<image |fixture-token|127\.0\.0\.1/);
       if (state === "idle") assert.match(hosted, /Nothing playing/);
       else assert.ok(hosted.includes(media.item.Name), "hosted card retains the permitted media title");
-      if (output && state === "playing" && width === 440) await writeFile(join(output, `${media.key}-${theme}.svg`), svg);
+      if (outputRoot && outputRoot.startsWith(resolve(process.cwd()) + "/") && state === "playing" && width === 440) {
+        await writeFile(join(outputRoot, `${media.key}-${theme}.svg`), svg);
+      }
     }
     // Privacy changes must invalidate prior art/title renders immediately.
     for (media of MEDIA) for (const theme of Object.keys(cardPresets)) {

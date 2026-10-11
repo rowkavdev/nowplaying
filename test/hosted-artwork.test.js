@@ -87,7 +87,7 @@ test("actual HTTP upload, stored state and public SVG retain images for music, m
         const res = await fetch(`${url}?theme=${theme}&width=${width}`);
         assert.equal(res.status, 200);
         const svg = await res.text();
-        assert.doesNotMatch(svg, /private-item-id|jellyfin|https?:\/\/(?!www.w3.org)/);
+        assert.doesNotMatch(svg, /private-item-id|jellyfin|https?:\/\/(?!www\.w3\.org)/);
         if (theme === "compact") assert.doesNotMatch(svg, /<image /);
         else assert.match(svg, /<image href="data:image\/png;base64,/);
         const info = await sharp(Buffer.from(svg)).metadata();
