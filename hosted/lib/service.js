@@ -10,6 +10,10 @@ import { currentPosition, resolveDeviceStates } from "./resolve.js";
 export const SCHEMA_VERSION = 1;
 export const MAX_INGEST_BYTES = MAX_HOSTED_ARTWORK_LENGTH + 2048;
 export const STATE_TTL_SECONDS = 600;
+// Last-played records feed the /badges/last.json badge. They hold only the
+// fields the public card already shows (kind, title, subtitle, last state)
+// and expire on their own after a week.
+export const LAST_TTL_SECONDS = 60 * 60 * 24 * 7;
 export const MAX_CLOCK_SKEW_MS = 120_000;
 export const SEQ_TTL_SECONDS = 60 * 60 * 24 * 30;
 export const REGISTRATIONS_PER_HOUR = 5;
@@ -294,6 +298,11 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       String(update.seq), SEQ_TTL_SECONDS, device.userId ? "1" : "0", JSON.stringify(record), String(receivedAt), STATE_TTL_SECONDS);
     if (Number(accepted) === -1) throw new ServiceError(401, "unauthorized");
     if (Number(accepted) !== 1) throw new ServiceError(409, "stale_sequence", { lastSeq: Number(lastSeq) });
+    if (update.state !== "idle" && update.title) {
+      // Remember the last playback of each kind for the last-played badge. A
+      // failing record must never fail an accepted ingest.
+      try { await recordLastPlay(device, update); } catch { /* ignore */ }
+    }
     await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
   }
@@ -309,6 +318,8 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     await cmd("DEL", `np:tok:${hashToken(token)}`);
     await cmd("DEL", `np:state:${device.cardId}`);
     await cmd("DEL", `np:seq:${device.deviceId}`);
+    // The token is already gone, so this must not turn the revoke into a 500.
+    try { await deleteLastPlays(`np:last:card:${device.cardId}`); } catch { /* ignore */ }
     return { revoked: true };
   }
 
@@ -320,6 +331,8 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   // np:dstate:<deviceId>    that device's live state (TTL), with startedAt
   // np:dseen:<deviceId>     last upload time, for the device list
   // np:alias:<oldCardId>    githubId: an old per-PC card link now shows the user's card
+  // np:last:user:<githubId>:<kind>   last non-idle playback of that kind, for
+  // np:last:card:<cardId>:<kind>     the /badges/last.json badge (7-day TTL)
 
   const readDevices = async (userId) => {
     const raw = await cmd("GET", `np:udevs:${userId}`);
@@ -368,6 +381,9 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
         await cmd("SET", `np:alias:${legacy.cardId}`, userId);
         await cmd("DEL", `np:state:${legacy.cardId}`);
         await cmd("DEL", `np:seq:${legacy.deviceId}`);
+        // The old link's last-played history moves to the user's card so the
+        // badge keeps telling one story. Best effort, like the stats writes.
+        try { await migrateLastPlays(`np:last:card:${legacy.cardId}`, `np:last:user:${userId}`); } catch { /* ignore */ }
         aliased = true;
       }
     }
@@ -407,6 +423,10 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const me = await authenticateUser(token);
     const result = await deviceAction(me.userId, "sign-out", hashToken(token));
     if (Number(result[0]) === -1) throw new ServiceError(401, "unauthorized");
+    if (Number(result[1]) > 0) {
+      // The devices are gone; a failed cleanup must not fail the sign-out.
+      try { await deleteLastPlays(`np:last:user:${me.userId}`); } catch { /* ignore */ }
+    }
     return { removed: Number(result[1]) };
   }
 
@@ -426,23 +446,81 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     return winner ? shown(winner) : IDLE;
   }
 
+  // Resolve a card or a GitHub login to the presence the public card shows.
+  // Card reads count a render; badge reads reuse this without counting.
+  async function resolvePresence({ id, login }) {
+    if (login != null) {
+      if (!isLogin(login)) throw new ServiceError(404, "not_found");
+      const userId = await cmd("GET", `np:login:${login.toLowerCase()}`);
+      if (!userId) throw new ServiceError(404, "not_found");
+      return { userId, presence: await userCardState(userId) };
+    }
+    if (!isCardId(id)) throw new ServiceError(404, "not_found");
+    const alias = await cmd("GET", `np:alias:${id}`);
+    if (alias) return { userId: alias, presence: await userCardState(alias) };
+    const raw = await cmd("GET", `np:state:${id}`);
+    return { cardId: id, presence: raw ? shown(JSON.parse(raw)) : { ...IDLE } };
+  }
+
   async function readUserCardState(login) {
-    if (!isLogin(login)) throw new ServiceError(404, "not_found");
-    const userId = await cmd("GET", `np:login:${login.toLowerCase()}`);
-    if (!userId) throw new ServiceError(404, "not_found");
-    const state = await userCardState(userId);
+    const { presence } = await resolvePresence({ login });
     await countRender();
-    return state;
+    return presence;
   }
 
   async function readCardState(cardId) {
-    if (!isCardId(cardId)) throw new ServiceError(404, "not_found");
-    const alias = await cmd("GET", `np:alias:${cardId}`);
-    if (alias) { const state = await userCardState(alias); await countRender(); return state; }
-    const raw = await cmd("GET", `np:state:${cardId}`);
+    const { presence } = await resolvePresence({ id: cardId });
     await countRender();
-    if (!raw) return { ...IDLE };
-    return shown(JSON.parse(raw));
+    return presence;
+  }
+
+  async function recordLastPlay(device, update) {
+    const scope = device.userId != null ? `np:last:user:${device.userId}` : device.cardId != null ? `np:last:card:${device.cardId}` : null;
+    if (!scope) return;
+    await cmd("SET", `${scope}:${update.kind}`, JSON.stringify({ title: update.title, subtitle: update.subtitle, state: update.state, kind: update.kind, at: now() }), "EX", LAST_TTL_SECONDS);
+  }
+
+  // Move an old per-PC card's last-played records to the user scope during a
+  // legacy sign-in, so the badge history follows the card like the alias does.
+  // A record never overwrites a newer one already on the user's card.
+  async function migrateLastPlays(fromScope, toScope) {
+    for (const kind of KINDS) {
+      try {
+        const raw = await cmd("GET", `${fromScope}:${kind}`);
+        if (!raw) continue;
+        const kept = await cmd("GET", `${toScope}:${kind}`);
+        const moved = JSON.parse(raw);
+        const current = kept ? JSON.parse(kept) : null;
+        if (!current || current.at < moved.at) await cmd("SET", `${toScope}:${kind}`, raw, "EX", LAST_TTL_SECONDS);
+        await cmd("DEL", `${fromScope}:${kind}`);
+      } catch { /* the next kind still migrates */ }
+    }
+  }
+
+  async function deleteLastPlays(scope) {
+    for (const kind of KINDS) await cmd("DEL", `${scope}:${kind}`);
+  }
+
+  // Content for the /badges/now.json and /badges/last.json badges: the live
+  // playback filtered by kind, or with `last` the most recent playback of that
+  // kind. Only fields the public card already shows, never a device or token.
+  async function readBadgeState({ id, login, kind = "any", last = false }) {
+    if (kind !== "any" && !KINDS.has(kind)) throw new ServiceError(400, "invalid_kind");
+    const { userId, cardId, presence } = await resolvePresence({ id, login });
+    if (presence.state !== "idle" && presence.title && (kind === "any" || presence.kind === kind)) {
+      return { state: presence.state, kind: presence.kind, title: presence.title, subtitle: presence.subtitle };
+    }
+    if (!last) return { ...IDLE };
+    const scope = userId != null ? `np:last:user:${userId}` : cardId != null ? `np:last:card:${cardId}` : null;
+    if (!scope) return { ...IDLE };
+    const kinds = kind === "any" ? [...KINDS] : [kind];
+    const raws = await cmd("MGET", ...kinds.map((entry) => `${scope}:${entry}`));
+    let best = null;
+    for (const raw of raws ?? []) {
+      if (!raw) continue;
+      try { const entry = JSON.parse(raw); if (entry?.title && (!best || entry.at >= best.at)) best = entry; } catch { /* ignore */ }
+    }
+    return best ? { state: best.state ?? "idle", kind: best.kind ?? "unknown", title: best.title, subtitle: best.subtitle ?? null } : { ...IDLE };
   }
 
   // Public totals for the README badges: one aggregate number each, nothing
@@ -458,5 +536,5 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   function readRegistrationCount() { return readTotalCount("np:stats:registrations"); }
   function readUserCount() { return readTotalCount("np:stats:users"); }
 
-  return { register, ingest, revoke, readCardState, readUserCardState, readRequestCount, readRegistrationCount, readUserCount, signInWithGitHub, listDevices, renameDevice, removeDevice, signOutEverywhere };
+  return { register, ingest, revoke, readCardState, readUserCardState, readBadgeState, readRequestCount, readRegistrationCount, readUserCount, signInWithGitHub, listDevices, renameDevice, removeDevice, signOutEverywhere };
 }

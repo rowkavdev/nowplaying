@@ -52,7 +52,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 
 ## Storage and counters
 
-State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The counters are aggregate only. Totals: `np:stats:cards_rendered`, `np:stats:registrations` and `np:stats:users`. Per UTC day, for the private usage dashboard (#218): `np:stats:day:<date>:renders`, `np:stats:day:<date>:registrations` and `np:stats:day:<date>:users` (plain counts), `np:stats:day:<date>:devices`, a HyperLogLog of hashed device IDs, and `np:stats:day:<date>:active_devices`, a counter that goes up when that HyperLogLog sees a new device. Together they estimate how many devices sent updates that day, never which ones. The per-day keys expire after 400 days. A failing stats write never fails a request.
+State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The counters are aggregate only. Totals: `np:stats:cards_rendered`, `np:stats:registrations` and `np:stats:users`. Per UTC day, for the private usage dashboard (#218): `np:stats:day:<date>:renders`, `np:stats:day:<date>:registrations` and `np:stats:day:<date>:users` (plain counts), `np:stats:day:<date>:devices`, a HyperLogLog of hashed device IDs, and `np:stats:day:<date>:active_devices`, a counter that goes up when that HyperLogLog sees a new device. Together they estimate how many devices sent updates that day, never which ones. The per-day keys expire after 400 days. A failing stats write never fails a request. Last-played records for the `/badges/last.json` badge live in `np:last:user:<githubId>:<kind>` and `np:last:card:<cardId>:<kind>`: the kind, title, subtitle and last state the public card already showed, expiring after 7 days. A legacy card's records move to the user's scope when it aliases during GitHub sign-in.
 
 Three totals are published as [Shields endpoint badges](https://shields.io/badges/endpoint-badge), cached for 5 minutes, each a single public number with nothing per card, user or device:
 
@@ -63,6 +63,15 @@ Three totals are published as [Shields endpoint badges](https://shields.io/badge
 | `GET /badges/users.json` | `np:stats:users` | "people signed in" |
 
 An unavailable counter returns `503` with the message "unavailable" and `no-store`. See [usage badges](../docs/hosted-upload.md#usage-badges) for the shields.io snippet.
+
+Two content badges show what a card is playing, filtered by media kind. Both take `?id=<cardId>` or `?user=<github-login>` (one required) and an optional `?kind=track|episode|movie|show|unknown` (default `any`):
+
+| Path | Shows |
+| --- | --- |
+| `GET /badges/now.json` | The card's live playback of that kind, or "not playing" when idle or the kind does not match. |
+| `GET /badges/last.json` | The same, falling back to the most recent playback of that kind (kept 7 days) whenever nothing of that kind is playing. |
+
+Labels follow the kind: "listening to" / "last listened" for tracks, "watching" / "last watched" for films, episodes and shows, "now playing" / "last played" otherwise. Paused playback adds "(paused)". These badges refresh after 60 seconds and show only the title and subtitle the public card already shows; they hold no artwork, positions, tokens or device data.
 
 ## Deploy
 

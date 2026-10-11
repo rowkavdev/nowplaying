@@ -37,6 +37,7 @@ Deploy the updated hosted service before enabling cover sharing in the updated d
 ## How it's stored
 
 - The service keeps only the latest update from each of your PCs, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
+- For the last-played badge, the service keeps the title and subtitle of the most recent playback of each media kind for 7 days after it was last shown. Nothing else about that playback is kept. Signing out everywhere, or revoking a legacy per-PC card, deletes those records right away; otherwise they expire on their own.
 - The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown, PCs registered and people signed in. Each total is also published as a public badge; see [Usage badges](#usage-badges).
 
 ## Usage badges
@@ -56,6 +57,23 @@ Point a Shields endpoint badge at one of them, for example:
 ```
 
 Each badge is a single number with nothing per card, per PC or per person. If the counter is unavailable the endpoint answers `503`, so Shields shows its error state instead of a number. Self-hosted deployments can wire the same handlers and serve the same badges from their own domain.
+
+### Content badges
+
+Two more badges show what a card is playing instead of a total. Both take the same card address as a card link (`?user=<your-github-username>` or `?id=<cardId>`) and an optional `kind` filter: `track`, `episode`, `movie`, `show` or `unknown` (default `any`).
+
+| Badge | Shows |
+| --- | --- |
+| `https://nowplaying-hosted.vercel.app/badges/now.json` | The live playback of that kind, or "not playing" when idle or the kind doesn't match |
+| `https://nowplaying-hosted.vercel.app/badges/last.json` | The same, falling back to the most recent playback of that kind whenever nothing of that kind is playing |
+
+For example, a badge that shows the film you last watched:
+
+```md
+![Last watched](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Flast.json%3Fuser%3Dyour-github-username%26kind%3Dmovie)
+```
+
+The label follows the kind: "listening to" for tracks, "watching" for films, episodes and shows, and "now playing" for anything else; the fallback badges say "last listened", "last watched" or "last played". Paused playback says so. A content badge shows only the title and subtitle your card already shows publicly — never artwork, timestamps, positions or anything about your PCs. It refreshes every minute.
 
 ### Signed in with GitHub (one card for all your PCs)
 
