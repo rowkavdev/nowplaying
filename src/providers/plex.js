@@ -7,7 +7,7 @@ import { readBoundedJson } from "../bounded-response.js";
  */
 
 import { defineProvider } from "../provider.js";
-import { fetchWithTimeout } from "./request.js";
+import { discardResponseBody, fetchWithTimeout } from "./request.js";
 import { imageRef, optionalCount, optionalText, optionalYear, playbackTimes, pickSession } from "./fields.js";
 
 const CLIENT_ID = "nowplaying";
@@ -40,7 +40,7 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/status/sessions`, {
         headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token },
       });
-      if (!response.ok) throw Object.assign(new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`), { status: response.status });
+      if (!response.ok) { discardResponseBody(response); throw Object.assign(new Error(`Plex sessions request failed: ${response.status} ${response.statusText}`), { status: response.status }); }
       const payload = await readBoundedJson(response);
       const listed = payload?.MediaContainer?.Metadata ?? [];
       if (!Array.isArray(listed)) throw new Error("Plex sessions response was not a list");

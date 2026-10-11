@@ -1,6 +1,6 @@
 import { readBoundedJson } from "../bounded-response.js";
 import { defineProvider } from "../provider.js";
-import { fetchWithTimeout } from "./request.js";
+import { discardResponseBody, fetchWithTimeout } from "./request.js";
 import { imageRef, optionalText, playbackTimes } from "./fields.js";
 
 export function createNavidromeProvider({ baseUrl, username, token, salt, fetchImpl = fetch }) {
@@ -16,7 +16,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
     mediaKinds: ["track"],
     async getPresence({ username: playingUser } = {}) {
       const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getNowPlaying.view?${auth}`);
-      if (!response.ok) throw Object.assign(new Error(`Navidrome now-playing request failed: ${response.status} ${response.statusText}`), { status: response.status });
+      if (!response.ok) { discardResponseBody(response); throw Object.assign(new Error(`Navidrome now-playing request failed: ${response.status} ${response.statusText}`), { status: response.status }); }
       const payload = await readBoundedJson(response);
       const root = payload?.["subsonic-response"];
       if (root?.status === "failed") throw Object.assign(new Error(`Navidrome API error: ${root.error?.message || "unknown error"}`), { status: Number(root.error?.code) === 40 ? 401 : undefined });
@@ -31,7 +31,7 @@ export function createNavidromeProvider({ baseUrl, username, token, salt, fetchI
       const query = new URLSearchParams(auth);
       query.set("username", username);
       const response = await fetchWithTimeout(fetchImpl, `${origin}/rest/getUser.view?${query}`);
-      if (!response.ok) throw Object.assign(new Error(`Navidrome user request failed: ${response.status} ${response.statusText}`), { status: response.status });
+      if (!response.ok) { discardResponseBody(response); throw Object.assign(new Error(`Navidrome user request failed: ${response.status} ${response.statusText}`), { status: response.status }); }
       const root = (await readBoundedJson(response))?.["subsonic-response"];
       if (root?.status === "failed") throw Object.assign(new Error(`Navidrome API error: ${root.error?.code === 40 ? "request failed: 401" : "user lookup failed"}`), { status: Number(root.error?.code) === 40 ? 401 : undefined });
       const name = typeof root?.user?.username === "string" ? root.user.username : null;
