@@ -181,6 +181,43 @@ test("the requests badge publishes the card request total as a Shields endpoint"
   assert.deepEqual([0, 999, 1000, 12_345, 999_950, 4_560_000, 2_500_000_000].map(compactCount), ["0", "999", "1k", "12.3k", "1M", "4.56M", "2.5B"]);
 });
 
+test("the usage badges publish aggregate registration and sign-in totals", async () => {
+  const redis = createMemoryRedis();
+  const service = createService({ redis });
+  const handlers = createHandlers({ getService: () => service });
+  const server = createServer((req, res) => handlers.pcsBadge(req, res));
+  const userServer = createServer((req, res) => handlers.usersBadge(req, res));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => userServer.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const { port: userPort } = userServer.address();
+  try {
+    let badge = await call(port, "GET", "/badges/pcs.json");
+    assert.equal(badge.status, 200);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "PCs registered", message: "0", color: "#58a6ff" });
+    assert.match(badge.headers["cache-control"], /max-age=300/);
+    await redis.command(["SET", "np:stats:registrations", "8123"]);
+    badge = await call(port, "GET", "/badges/pcs.json");
+    assert.equal(JSON.parse(badge.body).message, "8.12k");
+    assert.equal((await call(port, "POST", "/badges/pcs.json")).status, 405);
+    badge = await call(userPort, "GET", "/badges/users.json");
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "people signed in", message: "0", color: "#58a6ff" });
+    await redis.command(["SET", "np:stats:users", "94"]);
+    badge = await call(userPort, "GET", "/badges/users.json");
+    assert.equal(JSON.parse(badge.body).message, "94");
+    for (const [badgePort, key, path] of [[port, "np:stats:registrations", "/badges/pcs.json"], [userPort, "np:stats:users", "/badges/users.json"]]) {
+      await redis.command(["SET", key, "garbage"]);
+      badge = await call(badgePort, "GET", path);
+      assert.equal(badge.status, 503);
+      assert.equal(JSON.parse(badge.body).message, "unavailable");
+      assert.equal(badge.headers["cache-control"], "no-store");
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => userServer.close(resolve));
+  }
+});
+
 test("GitHub sign-in, device list and the /u/<login>.svg card over HTTP", async () => {
   const app = await start({ githubUser: async () => ({ id: 42, login: "octo" }) });
   try {

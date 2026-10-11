@@ -36,6 +36,19 @@ test("sign-in gives one card per GitHub user and never stores the GitHub token",
   await assert.rejects(service.readUserCardState("../x"), { status: 404 });
 });
 
+test("the public sign-in counter grows once per GitHub user and never per PC", async () => {
+  const { service, redis } = setup();
+  const userCount = () => redis.data.get("np:stats:users")?.value;
+  await signIn(service, "Desktop");
+  assert.equal(userCount(), "1");
+  await signIn(service, "Laptop");
+  assert.equal(userCount(), "1");
+  await service.signInWithGitHub({ githubToken: "gho_other000000000", deviceName: "Other user", clientKey: "k-o" });
+  assert.equal(userCount(), "2");
+  await signIn(service, "Replaced");
+  assert.equal(userCount(), "2");
+});
+
 test("bad GitHub tokens are refused and sign-in is rate limited per client", async () => {
   const { service } = setup();
   await assert.rejects(service.signInWithGitHub({ githubToken: "short", clientKey: "c" }), { status: 400 });

@@ -445,14 +445,18 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     return shown(JSON.parse(raw));
   }
 
-  // Public total for the README badge: how many card requests the service has
-  // answered. One aggregate number, nothing per card or per device.
-  async function readRequestCount() {
-    const raw = await cmd("GET", "np:stats:cards_rendered");
+  // Public totals for the README badges: one aggregate number each, nothing
+  // per card, per user or per device.
+  async function readTotalCount(key) {
+    const raw = await cmd("GET", key);
     const count = raw === null ? 0 : Number(raw);
     if (!Number.isSafeInteger(count) || count < 0) throw new ServiceError(503, "unavailable");
     return count;
   }
 
-  return { register, ingest, revoke, readCardState, readUserCardState, readRequestCount, signInWithGitHub, listDevices, renameDevice, removeDevice, signOutEverywhere };
+  function readRequestCount() { return readTotalCount("np:stats:cards_rendered"); }
+  function readRegistrationCount() { return readTotalCount("np:stats:registrations"); }
+  function readUserCount() { return readTotalCount("np:stats:users"); }
+
+  return { register, ingest, revoke, readCardState, readUserCardState, readRequestCount, readRegistrationCount, readUserCount, signInWithGitHub, listDevices, renameDevice, removeDevice, signOutEverywhere };
 }

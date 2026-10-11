@@ -65,15 +65,17 @@ export function createHandlers({ getService }) {
         sendCard(req, res, presence, options);
       } catch (error) { sendError(res, error); }
     },
-    // Shields.io endpoint badge (https://shields.io/badges/endpoint-badge).
+    // Shields.io endpoint badges (https://shields.io/badges/endpoint-badge).
+    // Each publishes one aggregate total; the privacy rules in
+    // docs/hosted-upload.md keep these free of anything per user or device.
     async requestsBadge(req, res) {
-      if (!requireMethod(req, res, ["GET", "HEAD"])) return;
-      try {
-        const count = await getService().readRequestCount();
-        sendJson(res, 200, { schemaVersion: 1, label: "card requests", message: compactCount(count), color: "#58a6ff" }, { "cache-control": "public, max-age=300, s-maxage=300" });
-      } catch {
-        sendJson(res, 503, { schemaVersion: 1, label: "card requests", message: "unavailable", color: "lightgrey" });
-      }
+      return badgeHandler(req, res, "card requests", () => getService().readRequestCount());
+    },
+    async pcsBadge(req, res) {
+      return badgeHandler(req, res, "PCs registered", () => getService().readRegistrationCount());
+    },
+    async usersBadge(req, res) {
+      return badgeHandler(req, res, "people signed in", () => getService().readUserCount());
     },
     health(req, res) {
       res.statusCode = 200;
@@ -82,6 +84,18 @@ export function createHandlers({ getService }) {
       res.end("ok");
     },
   };
+}
+
+// One Shields endpoint badge response for an aggregate counter read: a short
+// cached 200 with the compact count, or a 503 the reader can ignore.
+async function badgeHandler(req, res, label, readCount) {
+  if (!requireMethod(req, res, ["GET", "HEAD"])) return;
+  try {
+    const count = await readCount();
+    sendJson(res, 200, { schemaVersion: 1, label, message: compactCount(count), color: "#58a6ff" }, { "cache-control": "public, max-age=300, s-maxage=300" });
+  } catch {
+    sendJson(res, 503, { schemaVersion: 1, label, message: "unavailable", color: "lightgrey" });
+  }
 }
 
 // 999 -> "999", 12_345 -> "12.3k", 4_560_000 -> "4.56M".

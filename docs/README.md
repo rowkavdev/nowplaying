@@ -26,6 +26,7 @@ Two audiences, two homes:
 | [Windows packaging](windows-packaging.md) | Installer and portable ZIP layout, and why native files sit beside the EXE | Current |
 | [Deployment](deployment.md) | Self-hosting design notes: network boundaries, polling, supervision, containers | Partly design target; the hosted card and Windows app sections predate what shipped |
 | [Releases and versioning](releasing.md) | SemVer, immutable artifacts, checksums, provenance and migrations | Current |
+| [Release notes](release-notes/) | Notes per release: changes, migration and compatibility | Current |
 | [Security policy](../SECURITY.md) | Vulnerability reporting, deployment hardening, private data and secret handling | Current |
 
 ## Contributor docs
@@ -34,6 +35,8 @@ Two audiences, two homes:
 | --- | --- | --- |
 | [Architecture](architecture.md) | Module boundaries, data flow, errors and extension points | Current |
 | [Contributing](../CONTRIBUTING.md) | Setup, style, testing, focused PRs, licensing and review checklist | Current |
+| [Ways to help](contributing.md) | Where help is wanted, a worked Discord example and the pull request checklist | Current |
+| [Guide skeleton](guide-skeleton.md) | Tested example paths for install, Plex, Discord and the hosted card, verified by `scripts/guide-paths.js` | Current |
 
 ## Project references
 

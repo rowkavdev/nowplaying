@@ -14,6 +14,8 @@ test("hosted static output is limited to public/ and has a root page", async () 
 test("the requests badge has its public path", async () => {
   const config = JSON.parse(await readFile(new URL("../hosted/vercel.json", import.meta.url), "utf8"));
   assert.ok(config.rewrites.some((rule) => rule.source === "/badges/requests.json" && rule.destination === "/api/badge"));
+  assert.ok(config.rewrites.some((rule) => rule.source === "/badges/pcs.json" && rule.destination === "/api/badge-pcs"));
+  assert.ok(config.rewrites.some((rule) => rule.source === "/badges/users.json" && rule.destination === "/api/badge-users"));
   assert.ok(config.rewrites.some((rule) => rule.source === "/u/:login.svg" && rule.destination === "/api/card?user=:login"));
   assert.ok(config.rewrites.some((rule) => rule.source === "/api/auth/github" && rule.destination === "/api/auth-github"));
 });

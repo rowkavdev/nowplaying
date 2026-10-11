@@ -4,14 +4,19 @@
 [![Windows dev build](https://github.com/rowkavdev/nowplaying/actions/workflows/beta.yml/badge.svg?branch=main)](https://github.com/rowkavdev/nowplaying/releases/tag/dev)
 [![Coverage](https://codecov.io/gh/rowkavdev/nowplaying/graph/badge.svg?branch=main)](https://app.codecov.io/gh/rowkavdev/nowplaying)
 [![License: AGPL-3.0](https://img.shields.io/github/license/rowkavdev/nowplaying)](LICENSE)
+[![Cards shown](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Frequests.json)](docs/hosted-upload.md#usage-badges)
+[![PCs registered](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Fpcs.json)](docs/hosted-upload.md#usage-badges)
+[![People signed in](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Fusers.json)](docs/hosted-upload.md#usage-badges)
 
 Your media server knows what you are playing. nowplaying turns that into a card for your GitHub README and a status in Discord, without exposing your server to the internet. It runs on your PC and reads playback from Plex, Jellyfin, Emby or Navidrome. Spotify and a paired YouTube extension can also feed the card.
 
 | Studio · music | Editorial · film | Hi-Fi · TV |
 | :---: | :---: | :---: |
 | ![Studio: Blue Monday by New Order with sample cover art](docs/assets/cards/studio.svg) | ![Editorial: Dune Part Two with sample poster art](docs/assets/cards/editorial-film.svg) | ![Hi-Fi: Lost, The Constant, with sample poster art](docs/assets/cards/terminal-episode.svg) |
+| **Classic · music** | **Paper · music** | **Compact · music** |
+| ![Classic: Holocene by Bon Iver](docs/assets/cards/music-playing.svg) | ![Paper: Holocene by Bon Iver](docs/assets/cards/music-light.svg) | ![Compact: Holocene by Bon Iver](docs/assets/cards/compact.svg) |
 
-Studio puts artwork behind the card. Editorial pairs a large cover with warm paper and serif type. Hi-Fi adds record grooves and an amber timeline. Classic, Paper and Compact are also available. **[Explore all six styles, with music, film and TV examples →](docs/card-examples.md)**
+Studio puts artwork behind the card. Editorial pairs a large cover with warm paper and serif type. Hi-Fi adds record grooves and an amber timeline. Classic is the original dark card, Paper its light twin and Compact a single text-only line. **[See every style with music, film and TV examples →](docs/card-examples.md)**
 
 *Examples rendered by the app with illustrated sample artwork. Your card uses the current album cover or poster; hosted covers require **Include cover art** in Settings.*
 
