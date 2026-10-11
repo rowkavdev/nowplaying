@@ -57,62 +57,14 @@ const buildPage = (startupCopy) => `<!doctype html>
 </div>
 <details class="drpp-accordion" id="settings-servers" open><summary><span class="section-copy"><span>Media servers</span><small>Connect Plex, Jellyfin, Emby or Navidrome.</small></span></summary>${serverPanel()}</details>
 <details class="drpp-accordion" id="settings-services"><summary><span class="section-copy"><span>Connected services</span><small>Spotify and your card hosting account.</small></span></summary>${servicePanel()}</details>
-<details class="drpp-accordion" id="settings-discord"><summary><span class="section-copy"><span>Discord Settings</span><small>Choose what appears on your profile.</small></span></summary>
-<form id="discord-form">
-<section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
-<p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
-<p class="row"><label for="discord-timestamps">Timer</label>
-<select id="discord-timestamps" name="timestamps">
-<option value="both">Time played and time left</option>
-<option value="elapsed">Time played</option>
-<option value="remaining">Time left</option>
-<option value="none">No timer</option>
-</select></p>
-<p class="row"><label for="discord-idle">When nothing is playing</label>
-<select id="discord-idle" name="idleBehavior">
-<option value="clear">Clear my status</option>
-<option value="grace">Keep it for a short grace period</option>
-<option value="show">Show that nothing is playing</option>
-<option value="recent">Show what I played last</option>
-</select></p>
-<p class="row"><label for="discord-name">Status text</label>
-<input type="text" id="discord-name" name="name" maxlength="128" placeholder="{title} - {artist}" aria-describedby="discord-name-help"></p>
-<p class="hint" id="discord-name-help">What Discord shows in your status, next to your name. Leave it empty for "{title} - {artist}" on music. Films and episodes use the app name. Fields you can use: {artist}, {title}, {subtitle}, {album}, {year}, {series}, {season}, {episode}, {episodeCode}, {service} (Spotify, Navidrome and so on), {provider}, {mediaType}, {state}, {stateLabel}, {position}, {duration} and {progressPercent}. Anything else you type is kept as it is. To show a literal brace, write {{ or }}.</p>
-<p class="row"><label for="discord-status-type">Status shows</label>
-<select id="discord-status-type" name="statusDisplayType">
-<option value="name">The status text above</option>
-<option value="state">The second line (artist or episode)</option>
-<option value="details">The first line (title)</option>
-</select></p>
-<p class="row"><label for="discord-upload">Show my server's cover</label>
-<input type="checkbox" id="discord-upload" name="artworkUpload" aria-describedby="discord-upload-help"></p>
-<p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to Litterbox (72 hours), or tmpfiles.org (48 hours) if the first host fails. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
-<p class="row"><label for="discord-artwork">If that fails</label>
-<select id="discord-artwork" name="artworkLookup" aria-describedby="discord-artwork-help">
-<option value="musicbrainz">Look up the cover on MusicBrainz</option>
-<option value="off">Show the NowPlaying icon</option>
-</select></p>
-<p class="hint" id="discord-artwork-help">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
-<p><button type="submit" id="discord-save" aria-label="Save Discord settings">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
-<p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
-<p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
+<details class="drpp-accordion" id="settings-youtube"><summary><span class="section-copy"><span>YouTube Settings</span><small>Pair your browser extension.</small></span></summary>
+<section id="youtube-section" aria-labelledby="h-youtube" hidden><h2 id="h-youtube">YouTube</h2>
+<p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
+<dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
+<dt>Port</dt><dd><code id="youtube-port">-</code></dd></dl>
+<p class="row"><button type="button" id="youtube-show" disabled aria-pressed="false">Show code</button> <button type="button" id="youtube-copy" disabled>Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
+<p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
 </section>
-</form>
-</details>
-<details class="drpp-accordion" id="settings-privacy"><summary><span class="section-copy"><span>Privacy Settings</span><small>Control what other people can see.</small></span></summary>
-<form id="privacy-form" hidden>
-<section aria-labelledby="h-privacy"><h2 id="h-privacy">Privacy</h2>
-<p class="hint">Applies to Discord, the hosted card and your local card.</p>
-<p class="row"><label><input type="checkbox" id="privacy-hideTitles"> Hide titles (shows "Private media")</label></p>
-<p class="row"><label><input type="checkbox" id="privacy-hideArtwork"> Hide album art</label></p>
-<p class="row"><label><input type="checkbox" id="privacy-hideProgress"> Hide progress and timer</label></p>
-<fieldset><legend>Don't show when I'm playing</legend>
-<p class="row"><label><input type="checkbox" id="privacy-hideMovies"> Movies</label> <label><input type="checkbox" id="privacy-hideEpisodes"> TV episodes</label> <label><input type="checkbox" id="privacy-hideMusic"> Music</label></p>
-</fieldset>
-<p class="hint">Hidden kinds show as nothing playing. With titles or album art hidden, covers are never looked up on MusicBrainz.</p>
-<p><button type="submit" id="privacy-save" aria-label="Save privacy settings">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
-</section>
-</form>
 </details>
 <details class="drpp-accordion" id="settings-card"><summary><span class="section-copy"><span>Card Settings</span><small>Choose a style and make it your own.</small></span></summary>
 <form id="card-form" hidden>
@@ -209,20 +161,60 @@ ${Object.entries(cardPresets).map(([key, preset]) => `<option value="${key}">${p
 </section>
 </form>
 </details>
-<details class="drpp-accordion" id="settings-youtube"><summary><span class="section-copy"><span>YouTube Settings</span><small>Pair your browser extension.</small></span></summary>
-<section id="youtube-section" aria-labelledby="h-youtube" hidden><h2 id="h-youtube">YouTube</h2>
-<p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
-<dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
-<dt>Port</dt><dd><code id="youtube-port">-</code></dd></dl>
-<p class="row"><button type="button" id="youtube-show" disabled aria-pressed="false">Show code</button> <button type="button" id="youtube-copy" disabled>Copy code</button> <button type="button" id="youtube-reset">Make a new code</button> <span id="youtube-result" role="status" aria-live="polite"></span></p>
-<p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
+<details class="drpp-accordion" id="settings-discord"><summary><span class="section-copy"><span>Discord Settings</span><small>Choose what appears on your profile.</small></span></summary>
+<form id="discord-form">
+<section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
+<p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
+<p class="row"><label for="discord-timestamps">Timer</label>
+<select id="discord-timestamps" name="timestamps">
+<option value="both">Time played and time left</option>
+<option value="elapsed">Time played</option>
+<option value="remaining">Time left</option>
+<option value="none">No timer</option>
+</select></p>
+<p class="row"><label for="discord-idle">When nothing is playing</label>
+<select id="discord-idle" name="idleBehavior">
+<option value="clear">Clear my status</option>
+<option value="grace">Keep it for a short grace period</option>
+<option value="show">Show that nothing is playing</option>
+<option value="recent">Show what I played last</option>
+</select></p>
+<p class="row"><label for="discord-name">Status text</label>
+<input type="text" id="discord-name" name="name" maxlength="128" placeholder="{title} - {artist}" aria-describedby="discord-name-help"></p>
+<p class="hint" id="discord-name-help">What Discord shows in your status, next to your name. Leave it empty for "{title} - {artist}" on music. Films and episodes use the app name. Fields you can use: {artist}, {title}, {subtitle}, {album}, {year}, {series}, {season}, {episode}, {episodeCode}, {service} (Spotify, Navidrome and so on), {provider}, {mediaType}, {state}, {stateLabel}, {position}, {duration} and {progressPercent}. Anything else you type is kept as it is. To show a literal brace, write {{ or }}.</p>
+<p class="row"><label for="discord-status-type">Status shows</label>
+<select id="discord-status-type" name="statusDisplayType">
+<option value="name">The status text above</option>
+<option value="state">The second line (artist or episode)</option>
+<option value="details">The first line (title)</option>
+</select></p>
+<p class="row"><label for="discord-upload">Show my server's cover</label>
+<input type="checkbox" id="discord-upload" name="artworkUpload" aria-describedby="discord-upload-help"></p>
+<p class="hint" id="discord-upload-help">Discord can only show a picture from a public address, so this uploads just the cover image to Litterbox (72 hours), or tmpfiles.org (48 hours) if the first host fails. No title, artist, token or server address is sent. Turn it off and a private server's art is never sent to Discord.</p>
+<p class="row"><label for="discord-artwork">If that fails</label>
+<select id="discord-artwork" name="artworkLookup" aria-describedby="discord-artwork-help">
+<option value="musicbrainz">Look up the cover on MusicBrainz</option>
+<option value="off">Show the NowPlaying icon</option>
+</select></p>
+<p class="hint" id="discord-artwork-help">MusicBrainz lookups send only the track title and artist to musicbrainz.org and coverartarchive.org.</p>
+<p><button type="submit" id="discord-save" aria-label="Save Discord settings">Save</button> <span id="discord-result" role="status" aria-live="polite"></span></p>
+<p class="row"><button type="button" id="refresh-art">Refresh album art</button> <span id="refresh-result" role="status" aria-live="polite"></span></p>
+<p class="hint">Use this if Discord shows an old or wrong cover. It forgets saved covers and looks them up again now.</p>
 </section>
+</form>
 </details>
-<details class="drpp-accordion" id="settings-startup"><summary><span class="section-copy"><span>Startup Settings</span><small>Launch NowPlaying when you sign in.</small></span></summary>
-<form id="startup-form" hidden>
-<section aria-labelledby="h-startup"><h2 id="h-startup">${startupCopy.heading}</h2>
-<p class="row"><label><input type="checkbox" id="startup-enabled"> ${startupCopy.label}</label></p>
-<p><button type="submit" id="startup-save" aria-label="Save startup settings">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
+<details class="drpp-accordion" id="settings-privacy"><summary><span class="section-copy"><span>Privacy Settings</span><small>Control what other people can see.</small></span></summary>
+<form id="privacy-form" hidden>
+<section aria-labelledby="h-privacy"><h2 id="h-privacy">Privacy</h2>
+<p class="hint">Applies to Discord, the hosted card and your local card.</p>
+<p class="row"><label><input type="checkbox" id="privacy-hideTitles"> Hide titles (shows "Private media")</label></p>
+<p class="row"><label><input type="checkbox" id="privacy-hideArtwork"> Hide album art</label></p>
+<p class="row"><label><input type="checkbox" id="privacy-hideProgress"> Hide progress and timer</label></p>
+<fieldset><legend>Don't show when I'm playing</legend>
+<p class="row"><label><input type="checkbox" id="privacy-hideMovies"> Movies</label> <label><input type="checkbox" id="privacy-hideEpisodes"> TV episodes</label> <label><input type="checkbox" id="privacy-hideMusic"> Music</label></p>
+</fieldset>
+<p class="hint">Hidden kinds show as nothing playing. With titles or album art hidden, covers are never looked up on MusicBrainz.</p>
+<p><button type="submit" id="privacy-save" aria-label="Save privacy settings">Save</button> <span id="privacy-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
@@ -248,6 +240,14 @@ ${Object.entries(cardPresets).map(([key, preset]) => `<option value="${key}">${p
 </section>
 </details>
 <!-- /Hosted card devices -->
+<details class="drpp-accordion" id="settings-startup"><summary><span class="section-copy"><span>Startup Settings</span><small>Launch NowPlaying when you sign in.</small></span></summary>
+<form id="startup-form" hidden>
+<section aria-labelledby="h-startup"><h2 id="h-startup">${startupCopy.heading}</h2>
+<p class="row"><label><input type="checkbox" id="startup-enabled"> ${startupCopy.label}</label></p>
+<p><button type="submit" id="startup-save" aria-label="Save startup settings">Save</button> <span id="startup-result" role="status" aria-live="polite"></span></p>
+</section>
+</form>
+</details>
 </div></main><aside class="drpp-logs" aria-labelledby="drpp-log-heading">
 <div class="drpp-panel-heading"><span class="drpp-indicator" id="drpp-log-indicator" role="img" aria-label="Log connection status"></span><h2 id="drpp-log-heading">Logs</h2><span class="drpp-divider"></span><label><input type="checkbox" id="drpp-auto-scroll" checked> Auto Scroll</label><label><input type="checkbox" id="drpp-wrap"> Wrap Text</label><span class="drpp-divider"></span><input id="drpp-search" type="search" aria-label="Search logs" aria-describedby="drpp-log-error" placeholder="Search logs (regex)"><small id="drpp-log-count">0 entries</small></div>
 <p id="drpp-log-error" role="status" hidden></p><div id="drpp-log-lines" tabindex="0" aria-label="Recent app events" class="drpp-log-lines" role="log" aria-live="off"></div>
