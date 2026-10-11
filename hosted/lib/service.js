@@ -504,14 +504,15 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   // Content for the /badges/now.json and /badges/last.json badges: the live
   // playback filtered by kind, or with `last` the most recent playback of that
   // kind. Only fields the public card already shows, never a device or token.
-  async function readBadgeState({ id, login, kind = "any", last = false }) {
-    if (kind !== "any" && !KINDS.has(kind)) throw new ServiceError(400, "invalid_kind");
-    const { userId, cardId, presence } = await resolvePresence({ id, login });
-    if (presence.state !== "idle" && presence.title && (kind === "any" || presence.kind === kind)) {
-      return { state: presence.state, kind: presence.kind, title: presence.title, subtitle: presence.subtitle };
-    }
-    if (!last) return { ...IDLE };
-    const scope = userId != null ? `np:last:user:${userId}` : cardId != null ? `np:last:card:${cardId}` : null;
+  // The live playback when it matches the requested kind, else nothing.
+  function liveBadgeFor(presence, kind) {
+    if (presence.state === "idle" || !presence.title) return null;
+    if (kind !== "any" && presence.kind !== kind) return null;
+    return { state: presence.state, kind: presence.kind, title: presence.title, subtitle: presence.subtitle };
+  }
+
+  // The most recent last-played record of the requested kind in this scope.
+  async function lastBadgeFor(scope, kind) {
     if (!scope) return { ...IDLE };
     const kinds = kind === "any" ? [...KINDS] : [kind];
     const raws = await cmd("MGET", ...kinds.map((entry) => `${scope}:${entry}`));
@@ -521,6 +522,16 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
       try { const entry = JSON.parse(raw); if (entry?.title && (!best || entry.at >= best.at)) best = entry; } catch { /* ignore */ }
     }
     return best ? { state: best.state ?? "idle", kind: best.kind ?? "unknown", title: best.title, subtitle: best.subtitle ?? null } : { ...IDLE };
+  }
+
+  async function readBadgeState({ id, login, kind = "any", last = false }) {
+    if (kind !== "any" && !KINDS.has(kind)) throw new ServiceError(400, "invalid_kind");
+    const { userId, cardId, presence } = await resolvePresence({ id, login });
+    const live = liveBadgeFor(presence, kind);
+    if (live) return live;
+    if (!last) return { ...IDLE };
+    const scope = userId != null ? `np:last:user:${userId}` : cardId != null ? `np:last:card:${cardId}` : null;
+    return lastBadgeFor(scope, kind);
   }
 
   // Public totals for the README badges: one aggregate number each, nothing
