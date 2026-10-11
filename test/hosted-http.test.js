@@ -218,6 +218,63 @@ test("the usage badges publish aggregate registration and sign-in totals", async
   }
 });
 
+test("the content badges show filtered playback and fall back to last played", async () => {
+  const redis = createMemoryRedis();
+  const now = () => 1_800_000_000_000;
+  const githubUser = async (token) => {
+    if (token !== "gho_rowan00000000") { const e = new Error("github_unauthorized"); e.status = 401; e.code = "github_unauthorized"; throw e; }
+    return { id: 101, login: "RowKav" };
+  };
+  const service = createService({ redis, now, githubUser });
+  const handlers = createHandlers({ getService: () => service });
+  const routes = { "/badges/now.json": handlers.nowBadge, "/badges/last.json": handlers.lastBadge };
+  const server = createServer((req, res) => routes[new URL(req.url, "http://x").pathname]?.(req, res) ?? (res.statusCode = 404, res.end()));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  const get = async (path) => call(port, "GET", path);
+  try {
+    const { login, token } = await service.signInWithGitHub({ githubToken: "gho_rowan00000000", deviceName: "Desk" });
+    const push = (seq, extra) => service.ingest({ token, payload: { v: 1, seq, observedAt: now(), state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", ...extra } });
+    let badge = await get(`/badges/now.json?user=${login}`);
+    assert.equal(badge.status, 200);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "now playing", message: "not playing", color: "lightgrey" });
+    assert.match(badge.headers["cache-control"], /max-age=60/);
+    await push(1, {});
+    badge = await get(`/badges/now.json?user=${login}`);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "listening to", message: "Blue Monday — New Order", color: "#58a6ff" });
+    badge = await get(`/badges/now.json?user=${login}&kind=movie`);
+    assert.equal(JSON.parse(badge.body).message, "not playing");
+    await push(2, { kind: "movie", title: "Dune Part Two", subtitle: null });
+    badge = await get(`/badges/now.json?user=${login}&kind=movie`);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "watching", message: "Dune Part Two", color: "#58a6ff" });
+    badge = await get(`/badges/last.json?user=${login}&kind=track`);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "last listened", message: "Blue Monday — New Order", color: "#58a6ff" });
+    await push(3, { state: "idle", kind: "movie", title: null, subtitle: null });
+    badge = await get(`/badges/now.json?user=${login}`);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "now playing", message: "not playing", color: "lightgrey" });
+    badge = await get(`/badges/last.json?user=${login}`);
+    assert.equal(JSON.parse(badge.body).message, "Dune Part Two");
+    assert.equal((await get("/badges/now.json")).status, 400);
+    assert.equal((await get(`/badges/now.json?user=${login}&kind=album`)).status, 400);
+    assert.equal((await get("/badges/now.json?user=../x")).status, 404);
+    assert.equal((await get(`/badges/now.json?user=${login}`)).headers["cache-control"], "public, max-age=60, s-maxage=60");
+    assert.equal((await call(port, "POST", `/badges/now.json?user=${login}`)).status, 405);
+    assert.doesNotMatch(JSON.stringify(await Promise.all([get(`/badges/now.json?user=${login}`), get(`/badges/last.json?user=${login}`)])), new RegExp(token));
+    // The legacy per-PC flow works the same through the id parameter.
+    const legacy = await service.register({ clientKey: "legacy" });
+    await service.ingest({ token: legacy.token, payload: { v: 1, seq: 1, observedAt: now(), state: "paused", kind: "episode", title: "The Constant", subtitle: "Lost" } });
+    badge = await get(`/badges/now.json?id=${legacy.cardId}`);
+    assert.deepEqual(JSON.parse(badge.body), { schemaVersion: 1, label: "watching", message: "The Constant — Lost (paused)", color: "#58a6ff" });
+    await service.ingest({ token: legacy.token, payload: { v: 1, seq: 2, observedAt: now(), state: "playing", kind: "track", title: "A".repeat(120), subtitle: null } });
+    badge = await get(`/badges/now.json?id=${legacy.cardId}`);
+    const long = JSON.parse(badge.body).message;
+    assert.equal(long.length, 100);
+    assert.ok(long.endsWith("..."), "a long title is truncated with an ellipsis");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("GitHub sign-in, device list and the /u/<login>.svg card over HTTP", async () => {
   const app = await start({ githubUser: async () => ({ id: 42, login: "octo" }) });
   try {

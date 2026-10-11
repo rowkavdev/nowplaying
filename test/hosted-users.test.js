@@ -376,3 +376,44 @@ test("registration does not restart a healthy bucket's window or count", async (
   assert.equal(await redis.command(["GET", key]), "4");
   assert.equal(redis.data.get(key).expiresAt, clock + 1200 * 1000);
 });
+
+test("the last-played badge follows the user card across kinds and aliases", async () => {
+  const { service, now } = setup();
+  const old = await service.register({ clientKey: "legacy" });
+  await service.ingest({ token: old.token, payload: up(now(), { seq: 1, kind: "movie", title: "Old Link Film" }) });
+  const me = await signIn(service, "Desktop", { legacyToken: old.token });
+  await service.ingest({ token: me.token, payload: up(now(), { seq: 2, kind: "track", title: "Blue Monday", subtitle: "New Order" }) });
+  let badge = await service.readBadgeState({ login: "RowKav" });
+  assert.equal(badge.title, "Blue Monday");
+  badge = await service.readBadgeState({ login: "RowKav", kind: "movie", last: true });
+  assert.equal(badge.title, "Old Link Film");
+  // The old per-PC link resolves to the same user's last-played records.
+  badge = await service.readBadgeState({ id: old.cardId, kind: "movie", last: true });
+  assert.equal(badge.title, "Old Link Film");
+  badge = await service.readBadgeState({ id: old.cardId, kind: "episode", last: true });
+  assert.equal(badge.state, "idle");
+});
+
+test("signing out everywhere deletes the user's last-played records", async () => {
+  const { service, redis, now } = setup();
+  const me = await signIn(service, "Desktop");
+  await service.ingest({ token: me.token, payload: up(now(), { seq: 1, kind: "movie", title: "Dune" }) });
+  assert.ok([...redis.data.keys()].some((key) => key.startsWith("np:last:user:101:")), "the user record exists");
+  const out = await service.signOutEverywhere({ token: me.token });
+  assert.equal(out.removed, 1);
+  assert.equal([...redis.data.keys()].some((key) => key.startsWith("np:last:user:101:")), false);
+});
+
+test("an aliased legacy record cannot overwrite a newer user record", async () => {
+  const { service, now, advance } = setup();
+  const old = await service.register({ clientKey: "legacy" });
+  await service.ingest({ token: old.token, payload: up(now(), { seq: 1, kind: "track", title: "Old Song" }) });
+  advance(60_000);
+  await signIn(service, "Desktop");
+  advance(60_000);
+  const me = await signIn(service, "Laptop");
+  await service.ingest({ token: me.token, payload: up(now(), { seq: 1, kind: "track", title: "New Song" }) });
+  await signIn(service, "Migrated", { legacyToken: old.token });
+  const badge = await service.readBadgeState({ login: "RowKav", kind: "track", last: true });
+  assert.equal(badge.title, "New Song");
+});

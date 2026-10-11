@@ -33,6 +33,14 @@
     {
       "source": "/badges/users.json",
       "destination": "/api/badge-users"
+    },
+    {
+      "source": "/badges/now.json",
+      "destination": "/api/badge-now"
+    },
+    {
+      "source": "/badges/last.json",
+      "destination": "/api/badge-last"
     }
   ],
   "headers": [

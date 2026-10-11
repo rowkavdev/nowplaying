@@ -231,3 +231,80 @@ test("a bad token is rejected before it counts against any limit", async () => {
   await assert.rejects(service.ingest({ token: "x".repeat(43), payload: update(now()) }), { status: 401 });
   assert.equal([...redis.data.keys()].some((key) => key.startsWith("np:rl:ingest:")), false);
 });
+
+test("the last-played badge remembers each kind separately and falls back after idle", async () => {
+  const { service, now, advance } = setup();
+  const { cardId, token } = await service.register();
+  await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Blue Monday", subtitle: "New Order" }) });
+  advance(1);
+  await service.ingest({ token, payload: update(now(), { seq: 2, kind: "movie", title: "Dune Part Two", subtitle: null }) });
+  advance(1_000);
+  let badge = await service.readBadgeState({ id: cardId });
+  assert.equal(badge.kind, "movie");
+  assert.equal(badge.title, "Dune Part Two");
+  badge = await service.readBadgeState({ id: cardId, kind: "track" });
+  assert.equal(badge.state, "idle");
+  badge = await service.readBadgeState({ id: cardId, kind: "track", last: true });
+  assert.equal(badge.title, "Blue Monday");
+  badge = await service.readBadgeState({ id: cardId, kind: "track", last: true });
+  assert.equal(badge.title, "Blue Monday");
+  await service.ingest({ token, payload: update(now(), { seq: 3, state: "idle" }) });
+  assert.equal((await service.readBadgeState({ id: cardId })).state, "idle");
+  badge = await service.readBadgeState({ id: cardId, last: true });
+  assert.equal(badge.title, "Dune Part Two");
+  assert.equal(badge.subtitle, null);
+  await assert.rejects(service.readBadgeState({ id: cardId, kind: "album" }), { status: 400, code: "invalid_kind" });
+  await assert.rejects(service.readBadgeState({ login: "nobody", last: true }), { status: 404 });
+  // The records are per kind and expire after a week on their own.
+  advance(7 * 24 * 60 * 60 * 1000 + 1_000);
+  assert.equal((await service.readBadgeState({ id: cardId, last: true })).state, "idle");
+});
+
+test("last-played records hold only card fields and are per kind", async () => {
+  const { service, redis, now } = setup();
+  const { cardId, token } = await service.register();
+  await service.ingest({ token, payload: update(now(), { seq: 1, kind: "episode", title: "The Constant", subtitle: "Lost", positionMs: 5000, durationMs: 2500000 }) });
+  const record = redis.data.get(`np:last:card:${cardId}:episode`);
+  assert.ok(record, "the record exists");
+  const stored = JSON.parse(record.value);
+  assert.deepEqual(Object.keys(stored).sort(), ["at", "kind", "state", "subtitle", "title"]);
+  assert.equal(stored.title, "The Constant");
+  assert.ok(!("artworkDataUri" in stored) && !("positionMs" in stored) && !("durationMs" in stored));
+  assert.ok(record.expiresAt - now() > 6 * 24 * 60 * 60 * 1000, "the record expires in about a week");
+  await service.ingest({ token, payload: update(now(), { seq: 2, state: "idle" }) });
+  assert.ok(redis.data.get(`np:last:card:${cardId}:episode`), "an idle update keeps the record");
+});
+
+test("revoking a legacy card deletes its last-played records", async () => {
+  const { service, redis, now } = setup();
+  const { cardId, token } = await service.register();
+  await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Song" }) });
+  assert.ok(redis.data.get(`np:last:card:${cardId}:track`), "the record exists before revoke");
+  await service.revoke({ token });
+  assert.equal(redis.data.get(`np:last:card:${cardId}:track`), undefined);
+});
+
+test("a failing last-played record never fails an accepted ingest", async () => {
+  const { service, redis, now } = setup();
+  const { cardId, token } = await service.register();
+  const original = redis.command.bind(redis);
+  redis.command = async (args) => {
+    if (String(args[0]).toUpperCase() === "SET" && String(args[1]).startsWith("np:last:")) throw new Error("redis down");
+    return original(args);
+  };
+  const result = await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Song" }) });
+  assert.equal(result.accepted, true);
+  assert.equal((await service.readCardState(cardId)).title, "Song");
+});
+
+test("badge reads never count card renders", async () => {
+  const { service, redis, now } = setup();
+  const { cardId, token } = await service.register();
+  await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Song" }) });
+  await service.readCardState(cardId);
+  const renders = () => redis.data.get("np:stats:cards_rendered")?.value;
+  assert.equal(renders(), "1");
+  await service.readBadgeState({ id: cardId });
+  await service.readBadgeState({ id: cardId, last: true });
+  assert.equal(renders(), "1");
+});
