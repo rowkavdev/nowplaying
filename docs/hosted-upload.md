@@ -14,6 +14,7 @@ Only these fields, and only the ones your card shows:
 | Title | Always, unless privacy mode hides it. With "redact titles" on, the card gets "Private media" instead |
 | Artist / show | Card shows the subtitle and titles aren't redacted |
 | Position and length | Card shows progress and privacy doesn't hide it |
+| Small cover image | Only with **Include cover art** enabled, artwork visible, and titles unredacted |
 | Track, episode or movie | Card shows the media type |
 | Time of the update and a counter | Always (stops old or replayed updates) |
 
@@ -23,9 +24,15 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 
 - Your media server's address, your username or anyone else on the server
 - Your server sign-in or API key
-- Artwork or artwork links
+- Artwork links (optional uploads contain image pixels only)
 - Discord details (Discord presence stays on your PC)
 - A history of what you've played
+
+## Cover art
+
+Enable **Settings → Hosted Card Settings → Include cover art** to share album covers and posters. It is off by default, including after upgrades. The app fetches artwork locally, strips metadata, resizes it to fit within 256 × 256 pixels, and uploads a PNG of at most 48 KiB. The image is public with the card and expires with the playback state. The service never fetches an artwork URL or contacts your media server. **Hide artwork**, **Hide titles**, private mode and hidden media types prevent cover uploads. Compact cards remain text-only. Turning cover sharing off replaces the stored image on the next successful update; CDN copies can remain for the normal 30-second cache lifetime.
+
+Deploy the updated hosted service before enabling cover sharing in the updated desktop app; older service versions reject the new optional image field.
 
 ## How it's stored
 
@@ -58,7 +65,7 @@ Disconnecting a PC deletes that PC's state and device key on the service, and re
 
 ## For developers
 
-- Config: `hosted: { "enabled": true, "url": "https://..." }` in `config.json`. `url` is optional and must be HTTPS.
+- Config: `hosted: { "enabled": true, "artwork": false, "url": "https://..." }` in `config.json`. `url` is optional and must be HTTPS.
 - Payload: built by `projectHostedState` in `src/hosted-projection.js`; tests in `test/hosted-projection.test.js` check that fields turned off for the card never reach the wire.
 - Client: `src/hosted-uploader.js`; GitHub sign-in (device flow): `src/hosted-signin.js`. Service and schema: [hosted/README.md](../hosted/README.md). Design: #140.
 

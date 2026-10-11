@@ -104,7 +104,7 @@ test("the running app applies a card save to /card.svg without a restart", async
     assert.equal(parseAppConfig(await readFile(file, "utf8")).card.theme, "paper");
     // The preview draws a placeholder so artwork placement is visible.
     const right = await (await fetch(`${app.url}/api/settings/card/preview.svg?width=440&padding=24&artworkPosition=right&artworkWidth=100&artworkHeight=100`)).text();
-    assert.match(right, /<image href="data:image\/png;base64,[^"]+" x="316" y="24" width="100" height="100"/);
+    assert.match(right, /<image href="data:image\/(?:png|jpeg);base64,[^"]+" x="316" y="24" width="100" height="100"/);
     const artSaved = await fetch(`${app.url}/api/settings`, { method: "PUT", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ card: { artworkPosition: "right", artworkWidth: 100 } }) });
     assert.equal(artSaved.status, 200);
     const onDisk = parseAppConfig(await readFile(file, "utf8")).card;
@@ -138,13 +138,13 @@ test("the hosted link follows the saved card style, width and progress bar", asy
   const base = "https://nowplaying-hosted.vercel.app/card/abc.svg";
   assert.equal(hostedLink(null)(base), base);
   assert.equal(hostedLink(DEFAULTS)(base), base);
-  assert.equal(hostedLink({ ...DEFAULTS, theme: "paper", width: 520, showProgress: false })(base), `${base}?theme=paper&width=520&show=mediaType,state,subtitle`);
+  assert.equal(hostedLink({ ...DEFAULTS, theme: "paper", width: 520, showProgress: false })(base), `${base}?theme=paper&width=520&show=artwork,mediaType,state,subtitle`);
   assert.equal(hostedLink({ ...DEFAULTS, theme: "compact", showProgress: false })(base), `${base}?theme=compact`);
   assert.equal(hostedLink({ ...DEFAULTS, radius: 0, padding: 12 })(base), `${base}?padding=12&radius=0`);
-  assert.equal(hostedLink({ ...DEFAULTS, artworkPosition: "right", artworkWidth: 120, artworkHeight: 120 })(base), base, "artwork settings stay local");
+  assert.equal(hostedLink({ ...DEFAULTS, artworkPosition: "right", artworkWidth: 120, artworkHeight: 120 })(base), `${base}?artworkPosition=right&artworkWidth=120&artworkHeight=120`, "artwork layout follows shared covers");
   assert.equal(hostedLink({ ...DEFAULTS, progressHeight: 8, fieldOrder: ["title", "subtitle", "state"], textAlign: "middle", progressPosition: "text", progressWidth: "full", direction: "auto" })(base),
     `${base}?progressHeight=8&fieldOrder=title,subtitle,state&textAlign=middle&progressPosition=text&progressWidth=full&direction=auto`);
-  assert.equal(hostedLink({ ...DEFAULTS, showProgress: false, progressHeight: 8, progressPosition: "text", progressWidth: "full" })(base), `${base}?show=mediaType,state,subtitle`, "bar options drop when the bar is off");
+  assert.equal(hostedLink({ ...DEFAULTS, showProgress: false, progressHeight: 8, progressPosition: "text", progressWidth: "full" })(base), `${base}?show=artwork,mediaType,state,subtitle`, "bar options drop when the bar is off");
   assert.equal(hostedLink(DEFAULTS)(""), "");
 });
 
@@ -153,8 +153,10 @@ test("live movie preview keeps the live title and reports its automatic art widt
   const dir = await mkdtemp(join(tmpdir(), "np-preview-movie-"));
   const file = join(dir, "config.json");
   await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false }));
-  const fetchImpl = async (url) => String(url).endsWith("/Sessions")
-    ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "movie-1", Name: "Example movie", Type: "Movie", ProductionYear: 2024 }, PlayState: { IsPaused: false } }])
+  const { previewArtwork } = await import("../src/setup-preview.js");
+  const art = Buffer.from((await previewArtwork("film")).split(",")[1], "base64");
+  const fetchImpl = async (url) => String(url).includes("/Images/") ? new Response(art, { headers: { "Content-Type": "image/jpeg" } }) : String(url).endsWith("/Sessions")
+    ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "movie-1", ImageTags: { Primary: "fixture" }, Name: "Example movie", Type: "Movie", ProductionYear: 2024 }, PlayState: { IsPaused: false } }])
     : Response.json([]);
   const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });
   try {
@@ -186,7 +188,9 @@ test("Hide progress and timer removes the bar from the live card and Settings pr
   const dir = await mkdtemp(join(tmpdir(), "np-hidden-progress-"));
   const file = join(dir, "config.json");
   await writeFile(file, serializeSetupConfig({ ...BASE, discordEnabled: false, privacy: { hideProgress: true }, card: { showProgress: true } }));
-  const fetchImpl = async (url) => String(url).endsWith("/Sessions")
+  const { previewArtwork } = await import("../src/setup-preview.js");
+  const art = Buffer.from((await previewArtwork("film")).split(",")[1], "base64");
+  const fetchImpl = async (url) => String(url).includes("/Images/") ? new Response(art, { headers: { "Content-Type": "image/jpeg" } }) : String(url).endsWith("/Sessions")
     ? Response.json([{ UserId: "u1", NowPlayingItem: { Id: "song", Name: "Example song", Type: "Audio", RunTimeTicks: 1_200_000_000 }, PlayState: { IsPaused: false, PositionTicks: 600_000_000 } }])
     : Response.json([]);
   const app = await startAppFromConfig({ configFile: file, credentialStore: { read: async () => "jf-token" }, port: 0, fetchImpl, discord: { env: {}, builtInClientId: "" } });

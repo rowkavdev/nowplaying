@@ -1,6 +1,7 @@
+import { cardPresets } from "./card-presets.js";
 import { createHash } from "node:crypto";
 
-const THEMES = new Set(["midnight-blue", "paper", "compact"]);
+const THEMES = new Set(Object.keys(cardPresets));
 const VISIBILITY = new Set(["artwork", "mediaType", "progress", "state", "subtitle"]);
 
 export function parseCardQuery(searchParams) {

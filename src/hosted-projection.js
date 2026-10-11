@@ -1,10 +1,10 @@
+import { isHostedArtwork } from "./hosted-artwork-format.js";
 import { applyPrivacy } from "./privacy.js";
 
 // Builds the one payload the desktop app may push to the hosted card service
 // (#140). Everything is opt-in: a field only leaves the PC when the privacy
-// policy and the card's own `show` settings both allow it. Artwork, users,
-// servers and provider IDs are never sent; the v1 ingest schema has no place
-// for them.
+// policy and the card's own `show` settings both allow it. Users, servers and provider IDs are never sent. Cover pixels are
+// optional, sanitized on the PC, and gated by explicit sharing and privacy.
 
 export const HOSTED_SCHEMA_VERSION = 1;
 export const HOSTED_TEXT_LIMIT = 200;
@@ -28,7 +28,7 @@ function wholeMs(value) {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
 }
 
-export function projectHostedState(presence, { privacy = {}, show = {} } = {}, { seq, now = Date.now() } = {}) {
+export function projectHostedState(presence, { privacy = {}, show = {}, shareArtwork = false } = {}, { seq, now = Date.now(), artworkDataUri = null } = {}) {
   if (!Number.isSafeInteger(seq) || seq < 0) throw new TypeError("seq must be a non-negative safe integer");
   if (!Number.isSafeInteger(now)) throw new TypeError("now must be a safe integer timestamp");
   const filtered = applyPrivacy(presence, privacy);
@@ -36,6 +36,7 @@ export function projectHostedState(presence, { privacy = {}, show = {} } = {}, {
   const payload = { v: HOSTED_SCHEMA_VERSION, seq, observedAt: now, state };
   if (state === "idle") return payload;
 
+  if (shareArtwork === true && show.artwork !== false && !privacy.hideArtwork && !privacy.redactTitles && isHostedArtwork(artworkDataUri)) payload.artworkDataUri = artworkDataUri;
   payload.kind = show.mediaType === false || !HOSTED_KINDS.has(filtered.kind) ? "unknown" : filtered.kind;
   const title = clip(filtered.title);
   if (title) payload.title = title;

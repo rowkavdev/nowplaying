@@ -106,7 +106,7 @@ test("ingest enforces auth, content type and size", async () => {
     const { token } = JSON.parse((await call(app.port, "POST", "/api/register")).body);
     const wrongType = await call(app.port, "POST", "/api/ingest", { body: "{}", headers: { "content-type": "text/plain", authorization: `Bearer ${token}` } });
     assert.equal(wrongType.status, 415);
-    const big = await call(app.port, "POST", "/api/ingest", { body: JSON.stringify({ pad: "x".repeat(5000) }), headers: json(token) });
+    const big = await call(app.port, "POST", "/api/ingest", { body: JSON.stringify({ pad: "x".repeat(100000) }), headers: json(token) });
     assert.equal(big.status, 413);
     const get = await call(app.port, "GET", "/api/ingest");
     assert.equal(get.status, 405);

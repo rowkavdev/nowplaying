@@ -19,7 +19,7 @@ Provider sign-ins and the hosted-card device key live in **Windows Credential Ma
 
 ## The card never exposes your server
 
-- Your media server's address and username never leave your PC, and neither does its artwork unless you leave on **Show my server's cover** in Settings > Discord. That option uploads the cover image (nothing else) to temporary public hosts: Litterbox (deleted after 72 hours), or tmpfiles.org if the first host fails (deleted after 48 hours); **Hide album art** turns it off. The hosted card receives only the fields your card shows, and with privacy on it only ever receives "nothing playing".
+- Your media server's address and username never leave your PC, and artwork is shared only through the separate cover switches: **Include cover art** under Hosted Card Settings, or **Show my server's cover** under Discord Settings. Hosted images are sanitized on your PC and expire with the latest playback state. The Discord option uploads the cover image (nothing else) to temporary public hosts: Litterbox (deleted after 72 hours), or tmpfiles.org if the first host fails (deleted after 48 hours); **Hide album art** turns it off. The hosted card receives only the fields your card shows, and with privacy on it only ever receives "nothing playing".
 - Without GitHub sign-in, your card link uses a random ID that can't be traced to your account. With GitHub sign-in, the link is your GitHub username (it sits on your public README anyway). The card service stores your GitHub user ID, username and the names of your signed-in PCs, never your GitHub sign-in itself.
 - Never put tokens in a card URL or post a card URL with extra query strings in public.
 

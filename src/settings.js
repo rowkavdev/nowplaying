@@ -1,7 +1,8 @@
+import { cardPresets } from "./card-presets.js";
 import { classifyArtworkUrl } from "./discord-artwork.js";
 
 const PRIVACY_MODES = new Set(["private", "friends", "public", "custom"]);
-const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
+const CARD_THEMES = new Set(Object.keys(cardPresets));
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
 const IDLE_BEHAVIORS = new Set(["clear", "grace", "show", "recent"]);
 
@@ -104,7 +105,7 @@ function validateCard(value) {
   assertObject(value, "card");
   rejectUnknown(value, KEYS.card, "card");
   if (value.theme !== undefined && !CARD_THEMES.has(value.theme)) {
-    throw new TypeError("card.theme: expected midnight-blue, paper or compact");
+    throw new TypeError("card.theme: expected a built-in card style");
   }
   if (value.width !== undefined && (!Number.isInteger(value.width) || value.width < 280 || value.width > 800)) {
     throw new TypeError("card.width: must be an integer between 280 and 800");
@@ -171,8 +172,8 @@ export function createSettings(input = {}) {
     card: {
       ...defaultSettings.card,
       ...input.card,
-      show: { ...defaultSettings.card.show, ...input.card?.show },
-      layout: { ...defaultSettings.card.layout, ...input.card?.layout },
+      show: { ...defaultSettings.card.show, ...cardPresets[input.card?.theme ?? defaultSettings.card.theme].show, ...input.card?.show },
+      layout: { ...defaultSettings.card.layout, ...cardPresets[input.card?.theme ?? defaultSettings.card.theme].layout, ...input.card?.layout },
     },
     discord: { ...defaultSettings.discord, ...input.discord },
   };

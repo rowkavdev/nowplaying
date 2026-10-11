@@ -1,3 +1,4 @@
+import { cardPresets } from "./card-presets.js";
 import { createProviderIdentity } from "./provider-identity.js";
 import { isFontStack } from "./card.js";
 import { isServerUrl } from "./setup.js";
@@ -32,7 +33,7 @@ function normalizePrivacy(value) {
 
 // Card appearance (#94, set from the settings page). Left out means the
 // renderer defaults, so older configs draw the same card as before.
-const CARD_THEMES = new Set(["midnight-blue", "paper", "compact"]);
+const CARD_THEMES = new Set(Object.keys(cardPresets));
 const CARD_NUMBERS = Object.freeze({ width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] });
 const ARTWORK_POSITIONS = new Set(["left", "right"]);
 const TEXT_ALIGNS = new Set(["start", "middle", "end"]);
@@ -47,7 +48,7 @@ export function normalizeCard(value) {
     // An empty custom font box means "use the named font": nothing is stored.
     if (key === "fontStack" && item === "") continue;
     if (key === "theme") {
-      if (!CARD_THEMES.has(item)) throw new TypeError("setup config.card.theme must be midnight-blue, paper or compact");
+      if (!CARD_THEMES.has(item)) throw new TypeError("setup config.card.theme must be a built-in card style");
     } else if (key === "artworkPosition") {
       if (!ARTWORK_POSITIONS.has(item)) throw new TypeError("setup config.card.artworkPosition must be left or right");
     } else if (Object.hasOwn(CARD_CHOICES, key)) {
@@ -133,6 +134,7 @@ export function createSetupConfig(input = {}) {
   if (input.discordStatusDisplayType !== undefined && !STATUS_DISPLAY_TYPES.has(input.discordStatusDisplayType)) {
     throw new TypeError("setup config.discordStatusDisplayType must be name, state or details");
   }
+  if (input.hostedArtwork !== undefined && typeof input.hostedArtwork !== "boolean") throw new TypeError("setup config.hostedArtwork must be a boolean");
   if (input.hostedEnabled !== undefined && typeof input.hostedEnabled !== "boolean") {
     throw new TypeError("setup config.hostedEnabled must be a boolean");
   }
@@ -166,7 +168,7 @@ export function createSetupConfig(input = {}) {
     }),
     // Hosted card upload (#140) is off unless the user turns it on.
     ...(input.hostedEnabled !== undefined || hostedUrl ? {
-      hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(hostedUrl ? { url: hostedUrl } : {}) }),
+      hosted: Object.freeze({ enabled: input.hostedEnabled ?? false, ...(input.hostedArtwork === true ? { artwork: true } : {}), ...(hostedUrl ? { url: hostedUrl } : {}) }),
     } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card && Object.keys(card).length ? { card } : {}),

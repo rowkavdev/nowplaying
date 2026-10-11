@@ -3,11 +3,12 @@
 // connects back to a media server, never stores provider credentials and never
 // logs media fields. State expires on its own so a card never shows stale media.
 
+import { isHostedArtwork, MAX_HOSTED_ARTWORK_LENGTH } from "../../src/hosted-artwork-format.js";
 import { createHash, randomBytes } from "node:crypto";
 import { currentPosition, resolveDeviceStates } from "./resolve.js";
 
 export const SCHEMA_VERSION = 1;
-export const MAX_INGEST_BYTES = 2048;
+export const MAX_INGEST_BYTES = MAX_HOSTED_ARTWORK_LENGTH + 2048;
 export const STATE_TTL_SECONDS = 600;
 export const MAX_CLOCK_SKEW_MS = 120_000;
 export const SEQ_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -30,7 +31,7 @@ const DEVICE_NAME_LIMIT = 40;
 
 const STATES = new Set(["playing", "paused", "idle"]);
 const KINDS = new Set(["track", "episode", "movie", "show", "unknown"]);
-const INGEST_KEYS = new Set(["v", "seq", "observedAt", "state", "kind", "title", "subtitle", "positionMs", "durationMs"]);
+const INGEST_KEYS = new Set(["v", "seq", "observedAt", "state", "kind", "title", "subtitle", "positionMs", "durationMs", "artworkDataUri"]);
 const TEXT_LIMIT = 200;
 const ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
@@ -172,7 +173,8 @@ export function validateIngest(payload, { now = Date.now() } = {}) {
   const positionMs = ms(payload.positionMs);
   const durationMs = ms(payload.durationMs);
   if (positionMs !== null && durationMs !== null && positionMs > durationMs) throw new ServiceError(400, "invalid_time");
-  return { seq: payload.seq, observedAt: payload.observedAt, state: payload.state, kind, title: text(payload.title), subtitle: text(payload.subtitle), positionMs, durationMs };
+  if (payload.artworkDataUri !== undefined && !isHostedArtwork(payload.artworkDataUri)) throw new ServiceError(400, "invalid_artwork");
+  return { ...(payload.state !== "idle" && payload.artworkDataUri ? { artworkDataUri: payload.artworkDataUri } : {}), seq: payload.seq, observedAt: payload.observedAt, state: payload.state, kind, title: text(payload.title), subtitle: text(payload.subtitle), positionMs, durationMs };
 }
 
 export function isLogin(value) { return typeof value === "string" && LOGIN_PATTERN.test(value); }
@@ -409,7 +411,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   }
 
   const IDLE = Object.freeze({ state: "idle", kind: "unknown", title: null, subtitle: null, positionMs: null, durationMs: null });
-  const shown = (stored) => ({ state: stored.state, kind: stored.kind, title: stored.title, subtitle: stored.subtitle, positionMs: currentPosition(stored, now()), durationMs: stored.durationMs });
+  const shown = (stored) => ({ ...(stored.artworkDataUri ? { artworkDataUri: stored.artworkDataUri } : {}), state: stored.state, kind: stored.kind, title: stored.title, subtitle: stored.subtitle, positionMs: currentPosition(stored, now()), durationMs: stored.durationMs });
 
   async function countRender() {
     await bump("np:stats:cards_rendered");

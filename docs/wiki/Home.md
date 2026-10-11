@@ -5,7 +5,7 @@ nowplaying shows what is playing on your own media server (Plex, Jellyfin, Navid
 - a **card** image you can embed in a GitHub README or any web page
 - **Discord Rich Presence**, the "Listening to / Watching" status on your Discord profile
 
-Everything runs on your own machine or server. Your server address, sign-in details and media titles never appear in the card or in Discord unless you choose to show them.
+Everything runs on your own machine or server. Your server address and sign-in details stay private. Titles are shown by default; Privacy Settings can hide them before they reach the card or Discord.
 
 ## Choose your path
 
@@ -18,6 +18,7 @@ Everything runs on your own machine or server. Your server address, sign-in deta
 
 ## After setup
 
+- [Settings guide](https://github.com/rowkavdev/nowplaying/blob/main/docs/settings.md): appearance, section saves and live logs
 - [Privacy and safe configuration](Privacy-and-safe-configuration): hide titles, artwork or progress, and keep credentials safe
 - [Updates and release channels](Updates-and-release-channels): stable releases versus development builds
 - [Troubleshooting](Troubleshooting): fixes organised by what you see going wrong

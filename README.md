@@ -7,11 +7,13 @@
 
 Your media server knows what you are playing. nowplaying turns that into a card for your GitHub README and a status in Discord, without exposing your server to the internet. It runs on your PC and reads playback from Plex, Jellyfin, Emby or Navidrome. Spotify and a paired YouTube extension can also feed the card.
 
-| Music | Film | TV |
+| Studio · music | Editorial · film | Hi-Fi · TV |
 | :---: | :---: | :---: |
-| ![Example card showing Holocene by Bon Iver](docs/assets/cards/music-playing.svg) | ![Example card showing Spirited Away](docs/assets/cards/movie-playing.svg) | ![Example card showing Lost, S04E05](docs/assets/cards/episode-playing.svg) |
+| ![Studio: Blue Monday by New Order with sample cover art](docs/assets/cards/studio.svg) | ![Editorial: Dune Part Two with sample poster art](docs/assets/cards/editorial-film.svg) | ![Hi-Fi: Lost, The Constant, with sample poster art](docs/assets/cards/terminal-episode.svg) |
 
-*Example cards, not live playback. [More states and styles](docs/card-examples.md).*
+Studio puts artwork behind the card. Editorial pairs a large cover with warm paper and serif type. Hi-Fi adds record grooves and an amber timeline. Classic, Paper and Compact are also available. **[Explore all six styles, with music, film and TV examples →](docs/card-examples.md)**
+
+*Examples rendered by the app with illustrated sample artwork. Your card uses the current album cover or poster; hosted covers require **Include cover art** in Settings.*
 
 > **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
 
@@ -27,7 +29,7 @@ On Linux, follow [Install on Linux](docs/wiki/Install-on-Linux.md) to choose an 
 
 2. Install it for your Windows user. On first launch, **Settings opens in your browser**. Find a media server or enter its address, then sign in. A full subnet scan only runs when you enter that subnet yourself. You can connect more than one server.
 3. Play something. Open the tray icon's status page, or visit [`http://127.0.0.1:47832/card.svg`](http://127.0.0.1:47832/card.svg) on that PC. The page at [`/healthz`](http://127.0.0.1:47832/healthz) says only that the configured app is responding, not that your server is connected.
-4. If you want a public README card, turn on **Hosted card** in Settings and copy its Markdown snippet. If you want Discord Rich Presence, turn it on separately in **Settings > Discord** and keep the Discord desktop app open.
+4. If you want a public README card, choose a style in **Settings > Appearance** and save it. Turn on **Hosted card** under **Sharing**, enable **Include cover art** if you want covers and posters, save, then copy its Markdown snippet. If you want Discord Rich Presence, turn it on separately in **Settings > Discord** and keep the Discord desktop app open.
 
 Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Connect-Jellyfin.md) · [Emby](docs/wiki/Connect-Emby.md) · [Navidrome](docs/wiki/Connect-Navidrome.md). For the full installation path, see [Quick start](docs/wiki/Quick-Start.md) and the [dev-build test checklist](docs/testing-dev-build.md).
 
@@ -35,7 +37,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 | Output | Source | How it works |
 | --- | --- | --- |
-| **Local card** | Media servers, Spotify, paired YouTube extension | An SVG on your PC. Choose a theme, width and visible fields in Settings. |
+| **Local card** | Media servers, Spotify, paired YouTube extension | An SVG on your PC. Choose a style, width and visible fields in Settings. |
 | **Hosted README card** | The same card state | Opt-in. Your PC pushes filtered playback fields to the card service; it never calls your media server. Copy the public link from Settings. Optional GitHub sign-in joins up to 10 PCs under one card. |
 | **Discord Rich Presence** | Media servers and paired YouTube extension | Opt-in. Your PC talks directly to the Discord desktop app. Music, films and episodes get fitting statuses. **Spotify never goes to Discord.** |
 
@@ -43,7 +45,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 ## Privacy is set on your PC
 
-- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork or listening history. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
+- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork links or listening history. **Include cover art** optionally adds a small sanitized image. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
 - **Sign-ins stay in the operating system credential store:** Windows Credential Manager or Linux Secret Service. Settings and server addresses are in `%LOCALAPPDATA%\nowplaying\config.json` on Windows or `~/.config/nowplaying/config.json` on Linux, with XDG directory overrides respected. These files do not contain passwords or tokens; check server addresses before sharing them.
 - **Settings > Privacy** can hide titles, artwork, progress or whole media types before they reach the card or Discord. A hidden type looks like nothing playing. [Privacy guide](docs/wiki/Privacy-and-safe-configuration.md).
 - **Discord cover art is uploaded to a temporary host.** Discord can't reach a private Plex, Jellyfin or Emby address, so "Show my server's cover" is on for a new setup and sends the cover to Litterbox (72-hour retention), with tmpfiles.org (48-hour retention) as a fallback when the first host fails. An existing install keeps it off until you tick it in Settings > Discord, and you can untick it there at any time. [Details](docs/artwork.md#discord-cover-upload).
@@ -51,7 +53,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 ## Settings, updates and problems
 
-Open **Settings** from the tray icon to manage servers, Discord, hosted cards, privacy and the card's appearance. The local status page shows connections and logs. [Customization](docs/customization.md) · [Updates and release channels](docs/wiki/Updates-and-release-channels.md) · [Troubleshooting](docs/wiki/Troubleshooting.md).
+Open **Settings** from the tray icon to manage servers, Discord, hosted cards, privacy and the card's appearance. Settings keeps configuration beside live logs, with shortcuts for servers, appearance, Discord, privacy, sharing and startup. Choose a card style from the visual gallery, preview changes, and save each section separately. [Settings guide](docs/settings.md) · [Customization](docs/customization.md) · [Updates and release channels](docs/wiki/Updates-and-release-channels.md) · [Troubleshooting](docs/wiki/Troubleshooting.md).
 
 If something fails on a dev build, [open an issue](https://github.com/rowkavdev/nowplaying/issues/new) with the build number, operating system and desktop environment, package format, what you tried and what happened. Leave out server addresses and tokens.
 

@@ -1,3 +1,4 @@
+import { cardPresets } from "./card-presets.js";
 import { randomBytes } from "node:crypto";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { parseAppConfig } from "./app-config.js";
@@ -10,7 +11,7 @@ import { validateTemplate } from "./template.js";
 // step (temp file + rename) so a crash never leaves half a file.
 
 const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior", "name", "statusDisplayType"]);
-const HOSTED_KEYS = new Set(["enabled"]);
+const HOSTED_KEYS = new Set(["enabled", "artwork"]);
 const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
 
@@ -27,7 +28,7 @@ export function discordSettingsView(config) {
 }
 
 export function hostedSettingsView(config) {
-  return Object.freeze({ enabled: config.hosted?.enabled === true });
+  return Object.freeze({ enabled: config.hosted?.enabled === true, ...(config.hosted?.artwork === true ? { artwork: true } : {}) });
 }
 
 export function privacySettingsView(config) {
@@ -48,29 +49,30 @@ const AUTO_CARD_KEYS = ["artworkWidth", "artworkHeight"];
 export function cardSettingsView(config) {
   const card = config.card ?? {};
   const theme = card.theme ?? "midnight-blue";
+  const defaults = cardPresets[theme].layout;
   return Object.freeze({
     theme,
     width: card.width ?? 440,
-    padding: card.padding ?? 24,
-    radius: card.radius ?? 10,
-    progressHeight: card.progressHeight ?? 4,
+    padding: card.padding ?? defaults.padding ?? 24,
+    radius: card.radius ?? defaults.radius ?? 10,
+    progressHeight: card.progressHeight ?? defaults.progressHeight ?? 4,
     // The compact theme hides progress unless it's turned on.
     showProgress: card.showProgress ?? theme !== "compact",
-    artworkPosition: card.artworkPosition ?? "left",
+    artworkPosition: card.artworkPosition ?? defaults.artworkPosition ?? "left",
     // null means automatic: the renderer picks by media kind (square for
     // music since #445), so a save never pins the old 68x100 default.
-    artworkWidth: card.artworkWidth ?? null,
-    artworkHeight: card.artworkHeight ?? null,
+    artworkWidth: card.artworkWidth ?? defaults.artworkWidth ?? null,
+    artworkHeight: card.artworkHeight ?? defaults.artworkHeight ?? null,
     fieldOrder: card.fieldOrder ?? ["state", "title", "subtitle"],
     textAlign: card.textAlign ?? "start",
     progressPosition: card.progressPosition ?? "bottom",
     progressWidth: card.progressWidth ?? "content",
     direction: card.direction ?? "ltr",
     artworkTint: card.artworkTint ?? true,
-    fontFamily: card.fontFamily ?? "system",
-    statusStyle: card.statusStyle ?? "plain",
-    artShape: card.artShape ?? "square",
-    progressStyle: card.progressStyle ?? "square",
+    fontFamily: card.fontFamily ?? defaults.fontFamily ?? "system",
+    statusStyle: card.statusStyle ?? defaults.statusStyle ?? "plain",
+    artShape: card.artShape ?? defaults.artShape ?? "square",
+    progressStyle: card.progressStyle ?? defaults.progressStyle ?? "square",
     border: card.border ?? "thin",
     background: card.background ?? "solid",
     fontStack: card.fontStack ?? "",
@@ -96,7 +98,7 @@ function rewrite(config, { servers = config.servers, discord = { ...discordSetti
     discordTimestamps: discord.timestamps,
     discordName: discord.name,
     discordStatusDisplayType: discord.statusDisplayType,
-    ...(hosted ? { hostedEnabled: hosted.enabled, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
+    ...(hosted ? { hostedEnabled: hosted.enabled, hostedArtwork: hosted.artwork, ...(hosted.url ? { hostedUrl: hosted.url } : {}) } : {}),
     ...(privacy ? { privacy } : {}),
     ...(card ? { card } : {}),
     // Settings changes never drop the Spotify connection (#135).
@@ -124,10 +126,11 @@ export function applyHostedDestinationChanges(config, changes) {
   return rewrite(config, { hosted: { enabled: true, ...(changes.url ? { url: changes.url } : {}) } });
 }
 
-// Only on/off: the service address stays whatever setup or config.json says.
+// The service address stays whatever setup or config.json says.
 export function applyHostedChanges(config, changes) {
   checkChanges(changes, HOSTED_KEYS, "hosted");
-  return rewrite(config, { hosted: { ...(config.hosted ?? {}), enabled: changes.enabled } });
+  for (const [key, value] of Object.entries(changes)) if (typeof value !== "boolean") throw new TypeError(`hosted settings: ${key} must be true or false`);
+  return rewrite(config, { hosted: { ...config.hosted, ...changes } });
 }
 
 export function applyPrivacyChanges(config, changes) {

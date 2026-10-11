@@ -6,8 +6,8 @@ It's off until you turn it on.
 
 ## Steps
 
-1. Open the nowplaying **Settings** page (tray icon, **Settings**) and find the **hosted card** section.
-2. Tick **Upload my card to the hosted service** and press **Save**. Settings shows an upload state, a per-PC card link with a random ID and a ready-made README snippet. Want one card shared by all your PCs? Sign in with GitHub in **Settings > Spotify and hosted card** - see below.
+1. Open the nowplaying **Settings** page (tray icon, **Settings**) and choose a style under **Appearance → Card Settings**. Press **Save**, then open **Sharing → Hosted Card Settings**.
+2. Tick **Upload my card to the hosted service**. For album covers and posters, also tick **Include cover art**. Press **Save**. Settings shows an upload state, a per-PC card link with a random ID and a ready-made README snippet. Want one card shared by all your PCs? Sign in with GitHub in **Settings > Spotify and hosted card** - see below.
 3. Press **Copy** beside **README** and paste that exact snippet into your README. A GitHub-linked card might look like:
 
    ```markdown
@@ -30,13 +30,14 @@ By default each PC gets its own card link with a random ID. If you have more tha
 
 ## What the card shows
 
-- Music shows as "Listening", films and TV episodes as "Watching".
-- Paused, idle and offline each have their own look.
-- Themes, width and which fields to show are options on the card link; secrets never go in the URL.
+- Playing cards say "Now playing"; paused cards say "Paused". Music shows the track and artist, and TV episodes show the episode name and series when available. Detailed season and episode numbers stay on your PC.
+- Paused media retains its title. Idle or expired updates show nothing playing.
+- Studio uses full-bleed artwork, Editorial pairs a large cover with warm paper and serif type, and Hi-Fi uses a record display with an amber timeline. Classic, Paper and Compact are also available.
+- Choose one of six styles in **Settings > Appearance**, adjust the width, and press **Save**. Copy the updated README snippet from **Sharing** after an appearance change; the style is part of its URL. [Style gallery](https://github.com/rowkavdev/nowplaying/blob/main/docs/card-examples.md).
 
 ## Privacy
 
-You choose what the card can ever receive. With a media type hidden or privacy set to private, the card only ever gets "nothing playing". Your server address, username and artwork never leave your PC. Full detail: [Privacy and safe configuration](Privacy-and-safe-configuration) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
+You choose what the card can ever receive. With a media type hidden or privacy set to private, the card only ever gets "nothing playing". Your server address and username never leave your PC. **Include cover art** optionally shares a small image; artwork URLs are never sent. Full detail: [Privacy and safe configuration](Privacy-and-safe-configuration) and [what leaves your PC](https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md).
 
 ## If the README looks stale
 

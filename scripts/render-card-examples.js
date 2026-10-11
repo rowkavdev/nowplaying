@@ -4,9 +4,19 @@
 // Default output: docs/assets/cards/. Test: test/card-examples.test.js.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PREVIEW_EXAMPLES, previewArtwork } from "../src/setup-preview.js";
 import { renderCard } from "../src/card.js";
 
 export const EXAMPLES = [
+  ...["studio", "editorial", "terminal"].flatMap((theme) =>
+    ["music", "film", "episode"].map((kind) => ({
+      file: kind === "music" ? `${theme}.svg` : `${theme}-${kind}.svg`,
+      title: `${theme} style: ${PREVIEW_EXAMPLES[kind].label}`,
+      options: { theme },
+      artworkKind: kind,
+      presence: PREVIEW_EXAMPLES[kind].presence,
+    })),
+  ),
   {
     file: "music-playing.svg",
     title: "Music, playing (default midnight-blue theme)",
@@ -63,7 +73,8 @@ export async function renderExamples(dir) {
   await mkdir(dir, { recursive: true });
   const written = {};
   for (const example of EXAMPLES) {
-    const svg = renderCard(example.presence, example.options);
+    const art = example.artworkKind ? await previewArtwork(example.artworkKind) : null;
+    const svg = renderCard(example.presence, { ...example.options, artworkDataUri: art });
     await writeFile(join(dir, example.file), svg, "utf8");
     written[example.file] = svg;
   }

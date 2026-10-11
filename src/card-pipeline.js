@@ -16,8 +16,9 @@ export function createCardPipeline({ provider, privacy = {}, artworkService, pro
     const theme = options.theme ?? base.theme ?? "midnight-blue";
     const show = options.show ?? base.show ?? {};
     const showArtwork = show.artwork ?? theme !== "compact";
-    const art = showArtwork && presence.artwork && artworkService
-      ? await artworkService.resolve(presence.artwork, providerConfig)
+    const reference = presence.artwork ?? (presence.artworkUrl ? { publicUrl: presence.artworkUrl } : null);
+    const art = showArtwork && reference && artworkService
+      ? await artworkService.resolve(reference, providerConfig, presence.kind === "track" ? { width: 256, height: 256 } : { width: 192, height: 288 })
       : null;
     // A service can return the data URI alone, or with a tint taken from the
     // art (#447).

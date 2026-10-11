@@ -20,6 +20,10 @@ const TV_HIDDEN = { ...TV, series: null, season: null, episode: null, subtitle: 
 const FILM = { state: "playing", kind: "movie", title: "Dune: Part Two", subtitle: "2024", year: 2024, positionMs: 3_000_000, durationMs: 9_960_000 };
 
 export const PRESETS = [
+  ...["studio", "editorial", "terminal"].flatMap((theme) => [
+    { file: `${theme}.svg`, presence: MUSIC, options: { theme, artworkDataUri: ART } },
+    { file: `${theme}-narrow.svg`, presence: TV, options: { theme, width: 280 } },
+  ]),
   { file: "default.svg", presence: MUSIC, options: { artworkDataUri: ART } },
   { file: "default-no-artwork.svg", presence: MUSIC, options: {} },
   { file: "narrow-max-artwork.svg", presence: MUSIC, options: { width: 280, artworkDataUri: ART, layout: { padding: 48, artworkWidth: 160 } } },
