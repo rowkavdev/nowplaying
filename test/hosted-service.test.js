@@ -289,7 +289,7 @@ test("a failing last-played record never fails an accepted ingest", async () => 
   const { cardId, token } = await service.register();
   const original = redis.command.bind(redis);
   redis.command = async (args) => {
-    if (String(args[0]).toUpperCase() === "SET" && String(args[1]).startsWith("np:last:")) throw new Error("redis down");
+    if (String(args[0]).toUpperCase() === "EVAL" && String(args[1]).includes("np-last-play-v1")) throw new Error("redis down");
     return original(args);
   };
   const result = await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Song" }) });

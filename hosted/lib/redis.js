@@ -96,6 +96,12 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
             else { drop(devices[index]); devices.splice(index, 1); }
             save(); return [1, 1];
           }
+          if (typeof key === "string" && key.includes("np-last-play-v1") && Number(rest[0]) === 2) {
+            const [tokenKey, historyKey, recordText, ttl] = rest.slice(1);
+            if (!live(tokenKey)) return 0;
+            data.set(historyKey, { value: String(recordText), expiresAt: now() + Number(ttl) * 1000 });
+            return 1;
+          }
           // Emulates the hosted ingest script as one synchronous Redis action.
           // No await may split its comparison from the card-state write.
           if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 4) throw new Error("unsupported script");
