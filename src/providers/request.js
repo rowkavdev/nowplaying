@@ -31,3 +31,9 @@ export async function fetchWithTimeout(fetchImpl, url, init = {}, timeoutMs = RE
     throw error;
   }
 }
+
+// Start best-effort disposal of a response that will not be read. Never let
+// cleanup hold back the provider's original result or status diagnostic.
+export function discardResponseBody(response) {
+  try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
+}
