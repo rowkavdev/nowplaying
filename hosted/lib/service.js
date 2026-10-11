@@ -78,6 +78,14 @@ redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
 return {1, previous}
 `;
 
+// History is best-effort, but its write must not follow token revocation.
+export const LAST_PLAY_ATOMIC_SCRIPT = `
+-- np-last-play-v1
+if not redis.call('GET', KEYS[1]) then return 0 end
+redis.call('SET', KEYS[2], ARGV[1], 'EX', tonumber(ARGV[2]))
+return 1
+`;
+
 // All device-list writes and associated token/state changes share this Redis atomic action.
 export const DEVICE_ATOMIC_SCRIPT = `
 -- np-device-lifecycle-v1
@@ -301,7 +309,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     if (update.state !== "idle" && update.title) {
       // Remember the last playback of each kind for the last-played badge. A
       // failing record must never fail an accepted ingest.
-      try { await recordLastPlay(device, update); } catch { /* ignore */ }
+      try { await recordLastPlay(device, update, hashToken(token)); } catch { /* ignore */ }
     }
     await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
@@ -474,10 +482,10 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     return presence;
   }
 
-  async function recordLastPlay(device, update) {
+  async function recordLastPlay(device, update, tokenHash) {
     const scope = device.userId != null ? `np:last:user:${device.userId}` : device.cardId != null ? `np:last:card:${device.cardId}` : null;
     if (!scope) return;
-    await cmd("SET", `${scope}:${update.kind}`, JSON.stringify({ title: update.title, subtitle: update.subtitle, state: update.state, kind: update.kind, at: now() }), "EX", LAST_TTL_SECONDS);
+    await cmd("EVAL", LAST_PLAY_ATOMIC_SCRIPT, 2, `np:tok:${tokenHash}`, `${scope}:${update.kind}`, JSON.stringify({ title: update.title, subtitle: update.subtitle, state: update.state, kind: update.kind, at: now() }), LAST_TTL_SECONDS);
   }
 
   // Move an old per-PC card's last-played records to the user scope during a
