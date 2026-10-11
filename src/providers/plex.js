@@ -21,7 +21,13 @@ export function createPlexProvider({ baseUrl, token, fetchImpl = fetch }) {
   let owner;
   async function isOwner() {
     owner ??= fetchWithTimeout(fetchImpl, `${origin}/accounts`, { headers: { Accept: "application/json", "X-Plex-Client-Identifier": CLIENT_ID, "X-Plex-Token": token } })
-      .then((reply) => { if (!reply.ok) owner = undefined; return reply.ok; }, () => { owner = undefined; return false; });
+      .then((reply) => {
+        // Only the status proves owner access; discard the unused body
+        // without letting cleanup delay or change that authorization result.
+        try { Promise.resolve(reply.body?.cancel?.()).catch(() => {}); } catch {}
+        if (!reply.ok) owner = undefined;
+        return reply.ok;
+      }, () => { owner = undefined; return false; });
     return owner;
   }
   async function ownerSession(sessions) {
