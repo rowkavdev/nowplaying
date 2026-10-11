@@ -400,11 +400,15 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     // or a sample track when nothing is, so layout changes are visible.
     async previewCard(card) {
       let presence = null;
-      try { presence = await cardProvider.getPresence(); } catch { presence = null; }
-      if (!presence || presence.state === "idle") presence = applyPrivacy(PREVIEW_SAMPLE, privacyPolicyFromConfig(current));
+      // Choose a sample only when the source itself is idle. A privacy-hidden
+      // movie/episode must stay idle instead of becoming sample music.
+      try { presence = await cardSource.getPresence(); } catch { presence = null; }
+      if (!presence || presence.state === "idle") presence = PREVIEW_SAMPLE;
+      const privacy = privacyPolicyFromConfig(current);
+      presence = applyPrivacy(presence, privacy);
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is fetched for /card.svg (#449).
-      const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
+      const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: privacy.hideArtwork || presence.state === "idle" ? null : PREVIEW_ARTWORK });
       const automaticWidth = cardPresets[card.theme ?? "midnight-blue"].layout.artworkWidth ?? (presence.kind === "track" ? 100 : 68);
       return svg.replace("<svg ", `<svg data-preview-artwork-width="${card.artworkWidth ?? automaticWidth}" `);
     },

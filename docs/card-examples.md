@@ -1,6 +1,6 @@
 # Card styles
 
-Choose **Settings → Appearance → Card Settings**. These examples come directly from the shipped SVG renderer, without cover art, just like hosted README cards. Local cards can also show your server's sanitized cover or poster.
+Choose **Settings → Appearance → Card Settings**. These examples come directly from the shipped local SVG renderer, with cover art disabled. Local cards can also show your server's sanitized cover or poster. Hosted README cards use the same styles but omit artwork and detailed episode metadata.
 
 ## Classic
 
