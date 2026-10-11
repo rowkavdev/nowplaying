@@ -1,3 +1,6 @@
+import { cardPresets } from "./card-presets.js";
+import { renderCard } from "./card.js";
+import { SETTINGS_DESIGN_CSS } from "./settings-design.js";
 // Local settings page (#253): Discord section (#272), including what
 // Discord shows when nothing is playing, and card appearance (#94). Served on loopback by
 // the running app next to the status page. Saves go to /api/settings as JSON;
@@ -41,19 +44,20 @@ const buildPage = (startupCopy) => `<!doctype html>
 <html lang="en" class="drpp-root"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NowPlaying settings</title><link rel="stylesheet" href="/status.css"><link rel="stylesheet" href="/settings.css"><link rel="stylesheet" href="/drpp-shell.css"></head>
 <body class="drpp-shell"><a class="drpp-skip" href="#settings-content">Skip to configuration</a><header class="drpp-header">
-  <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span><button type="button" disabled title="Updater integration not available">Check for Updates (coming soon)</button></div>
+  <div class="drpp-heading"><h1>NowPlaying</h1><span class="drpp-divider"></span><span id="drpp-version">Version: checking...</span></div>
   <div class="drpp-actions"><a href="/" title="Status">Status</a><a href="https://github.com/rowkavdev/nowplaying" target="_blank" rel="noopener noreferrer" title="GitHub">GitHub ↗</a><button type="button" id="drpp-info-open" aria-haspopup="dialog" title="Info">Info</button></div>
 </header><div class="drpp-columns"><main class="drpp-config" id="settings-content" tabindex="-1">
 <div class="drpp-panel-heading"><h2>Configuration</h2><span class="drpp-divider"></span><span>Save each section below</span><span class="drpp-divider" id="drpp-autostart-divider" hidden></span><label id="drpp-autostart-wrap" hidden><input type="checkbox" id="drpp-autostart"> Launch app on system startup</label><small id="drpp-autostart-result" role="status" aria-live="polite"></small></div>
+<nav class="settings-nav" aria-label="Settings sections"><a href="#settings-servers" aria-current="true">Servers</a><a href="#settings-card">Appearance</a><a href="#settings-discord">Discord</a><a href="#settings-privacy">Privacy</a><a href="#settings-hosted">Sharing</a><a href="#settings-startup">Startup</a></nav>
 <div class="drpp-config-scroll" tabindex="0" aria-label="Configuration sections">
 <div class="drpp-setup" id="drpp-setup" role="status" aria-live="polite" hidden>
 <div class="drpp-setup-title"><span aria-hidden="true">⚠</span><strong id="drpp-setup-title">Setup Incomplete</strong></div>
 <p id="drpp-setup-message">Add a media server to finish setting up.</p>
 <a href="#servers-section" id="drpp-setup-action">Add Server</a>
 </div>
-<details class="drpp-accordion" open><summary>Media servers</summary>${serverPanel()}</details>
-<details class="drpp-accordion"><summary>Connected services</summary>${servicePanel()}</details>
-<details class="drpp-accordion"><summary>Discord Settings</summary>
+<details class="drpp-accordion" id="settings-servers" open><summary><span class="section-copy"><span>Media servers</span><small>Connect Plex, Jellyfin, Emby or Navidrome.</small></span></summary>${serverPanel()}</details>
+<details class="drpp-accordion" id="settings-services"><summary><span class="section-copy"><span>Connected services</span><small>Spotify and your card hosting account.</small></span></summary>${servicePanel()}</details>
+<details class="drpp-accordion" id="settings-discord"><summary><span class="section-copy"><span>Discord Settings</span><small>Choose what appears on your profile.</small></span></summary>
 <form id="discord-form">
 <section aria-labelledby="h-discord"><h2 id="h-discord">Discord</h2>
 <p class="row"><label><input type="checkbox" id="discord-enabled" name="enabled"> Show what I'm playing on Discord</label></p>
@@ -95,7 +99,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </section>
 </form>
 </details>
-<details class="drpp-accordion"><summary>Privacy Settings</summary>
+<details class="drpp-accordion" id="settings-privacy"><summary><span class="section-copy"><span>Privacy Settings</span><small>Control what other people can see.</small></span></summary>
 <form id="privacy-form" hidden>
 <section aria-labelledby="h-privacy"><h2 id="h-privacy">Privacy</h2>
 <p class="hint">Applies to Discord, the hosted card and your local card.</p>
@@ -110,17 +114,18 @@ const buildPage = (startupCopy) => `<!doctype html>
 </section>
 </form>
 </details>
-<details class="drpp-accordion"><summary>Card Settings</summary>
+<details class="drpp-accordion" id="settings-card"><summary><span class="section-copy"><span>Card Settings</span><small>Choose a style and make it your own.</small></span></summary>
 <form id="card-form" hidden>
 <section aria-labelledby="h-card"><h2 id="h-card">Card</h2>
-<p class="hint">How your README card looks. Changes show in the preview straight away and are saved when you press Save. The hosted card link below uses these settings too, apart from artwork, which the hosted card never shows.</p>
+<p class="hint">Choose a style, then adjust the width. The preview updates as you go; press Save when you're happy. Hosted cards use the same style without cover art.</p>
+<div class="preview"><p class="preview-label">Live preview</p><img id="card-preview" alt="Preview of your card with these settings" hidden><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
+<div class="card-style-grid" role="group" aria-label="Card styles">${Object.entries(cardPresets).map(([key, preset]) => `<button type="button" class="card-style" data-card-theme="${key}" aria-pressed="${key === "midnight-blue"}"><img src="/card-styles/${key}.svg" width="280" height="140" alt="" loading="lazy"><strong>${preset.label}</strong><small>${preset.description}</small></button>`).join("")}</div>
 <p class="row"><label for="card-theme">Style</label>
 <select id="card-theme">
-<option value="midnight-blue">Dark</option>
-<option value="paper">Light</option>
-<option value="compact">Compact (title only)</option>
+${Object.entries(cardPresets).map(([key, preset]) => `<option value="${key}">${preset.label}</option>`).join("")}
 </select></p>
 <p class="row"><label for="card-width">Width</label><input type="number" id="card-width" min="280" max="800" step="1" inputmode="numeric" aria-describedby="card-width-help card-result"> <span class="unit" id="card-width-help">px, 280 to 800</span></p>
+<details class="card-advanced"><summary>Fine-tune typography, artwork and layout</summary>
 <p class="row"><label for="card-padding">Padding</label><input type="range" id="card-padding" min="12" max="48" step="1"> <output id="card-padding-value" for="card-padding"></output></p>
 <p class="row"><label for="card-radius">Corners</label><input type="range" id="card-radius" min="0" max="24" step="1"> <output id="card-radius-value" for="card-radius"></output></p>
 <p class="row"><label for="card-fontFamily">Font</label>
@@ -198,12 +203,13 @@ const buildPage = (startupCopy) => `<!doctype html>
 <option value="rtl">Right to left</option>
 <option value="auto">Match the title</option>
 </select></p>
-<div class="preview"><p class="preview-label">Preview</p><img id="card-preview" alt="Preview of your card with these settings" hidden><p id="card-preview-note" class="hint" hidden>Can't show a preview right now.</p><p id="card-artwork-scale-note" class="hint" aria-live="polite" hidden></p></div>
+
+</details>
 <p><button type="submit" id="card-save" aria-label="Save card settings">Save</button> <button type="button" id="card-reset">Back to defaults</button> <span id="card-result" role="status" aria-live="polite"></span></p>
 </section>
 </form>
 </details>
-<details class="drpp-accordion"><summary>YouTube Settings</summary>
+<details class="drpp-accordion" id="settings-youtube"><summary><span class="section-copy"><span>YouTube Settings</span><small>Pair your browser extension.</small></span></summary>
 <section id="youtube-section" aria-labelledby="h-youtube" hidden><h2 id="h-youtube">YouTube</h2>
 <p class="hint">Lets the NowPlaying for YouTube browser extension show what you're watching. Open the extension's options page, paste this pairing code and the port below, then press Save there. The extension only sends what's playing, and only to this PC.</p>
 <dl><dt>Pairing code</dt><dd><code id="youtube-token" class="secret">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</code></dd>
@@ -212,7 +218,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 <p class="hint">Keep the code to yourself. Anyone with it can change what your card and Discord show while NowPlaying is running. A new code stops the old one at once, so you'll need to paste it into the extension again.</p>
 </section>
 </details>
-<details class="drpp-accordion"><summary>Startup Settings</summary>
+<details class="drpp-accordion" id="settings-startup"><summary><span class="section-copy"><span>Startup Settings</span><small>Launch NowPlaying when you sign in.</small></span></summary>
 <form id="startup-form" hidden>
 <section aria-labelledby="h-startup"><h2 id="h-startup">${startupCopy.heading}</h2>
 <p class="row"><label><input type="checkbox" id="startup-enabled"> ${startupCopy.label}</label></p>
@@ -220,7 +226,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </section>
 </form>
 </details>
-<details class="drpp-accordion"><summary>Hosted Card Settings</summary>
+<details class="drpp-accordion" id="settings-hosted"><summary><span class="section-copy"><span>Hosted Card Settings</span><small>Put your card in a GitHub README.</small></span></summary>
 <form id="hosted-form">
 <section aria-labelledby="h-hosted"><h2 id="h-hosted">Hosted card</h2>
 <p class="hint">Puts your card on nowplaying-hosted.vercel.app so a GitHub README can show it without opening your server to the internet. It sends only what your card shows: playing or paused, the title, artist and progress if the card shows them. Never your server address, user name, sign-in, artwork or Discord details. <a href="https://github.com/rowkavdev/nowplaying/blob/main/docs/hosted-upload.md">What leaves your PC</a></p>
@@ -232,7 +238,7 @@ const buildPage = (startupCopy) => `<!doctype html>
 </form>
 </details>
 <!-- Hosted card devices (#140): markup only; script and route live in src/hosted-devices.js. -->
-<details class="drpp-accordion"><summary>Hosted Card Devices</summary>
+<details class="drpp-accordion" id="settings-devices"><summary><span class="section-copy"><span>Hosted Card Devices</span><small>Manage the PCs updating your public card.</small></span></summary>
 <section id="hosted-devices" aria-labelledby="h-hosted-devices" hidden><h2 id="h-hosted-devices">Hosted card devices</h2>
 <p class="hint">PCs signed in as <strong id="hosted-devices-login">-</strong> that update your card. The one playing shows on the card.</p>
 <ul id="hosted-devices-list" class="plain"></ul>
@@ -307,10 +313,15 @@ const buildDrppShellScript = (startupCopy) => `"use strict";
 // A bounded poll of the existing safe JSON log API; DRPP uses SSE, which
 // NowPlaying does not expose. No network request leaves loopback.
 const optionalSections = ["privacy-form", "card-form", "youtube-section", "startup-form", "hosted-devices"];
+let initialSectionRestored = false;
 function syncAccordionVisibility() {
   for (const id of optionalSections) {
     const section = document.getElementById(id);
     if (section) section.parentElement.hidden = section.hidden;
+  }
+  if (!initialSectionRestored && !document.getElementById("card-form").hidden) {
+    initialSectionRestored = true;
+    for (const link of document.querySelectorAll(".settings-nav a")) if (link.getAttribute("href") === location.hash) openSettingsSection(link, false);
   }
 }
 const visibilityObserver = new MutationObserver(syncAccordionVisibility);
@@ -319,6 +330,23 @@ for (const id of optionalSections) {
   if (section) visibilityObserver.observe(section, { attributes: true, attributeFilter: ["hidden"] });
 }
 syncAccordionVisibility();
+function openSettingsSection(link, focus) {
+  const section = document.querySelector(link.getAttribute("href"));
+  if (!section) return;
+  section.open = true;
+  for (const item of document.querySelectorAll(".settings-nav a")) item.setAttribute("aria-current", String(item === link));
+  const scroll = section.closest(".drpp-config-scroll");
+  if (window.matchMedia("(min-width: 901px)").matches) scroll.scrollTop += section.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 16;
+  else if (focus) section.scrollIntoView({ block: "start" });
+  if (focus) section.querySelector("summary").focus({ preventScroll: true });
+}
+for (const link of document.querySelectorAll(".settings-nav a")) {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    openSettingsSection(link, true);
+    history.replaceState(null, "", link.getAttribute("href"));
+  });
+}
 const lines = document.getElementById("drpp-log-lines");
 const indicator = document.getElementById("drpp-log-indicator");
 const search = document.getElementById("drpp-search");
@@ -427,7 +455,7 @@ async function refreshVersion() {
     const res = await fetch("/api/status", { cache: "no-store" });
     if (!res.ok) throw new Error();
     const status = await res.json();
-    document.getElementById("drpp-version").textContent = "Version: v" + status.version;
+    document.getElementById("drpp-version").textContent = status.version ? "Version: v" + status.version : "Development build";
     const notice = document.getElementById("drpp-setup");
     const state = status.server?.state;
     const rows = Array.isArray(status.servers) ? status.servers : [];
@@ -574,6 +602,7 @@ privacy.form.addEventListener("submit", async (event) => {
   }
 });
 const CARD_DEFAULTS = { theme: "midnight-blue", width: 440, padding: 24, radius: 10, progressHeight: 4, showProgress: true, artworkPosition: "left", artworkWidth: null, artworkHeight: null, fieldOrder: ["state", "title", "subtitle"], textAlign: "start", progressPosition: "bottom", progressWidth: "content", direction: "ltr", fontFamily: "system", statusStyle: "plain", artShape: "square", progressStyle: "square", border: "thin", background: "solid", fontStack: "" };
+const CARD_PRESETS = ${JSON.stringify(cardPresets)};
 const LOOK_KEYS = ["fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background", "fontStack"];
 const CARD_NUMBERS = { width: [280, 800], padding: [12, 48], radius: [0, 24], progressHeight: [2, 12], artworkWidth: [48, 160], artworkHeight: [48, 180] };
 const card = { form: document.getElementById("card-form"), save: document.getElementById("card-save"), preview: document.getElementById("card-preview"), note: document.getElementById("card-preview-note"), scaleNote: document.getElementById("card-artwork-scale-note") };
@@ -668,6 +697,8 @@ function showCard(c) {
   card.form.hidden = !c;
   if (!c) return;
   cardField("theme").value = c.theme;
+  for (const button of document.querySelectorAll("[data-card-theme]")) button.setAttribute("aria-pressed", String(button.dataset.cardTheme === cardField("theme").value));
+
   cardField("showProgress").checked = c.showProgress;
   cardField("artworkPosition").value = c.artworkPosition;
   cardField("fieldOrder").value = c.fieldOrder.join(",");
@@ -687,10 +718,17 @@ function showCard(c) {
 for (const key of Object.keys(ART_AUTO)) cardField(key).addEventListener("input", () => { ART_AUTO[key] = false; });
 for (const key of ["theme", "width", "padding", "radius", "progressHeight", "showProgress", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", ...LOOK_KEYS]) cardField(key).addEventListener("input", cardChanged);
 cardField("theme").addEventListener("change", () => {
-  // Compact hides the bar by default; the others show it.
-  cardField("showProgress").checked = cardField("theme").value !== "compact";
-  cardChanged();
+  chooseCardStyle(cardField("theme").value);
 });
+function chooseCardStyle(theme) {
+  // Choosing a style replaces its look controls; width and reading direction
+  // remain the user's choice. This is a draft until the section is saved.
+  const current = cardValues();
+  const preset = CARD_PRESETS[theme];
+  showCard({ ...CARD_DEFAULTS, ...preset.layout, theme, width: current.width, direction: current.direction, showProgress: preset.show.progress !== false });
+  cardSay("Style selected. Press Save to use it.", "");
+}
+for (const button of document.querySelectorAll("[data-card-theme]")) button.addEventListener("click", () => chooseCardStyle(button.dataset.cardTheme));
 document.getElementById("card-reset").addEventListener("click", () => { showCard(CARD_DEFAULTS); cardSay("Defaults shown. Press Save to keep them.", ""); });
 card.form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -807,13 +845,15 @@ let savedCard = null;
 function hostedLink(base) {
   if (!base || !savedCard) return base || "";
   const query = new URLSearchParams();
+  const defaults = { padding: 24, radius: 10, progressHeight: 4, fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin", background: "solid", ...${JSON.stringify(Object.fromEntries(Object.entries(cardPresets).map(([key, preset]) => [key, preset.layout])))}[savedCard.theme] };
   if (savedCard.theme !== "midnight-blue") query.set("theme", savedCard.theme);
   if (savedCard.width !== 440) query.set("width", String(savedCard.width));
   if (savedCard.theme !== "compact" && !savedCard.showProgress) query.set("show", "mediaType,state,subtitle");
+  if (savedCard.theme === "compact" && savedCard.showProgress) query.set("show", "mediaType,progress");
   const progressShown = savedCard.theme === "compact" ? savedCard.showProgress === true : savedCard.showProgress !== false;
-  if (savedCard.padding !== undefined && savedCard.padding !== 24) query.set("padding", String(savedCard.padding));
-  if (savedCard.radius !== undefined && savedCard.radius !== 10) query.set("radius", String(savedCard.radius));
-  if (progressShown && savedCard.progressHeight !== undefined && savedCard.progressHeight !== 4) query.set("progressHeight", String(savedCard.progressHeight));
+  if (savedCard.padding !== undefined && savedCard.padding !== defaults.padding) query.set("padding", String(savedCard.padding));
+  if (savedCard.radius !== undefined && savedCard.radius !== defaults.radius) query.set("radius", String(savedCard.radius));
+  if (progressShown && savedCard.progressHeight !== undefined && savedCard.progressHeight !== defaults.progressHeight) query.set("progressHeight", String(savedCard.progressHeight));
   if (savedCard.fieldOrder && savedCard.fieldOrder.join(",") !== "state,title,subtitle") query.set("fieldOrder", savedCard.fieldOrder.join(","));
   if (savedCard.textAlign && savedCard.textAlign !== "start") query.set("textAlign", savedCard.textAlign);
   if (progressShown && savedCard.progressPosition && savedCard.progressPosition !== "bottom") query.set("progressPosition", savedCard.progressPosition);
@@ -821,7 +861,7 @@ function hostedLink(base) {
   if (savedCard.direction && savedCard.direction !== "ltr") query.set("direction", savedCard.direction);
   // artShape is left out: the hosted card never draws artwork.
   const LOOK_DEFAULTS = { fontFamily: "system", statusStyle: "plain", progressStyle: "square", border: "thin", background: "solid" };
-  for (const [key, fallback] of Object.entries(LOOK_DEFAULTS)) if (savedCard[key] && savedCard[key] !== fallback) query.set(key, savedCard[key]);
+  for (const [key, fallback] of Object.entries(LOOK_DEFAULTS)) if (savedCard[key] && savedCard[key] !== (defaults[key] ?? fallback)) query.set(key, savedCard[key]);
   if (savedCard.fontStack) query.set("fontStack", savedCard.fontStack);
   const text = query.toString().replace(/%2C/g, ",");
   return text ? base + (base.includes("?") ? "&" : "?") + text : base;
@@ -930,9 +970,10 @@ export function createSettingsPageHandler({ settings, fallback, platform = proce
     "/settings": { body: pageHtml, type: "text/html; charset=utf-8", page: true },
     "/servers.js": { body: SERVER_SCRIPT, type: "text/javascript; charset=utf-8" },
     "/settings.css": { body: CSS, type: "text/css; charset=utf-8" },
-    "/drpp-shell.css": { body: DRPP_SHELL_CSS, type: "text/css; charset=utf-8" },
+    "/drpp-shell.css": { body: DRPP_SHELL_CSS + SETTINGS_DESIGN_CSS, type: "text/css; charset=utf-8" },
     "/settings.js": { body: `${scriptText}\n${HOSTED_DEVICES_SCRIPT}\n${SERVER_SCRIPT}\n${SERVICE_SCRIPT}\n${drppShellScriptText}`, type: "text/javascript; charset=utf-8" },
   };
+  for (const key of Object.keys(cardPresets)) assets["/card-styles/" + key + ".svg"] = { body: renderCard({ state: "playing", kind: "track", title: "Blue Monday", subtitle: "New Order", positionMs: 83_000, durationMs: 448_000 }, { theme: key, width: 280 }), type: "image/svg+xml; charset=utf-8" };
   // Explicit allowlist only; project files ship alongside src in installed builds.
   const infoFiles = Object.fromEntries(["NOTICE", "README.md", "LICENSE"].map((name) => {
     try { return [name, readFileSync(new URL("../" + name, import.meta.url), "utf8")]; }

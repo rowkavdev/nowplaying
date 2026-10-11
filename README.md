@@ -11,7 +11,11 @@ Your media server knows what you are playing. nowplaying turns that into a card 
 | :---: | :---: | :---: |
 | ![Example card showing Holocene by Bon Iver](docs/assets/cards/music-playing.svg) | ![Example card showing Spirited Away](docs/assets/cards/movie-playing.svg) | ![Example card showing Lost, S04E05](docs/assets/cards/episode-playing.svg) |
 
-*Example cards, not live playback. [More states and styles](docs/card-examples.md).*
+*Example cards, not live playback. [Browse all six styles](docs/card-examples.md).*
+
+| Studio | Editorial | Terminal |
+| :---: | :---: | :---: |
+| ![Studio card](docs/assets/cards/studio.svg) | ![Editorial card](docs/assets/cards/editorial.svg) | ![Terminal card](docs/assets/cards/terminal.svg) |
 
 > **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
 
@@ -51,7 +55,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 ## Settings, updates and problems
 
-Open **Settings** from the tray icon to manage servers, Discord, hosted cards, privacy and the card's appearance. The local status page shows connections and logs. [Customization](docs/customization.md) · [Updates and release channels](docs/wiki/Updates-and-release-channels.md) · [Troubleshooting](docs/wiki/Troubleshooting.md).
+Open **Settings** from the tray icon to manage servers, Discord, hosted cards, privacy and the card's appearance. Settings keeps configuration beside live logs, with shortcuts for servers, appearance, Discord, privacy, sharing and startup. Choose a card style from the visual gallery, preview changes, and save each section separately. [Settings guide](docs/settings.md) · [Customization](docs/customization.md) · [Updates and release channels](docs/wiki/Updates-and-release-channels.md) · [Troubleshooting](docs/wiki/Troubleshooting.md).
 
 If something fails on a dev build, [open an issue](https://github.com/rowkavdev/nowplaying/issues/new) with the build number, operating system and desktop environment, package format, what you tried and what happened. Leave out server addresses and tokens.
 

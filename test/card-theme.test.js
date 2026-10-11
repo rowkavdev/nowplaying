@@ -13,7 +13,7 @@ const presence = {
 };
 
 test("exports immutable built-in themes", () => {
-  assert.deepEqual(Object.keys(cardThemes), ["midnight-blue", "paper", "compact"]);
+  assert.deepEqual(Object.keys(cardThemes), ["midnight-blue", "studio", "editorial", "terminal", "paper", "compact"]);
   assert.equal(Object.isFrozen(cardThemes), true);
   assert.equal(Object.isFrozen(cardThemes.paper), true);
 });

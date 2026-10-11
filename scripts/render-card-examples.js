@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { renderCard } from "../src/card.js";
 
 export const EXAMPLES = [
+  ...["studio", "editorial", "terminal"].map((theme) => ({ file: `${theme}.svg`, title: `${theme} style`, options: { theme }, presence: { kind: "track", state: "playing", title: "Blue Monday", subtitle: "New Order", positionMs: 83_000, durationMs: 448_000 } })),
   {
     file: "music-playing.svg",
     title: "Music, playing (default midnight-blue theme)",

@@ -1,5 +1,11 @@
+import { cardPresets } from "./card-presets.js";
+export { cardPresets } from "./card-presets.js";
+
 export const cardThemes = Object.freeze({
   "midnight-blue": Object.freeze({ background: "#0d1117", border: "#30363d", primary: "#f0f6fc", secondary: "#9aa7b7", accent: "#58a6ff", track: "#30363d" }),
+  studio: Object.freeze({ background: "#181a1d", border: "#3a3d42", primary: "#f3f3f1", secondary: "#b1b3b7", accent: "#d6c8a9", track: "#393b40" }),
+  editorial: Object.freeze({ background: "#f8f5ee", border: "#c8c1b4", primary: "#25241f", secondary: "#625d52", accent: "#77583c", track: "#ddd6c8" }),
+  terminal: Object.freeze({ background: "#141817", border: "#4c5952", primary: "#e0e8df", secondary: "#a8b8aa", accent: "#b8d3ae", track: "#36443b" }),
   paper: Object.freeze({ background: "#ffffff", border: "#c7d2df", primary: "#172033", secondary: "#526173", accent: "#0969da", track: "#d8e0e8" }),
   compact: Object.freeze({ background: "#0d1117", border: "#30363d", primary: "#f0f6fc", secondary: "#9aa7b7", accent: "#58a6ff", track: "#30363d" }),
 });
@@ -10,7 +16,7 @@ const DATA_IMAGE_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+
 const DEFAULT_FIELD_ORDER = Object.freeze(["state", "title", "subtitle"]);
 const TEXT_ANCHORS = Object.freeze({ start: "start", middle: "middle", end: "end" });
 const SHOW_DEFAULTS = Object.freeze({ artwork: true, mediaType: true, progress: true, state: true, subtitle: true, time: true });
-const COMPACT_SHOW = Object.freeze({ artwork: false, progress: false, state: false, subtitle: false, time: false });
+
 
 
 export function resolveCardTheme(theme = "midnight-blue", colors = {}) {
@@ -30,6 +36,8 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   if (!Number.isInteger(width) || width < 280 || width > 800) throw new RangeError("width must be an integer from 280 to 800");
   if (show === null || typeof show !== "object" || Array.isArray(show)) throw new TypeError("show must be an object");
   if (layout === null || typeof layout !== "object" || Array.isArray(layout)) throw new TypeError("layout must be an object");
+  if (!Object.hasOwn(cardPresets, theme)) throw new TypeError(`Unknown card theme: ${theme}`);
+  layout = { ...cardPresets[theme].layout, ...layout };
   const allowedLayout = new Set(["padding", "radius", "titleSize", "subtitleSize", "progressHeight", "artworkPosition", "artworkWidth", "artworkHeight", "fieldOrder", "textAlign", "progressPosition", "progressWidth", "direction", "fontFamily", "statusStyle", "artShape", "progressStyle", "border", "background", "fontStack"]);
   for (const key of Object.keys(layout)) if (!allowedLayout.has(key)) throw new TypeError(`Unknown card layout setting: ${key}`);
   const padding = bounded(layout.padding, 24, 12, 48, "layout.padding");
@@ -50,7 +58,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   const borderStyle = oneOf(layout.border, "thin", ["none", "thin"], "layout.border");
   const directionSetting = layout.direction ?? "ltr";
   if (!new Set(["ltr", "rtl", "auto"]).has(directionSetting)) throw new TypeError("layout.direction: expected ltr, rtl or auto");
-  const presetShow = theme === "compact" ? COMPACT_SHOW : {};
+  const presetShow = cardPresets[theme].show;
   const visibility = { ...SHOW_DEFAULTS, ...presetShow, ...show };
   for (const [key, value] of Object.entries(visibility)) {
     if (!Object.hasOwn(SHOW_DEFAULTS, key)) throw new TypeError(`Unknown card visibility setting: ${key}`);
@@ -162,10 +170,10 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="${radius}" ${fillAttr}${borderStyle === "thin" ? ` stroke="${palette.border}"` : ""}/>
   ${hasArtwork ? `<image href="${artworkDataUri}" x="${artworkX}" y="${padding}" width="${artworkWidth}" height="${artworkHeight}" preserveAspectRatio="xMidYMid slice" clip-path="url(#art)"/>` : ""}
   ${dot ? `<circle cx="${dotX}" cy="${stateY - 4}" r="3.5" fill="${palette.accent}"/>` : ""}
-  ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="700" letter-spacing="${statusStyle === "caps" ? 1.1 : 0}">${status}</text>` : ""}
+  ${visibility.state ? `<text x="${stateX}" y="${stateY}"${anchorAttr} fill="${palette.accent}" ${font} font-size="11" font-weight="500" letter-spacing="${statusStyle === "caps" ? 1.1 : 0}">${status}</text>` : ""}
   ${showTime ? `<text x="${timeX}" y="${stateY}" text-anchor="${timeAnchor}" fill="${palette.secondary}" ${font} font-size="11" font-variant-numeric="tabular-nums">${timeLabel}</text>` : ""}
-  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">${escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
-  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="500" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
+  <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">${escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
+  ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="400" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
   ${visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${barRx}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${barRx}" fill="${palette.accent}"/>` : ""}
 </svg>`;
 }

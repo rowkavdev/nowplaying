@@ -164,9 +164,9 @@ test("DRPP configuration accordions keep existing form IDs and labels", async ()
   const h = handler();
   const page = (await h({url:"/settings"})).body;
   for (const title of ["Media servers", "Connected services", "Discord Settings", "Privacy Settings", "Card Settings", "YouTube Settings", "Startup Settings", "Hosted Card Settings", "Hosted Card Devices"]) {
-    assert.match(page, new RegExp(`<summary>${title}</summary>`));
+    assert.match(page, new RegExp(`<summary><span class="section-copy"><span>${title}</span>`));
   }
-  assert.match(page, /<details class="drpp-accordion" open>/);
+  assert.match(page, /<details class="drpp-accordion" id="settings-servers" open>/);
   for (const id of ["servers-section", "services-section", "discord-form", "privacy-form", "card-form", "youtube-section", "startup-form", "hosted-form", "hosted-devices"]) {
     assert.match(page, new RegExp(`id="${id}"`));
   }

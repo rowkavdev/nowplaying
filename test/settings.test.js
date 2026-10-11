@@ -69,7 +69,7 @@ test("rejects invalid nested values", () => {
   );
   assert.throws(
     () => validateSettings({ card: { theme: "unsafe-css" } }),
-    { message: "card.theme: expected midnight-blue, paper or compact" },
+    { message: "card.theme: expected a built-in card style" },
   );
   assert.throws(
     () => validateSettings({ discord: { enabled: "yes" } }),

@@ -30,9 +30,9 @@ By default each PC gets its own card link with a random ID. If you have more tha
 
 ## What the card shows
 
-- Music shows as "Listening", films and TV episodes as "Watching".
-- Paused, idle and offline each have their own look.
-- Themes, width and which fields to show are options on the card link; secrets never go in the URL.
+- Playing cards say "Now playing"; paused cards say "Paused". Music shows the track and artist, and TV episodes show the series and episode code.
+- Paused media retains its title. Idle or expired updates show nothing playing.
+- Choose one of six styles in **Settings > Appearance**, adjust the width, and press **Save**. Copy the updated README snippet from **Sharing** after an appearance change; the style is part of its URL. [Style gallery](https://github.com/rowkavdev/nowplaying/blob/main/docs/card-examples.md).
 
 ## Privacy
 

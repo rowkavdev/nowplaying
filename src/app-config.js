@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { cardSettingsView, createAppSettingsStore, discordSettingsView, hostedSettingsView, privacySettingsView } from "./app-settings.js";
-import { renderCard } from "./card.js";
+import { cardPresets, renderCard } from "./card.js";
 import { createCardHandler } from "./http-handler.js";
 import { createCardPipeline } from "./card-pipeline.js";
 import { createHttpServer } from "./http-server.js";
@@ -405,7 +405,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
       // A plain grey square stands in for artwork so placement and size
       // show in the preview; real art is fetched for /card.svg (#449).
       const svg = renderCard(presence, { ...cardRenderOptions(card), artworkDataUri: PREVIEW_ARTWORK });
-      const automaticWidth = presence.kind === "track" ? 100 : 68;
+      const automaticWidth = cardPresets[card.theme ?? "midnight-blue"].layout.artworkWidth ?? (presence.kind === "track" ? 100 : 68);
       return svg.replace("<svg ", `<svg data-preview-artwork-width="${card.artworkWidth ?? automaticWidth}" `);
     },
     // Drops cached album art and updates Discord straight away (#154).

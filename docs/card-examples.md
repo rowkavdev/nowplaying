@@ -1,41 +1,55 @@
-# Card examples
+# Card styles
 
-Every image below is generated from the shipped renderer by `node scripts/render-card-examples.js`, so what you see is exactly what the current build draws. A test fails if the renderer changes and these are not regenerated. Live cards also embed sanitized artwork from your media server on the left.
+Choose **Settings → Appearance → Card Settings**. These examples come directly from the shipped SVG renderer, without cover art, just like hosted README cards. Local cards can also show your server's sanitized cover or poster.
 
-## Music
+## Classic
 
-![Card showing Now playing with the track Holocene by Bon Iver and a progress bar, on a dark background](assets/cards/music-playing.svg)
+A familiar dark card with blue progress.
 
-## Music, paper theme
+![Classic card showing Holocene by Bon Iver](assets/cards/music-playing.svg)
 
-![The same music card in the light paper theme](assets/cards/music-light.svg)
+## Paper
 
-## TV episode
+White background, clear dark text.
 
-![Card showing the series Lost as the title with the episode code S04E05 and episode title The Constant below](assets/cards/episode-playing.svg)
+![Paper card showing Holocene by Bon Iver](assets/cards/music-light.svg)
 
-## Movie
+## Studio
 
-![Card showing the film Spirited Away (2001) with a progress bar](assets/cards/movie-playing.svg)
+Smaller type and cover, rounded corners and a warm accent.
 
-## Paused
+![Studio card showing Blue Monday by New Order](assets/cards/studio.svg)
 
-![Card in the paused state with a partially filled progress bar](assets/cards/paused.svg)
+## Editorial
 
-## Nothing playing
+Serif title, warm paper and square edges. Local artwork sits on the right.
 
-![Card in the idle state showing Nothing playing](assets/cards/idle.svg)
+![Editorial card showing Blue Monday by New Order](assets/cards/editorial.svg)
 
-## Compact theme
+## Terminal
 
-![The music card in the compact theme, text only with no progress bar](assets/cards/compact.svg)
+Monospace type with a muted green palette.
 
-## Privacy: titles hidden
+![Terminal card showing Blue Monday by New Order](assets/cards/terminal.svg)
 
-![Card showing Private media instead of a title, with progress only](assets/cards/privacy-redacted.svg)
+## Compact
 
-The exact set shown depends on your privacy settings - with a media type hidden, anyone looking at the card sees the idle state instead.
+Just the title, without artwork or progress by default.
 
-## Discord Rich Presence
+![Compact card showing Holocene](assets/cards/compact.svg)
 
-The same presence feeds Discord: music shows as **Listening**, films and episodes as **Watching**, and TV episodes use the series name with the episode code (for example "Lost" and "S04E05 · The Constant"). Word for word Discord examples live in the [wiki](https://github.com/rowkavdev/nowplaying/wiki/Enable-Discord-Rich-Presence).
+## Other playback states
+
+| State | Example |
+| --- | --- |
+| TV episode | ![Lost, S04E05, The Constant](assets/cards/episode-playing.svg) |
+| Film | ![Spirited Away, 2001](assets/cards/movie-playing.svg) |
+| Paused | ![Paused music card](assets/cards/paused.svg) |
+| Nothing playing | ![Idle card](assets/cards/idle.svg) |
+| Titles hidden | ![Private media with progress](assets/cards/privacy-redacted.svg) |
+
+Hiding a whole media type shows the idle state. Hiding progress also removes the timer. Privacy applies before any appearance choices.
+
+See [customization](customization.md) for layout controls and theme names. After changing a saved style, copy the new hosted README snippet to update an existing embed.
+
+For contributors: `node scripts/render-card-examples.js` regenerates these images. The example test checks that they match the renderer; visual fixtures also cover narrow cards, artwork, RTL and reordered fields.

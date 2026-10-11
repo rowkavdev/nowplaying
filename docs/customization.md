@@ -1,62 +1,64 @@
-# Customization reference
+# Customize NowPlaying
 
-Customization is provider-neutral and applied after polling. The same normalized presence can feed cards and Discord without changing provider behavior.
+Open **Settings** from the tray icon. Each section saves separately; changing the preview does not save a setting.
 
-## Shipped settings
+## Card appearance
 
-`createSettings()` validates unknown keys and deep-merges immutable defaults for:
+Choose **Appearance** in the settings navigation to open **Card Settings**. Pick a style, adjust the width, and press **Save**. The local card changes immediately. If you already embedded a hosted card, copy the updated README snippet from **Sharing** and replace the old one: appearance is part of that image's URL.
 
-- locale;
-- privacy mode and field removal;
-- shared title/detail/state templates and separators;
-- card theme, width and field visibility;
-- Discord enablement, templates, timestamps and idle behavior.
+| Style | Look | Theme value |
+| --- | --- | --- |
+| Classic | Dark background, sans-serif type, blue progress | `midnight-blue` |
+| Paper | White background and dark type | `paper` |
+| Studio | Smaller rounded cover, warm accent, slim progress | `studio` |
+| Editorial | Warm paper, serif title, square border, cover on the right | `editorial` |
+| Terminal | Monospace type, muted green, square edges | `terminal` |
+| Compact | A single title without artwork or progress | `compact` |
 
-Templates support documented named presence fields. Missing values remove their associated empty segments rather than leaving doubled separators. Output escaping remains destination-specific.
+[See the card gallery](card-examples.md). Width can be 280–800 pixels. Hosted cards use these styles without artwork. The preview uses your current playback when available; when nothing is playing, it uses sample media and a placeholder cover.
 
-## Cards
+**Fine-tune typography, artwork and layout** opens the detailed controls:
 
-`renderCard(presence, options)` supports:
+- padding and corner radius;
+- named font or a custom stack of up to five plain font names;
+- status text, border, background and progress bar appearance;
+- artwork size, shape and side;
+- line order, alignment and text direction.
 
-- `theme`: `midnight-blue`, `paper` or `compact`;
-- `width`: integer from 280 to 800;
-- `colors`: validated six-digit overrides for the selected palette;
-- `show`: booleans for artwork, media type, progress, state and subtitle;
-- `artworkDataUri`: validated, sanitized PNG/JPEG/WebP data.
+Classic, Paper and Editorial choose artwork size by media type; Studio and Terminal use a smaller cover. The size sliders override those defaults. At narrow widths the renderer can reduce the displayed cover to leave room for text. The preview explains when this happens; your saved preference is kept.
 
-`card.artworkTint` (config.json only, default `true`): the card background takes a tint from the cover's dominant colour, kept in a safe lightness range so text stays readable on white or black covers. Set it to `false` in `config.json` to turn it off; settings saves keep your choice.
+Selecting a style resets these appearance controls to that style's defaults. It keeps the current width and reading direction. **Back to defaults** restores Classic at 440 pixels. Both actions are drafts until you press **Save**.
 
-The hosted endpoint exposes a deliberately smaller public allowlist: `theme`, `width`, comma-separated `show` (with `notime` to hide the clock) and the layout and look options listed in the hosted card guide. Secrets, arbitrary colors and templates never enter public query strings.
+Fonts must be installed on the device viewing the SVG. A custom name does not download or embed a font. The local card can take a subtle tint from its cover; set `card.artworkTint` to `false` in `config.json` to disable that. Settings saves preserve your tint choice.
 
-Built-in palettes use color combinations selected to remain distinguishable for deuteranopia. Accessible title/description text is always emitted.
+## Renderer and card links
+
+`renderCard(presence, options)` accepts `theme`, `width`, validated six-digit `colors`, field visibility in `show`, `layout`, sanitized raster artwork in `artworkDataUri`, and a six-digit `tint`. Explicit layout and visibility options override the selected style.
+
+```js
+import { renderCard } from "nowplaying/card";
+
+const svg = renderCard(presence, {
+  theme: "editorial",
+  width: 480,
+  layout: { radius: 4, textAlign: "start" },
+});
+```
+
+`show` accepts booleans for `artwork`, `mediaType`, `progress`, `state`, `subtitle` and `time`. A privacy filter must run before rendering; showing a field cannot recover data removed by that filter.
+
+The local `/card.svg` URL accepts `theme`, `width` and comma-separated `show`. Hosted links also accept the public layout options documented in [hosted card deployment](hosted-card.md). Add `notime` to `show` to hide the clock. Credentials and custom text templates do not belong in a card URL.
 
 ## Discord
 
-Discord settings (Settings > Discord, saved to `config.json`):
+In **Discord Settings**, choose whether to publish presence, which timer to use, what happens when playback stops, and the status text shown beside your name. Spotify appears on cards only; it never feeds Discord.
 
-- elapsed, remaining, both or no timestamps (`discord.timestamps`);
-- idle behaviour (`discord.idleBehavior`);
-- the status text next to your name (`discord.name`) and which line Discord shows there (`discord.statusDisplayType`: `name`, `state` or `details`);
-- album art lookup (`discord.artworkLookup`, off by default).
+For music the default status text is `{title} - {artist}`. Films and episodes use the app name unless you provide a custom status text. Leave the field empty to use those defaults.
 
-Wording templates for the other lines, buttons, asset keys and the update interval can't be changed yet. Values for them in `config.json` are ignored, and a settings save removes them.
+Available fields: `{artist}`, `{title}`, `{subtitle}`, `{album}`, `{year}`, `{series}`, `{season}`, `{episode}`, `{episodeCode}`, `{service}`, `{provider}`, `{mediaType}`, `{state}`, `{stateLabel}`, `{position}`, `{duration}` and `{progressPercent}`. Write `{{` or `}}` for a literal brace. Unknown fields are rejected on save; the maximum is 128 characters.
 
-TV episodes with a known series show the series and episode code, for example "Lost" and "S04E05 · The Constant".
-
-Discord Rich Presence runs locally and communicates with the user's Discord IPC socket. Analytics, when explicitly enabled, sends only one anonymous installation ping.
-
-## Status text
-
-For music, Discord shows `<song> - <artist>` by default, for example "Holocene - Bon Iver" from Plex. Films and episodes keep Discord's own app name unless you set a status text. Change it in Settings > Discord > Status text, or set `discord.name` in `config.json`. Leave it empty for the default. Saved custom templates keep their wording, including `{artist} on {service}` if you prefer it.
-
-Write fields in braces: `{artist}`, `{title}`, `{subtitle}`, `{album}`, `{year}`, `{series}`, `{season}`, `{episode}`, `{episodeCode}`, `{service}` (Spotify, Navidrome, Plex and so on), `{provider}`, `{mediaType}`, `{state}`, `{stateLabel}`, `{position}`, `{duration}` and `{progressPercent}`. Other text is kept as typed. Write `{{` or `}}` for a literal brace. A field that is not in this list is rejected when you save. The text can be 128 characters at most. With hidden titles on, `{artist}` is blank.
+**Show my server's cover** uploads a cover to a temporary public host so Discord can display it. The fallback MusicBrainz lookup sends a track title and artist. Read [artwork behavior](artwork.md#discord-cover-upload) before enabling either on an existing install. Other Discord line templates, buttons and the update interval are not editable in Settings.
 
 ## Privacy
 
-Privacy is applied before formatting. Removed data cannot be restored by card or Discord visibility settings.
-
-Available controls include private/friends/public/custom modes, title redaction/replacement, artwork removal, progress removal and media-kind suppression. Public deployments should start with conservative policy and widen fields intentionally.
-
-## Further layout work
-
-The next customization slices will remain backward-compatible and small. Candidate controls include padding/corner radius, typography scale, artwork placement, progress dimensions/position, field order and RTL-aware alignment. These are not yet accepted renderer options; unsupported keys continue to fail validation rather than silently doing nothing.
+**Privacy Settings** can hide titles, artwork, progress or whole media types across the local card, hosted card and Discord. A hidden media type appears as nothing playing. Privacy is applied before formatting or artwork lookup. [Privacy and safe configuration](wiki/Privacy-and-safe-configuration.md) explains these controls and where credentials are stored.

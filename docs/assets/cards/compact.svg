@@ -7,7 +7,7 @@
   
   
   
-  <text x="24" y="44" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.2" clip-path="url(#txt)">Holocene</text>
+  <text x="24" y="44" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif" font-size="20" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">Holocene</text>
   
   
 </svg>
