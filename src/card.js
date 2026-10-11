@@ -189,7 +189,7 @@ export function renderCard(presence, { width = 440, show = {}, theme = "midnight
   <text x="${textX}" y="${titleY}"${anchorAttr} fill="${palette.primary}" ${font} font-size="${titleSize}" font-weight="600" letter-spacing="-0.35" clip-path="url(#txt)">${titleLines ? titleLines.map((line, index) => `<tspan x="${textX}" dy="${index ? titleSize + 4 : 0}">${escapeXml(line)}</tspan>`).join("") : escapeXml(truncate(title, Math.max(4, Math.floor(contentWidth / (titleSize * 0.64)))))}</text>
   ${hasSubtitle ? `<text x="${textX}" y="${subtitleY}"${anchorAttr} fill="${palette.secondary}" ${font} font-size="${subtitleSize}" font-weight="400" clip-path="url(#txt)">${escapeXml(truncate(subtitle, Math.max(4, Math.floor(contentWidth / (subtitleSize * 0.55)))))}</text>` : ""}
   ${visibility.progress && theme === "terminal" ? `<g>${Array.from({ length: 24 }, (_, i) => { const segmentWidth = Math.max(1, (barWidth - 46) / 24); return `<rect x="${barX + i * (segmentWidth + 2)}" y="${progressY}" width="${segmentWidth}" height="${progressHeight}" rx="0" fill="${(rtl ? 23 - i : i) / 24 < progress / barWidth ? palette.accent : palette.track}"/>`; }).join("")}</g>` : visibility.progress ? `<rect x="${barX}" y="${progressY}" width="${barWidth}" height="${progressHeight}" rx="${barRx}" fill="${palette.track}"/><rect x="${rtl ? barX + barWidth - progress : barX}" y="${progressY}" width="${progress}" height="${progressHeight}" rx="${barRx}" fill="${palette.accent}"/>` : ""}
-</svg>`.split("\n").map((line) => line.replace(/[ \t]+$/, "")).join("\n");
+</svg>`.split("\n").map((line) => line.trimEnd()).join("\n");
 }
 
 
