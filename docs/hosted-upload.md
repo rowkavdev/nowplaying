@@ -37,7 +37,25 @@ Deploy the updated hosted service before enabling cover sharing in the updated d
 ## How it's stored
 
 - The service keeps only the latest update from each of your PCs, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
-- The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown, PCs registered and people signed in.
+- The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown, PCs registered and people signed in. Each total is also published as a public badge; see [Usage badges](#usage-badges).
+
+## Usage badges
+
+The service publishes three aggregate totals as [Shields endpoint badges](https://shields.io/badges/endpoint-badge), cached for five minutes:
+
+| Badge | URL |
+| --- | --- |
+| Cards shown | `https://nowplaying-hosted.vercel.app/badges/requests.json` |
+| PCs registered | `https://nowplaying-hosted.vercel.app/badges/pcs.json` |
+| People signed in | `https://nowplaying-hosted.vercel.app/badges/users.json` |
+
+Point a Shields endpoint badge at one of them, for example:
+
+```md
+![Cards shown](https://img.shields.io/endpoint?url=https%3A%2F%2Fnowplaying-hosted.vercel.app%2Fbadges%2Frequests.json)
+```
+
+Each badge is a single number with nothing per card, per PC or per person. If the counter is unavailable the endpoint answers `503`, so Shields shows its error state instead of a number. Self-hosted deployments can wire the same handlers and serve the same badges from their own domain.
 
 ### Signed in with GitHub (one card for all your PCs)
 

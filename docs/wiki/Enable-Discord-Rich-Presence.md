@@ -11,7 +11,7 @@ Discord Rich Presence puts "Listening to" or "Watching" with your current media 
 
 1. Connect a media server on the first-run page. Wait for the full Settings page, then under **Discord** tick **Show what I'm playing on Discord**. The first-run page has no Discord controls.
 2. Pick what happens when nothing is playing: clear the status, clear it after a short wait, show "Nothing playing", or keep the last item.
-3. Press **Save**. Play something to check the actual Discord status. **Settings > Card** has a card preview, not a Discord status preview.
+3. Press **Save**. Play something to check the actual Discord status. **Settings → Appearance → Card Settings** has a card preview, not a Discord status preview.
 
 Success looks like: play something, and your Discord profile shows it within a few seconds.
 

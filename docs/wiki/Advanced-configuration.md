@@ -9,7 +9,7 @@ Settings live at `%LOCALAPPDATA%\nowplaying\config.json`. It contains no passwor
 ## What you can change
 
 - Templates for the title, detail and state lines, with fields like `{title}`, `{series}`, `{episodeCode}` and `{year}`
-- Card theme (`midnight-blue`, `paper`, `compact`), width (280-800 px) and which fields show
+- Card theme (`midnight-blue`, `paper`, `compact`, `studio`, `editorial`, `terminal`), width (280-800 px) and which fields show
 - `card.artworkTint` (default `true`): tint the card background from the cover's dominant colour; set `false` in `config.json` to turn it off
 - Discord timestamps, idle behaviour and album art lookup (Discord wording, buttons and update interval can't be changed yet)
 - Privacy mode and per-field hiding (see [Privacy and safe configuration](Privacy-and-safe-configuration))

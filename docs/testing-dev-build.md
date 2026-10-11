@@ -44,15 +44,18 @@ Write down the build number and version from the release title, for example `dev
 - [ ] "Hide progress and timer": no progress bar on the card and no timer on Discord.
 - [ ] "Don't show" Music (or Movies / TV episodes): playing that kind clears Discord and the card shows nothing playing. Untick it and it comes back.
 - [ ] Settings > Discord > "When nothing is playing": pick "Show what I played last", Save, stop playback. Discord keeps the last item instead of clearing.
-- [ ] Settings > Card: move Corners, Padding and Width, and switch Style. The preview redraws within a second each time. With nothing playing it shows "Sample track".
+- [ ] Settings → Appearance → Card Settings: pick **Paper** from the style picker, press Save, and reload the page. The picker still shows **Paper** and the preview is still white.
+- [ ] Move Width, then Padding and Corners under "Fine-tune typography, artwork and layout". The preview redraws as each control moves. With nothing playing, the preview shows a sample track on illustrated artwork.
 - [ ] Untick "Show progress bar". Bar thickness greys out and the bar goes from the preview. Pick Compact: the bar box unticks on its own.
 - [ ] Type 90 in Width. A message says 280 to 800 and Save is greyed out. Put 520 back.
-- [ ] Pick Light, 520 px, press Save. Open the card link from the Status page: the card is light and wider. Nothing restarted.
-- [ ] Quit and reopen nowplaying. Settings > Card still shows Light and 520, and the card still looks the same.
+- [ ] Pick **Paper**, 520 px, press Save. Open the card link from the Status page: the card is light and wider. Nothing restarted.
+- [ ] Quit and reopen nowplaying. Card Settings still shows **Paper** and 520, and the card still looks the same.
+- [ ] Pick each of the six styles in turn: Classic, Paper, Compact, Studio, Editorial, Hi-Fi. The preview redraws for each, and picking a style resets the look controls to that style's defaults and keeps the width.
 - [ ] With the hosted card on, the README snippet under Hosted card ends in `?theme=paper&width=520`. Open that link and check it matches.
+- [ ] In Sharing → Hosted Card Settings, tick **Include cover art**, press Save, and reload the page. The toggle stays on.
 - [ ] Before or after the first server, **Settings > Spotify and hosted card > Hosted card** has **Sign in with GitHub**. Open the link and enter the code. The card link becomes `/u/<your-username>.svg`. Settings > Hosted card devices lists this PC; rename works and **Sign out** stops it updating.
 - [ ] On an existing installation that has never used GitHub sign-in, open configured Settings and confirm the same button is visible without rerunning setup.
-- [ ] "Back to defaults", then Save. The card goes back to dark, 440 px, and the hosted link has no `?` part.
+- [ ] "Back to defaults", then Save. The card goes back to Classic, 440 px, and the hosted link has no `?` part.
 - [ ] With artwork showing, the card background picks up the cover's colour. Set `card.artworkTint` to `false` in `config.json`: the background goes back to the plain theme colour.
 - [ ] The status page lists every connected server, each with its own connection state.
 - [ ] Settings > Media servers lists every server. Remove one there (not the last one); nowplaying restarts with the other servers still feeding the card and Discord.

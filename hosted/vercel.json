@@ -25,6 +25,14 @@
     {
       "source": "/badges/requests.json",
       "destination": "/api/badge"
+    },
+    {
+      "source": "/badges/pcs.json",
+      "destination": "/api/badge-pcs"
+    },
+    {
+      "source": "/badges/users.json",
+      "destination": "/api/badge-users"
     }
   ],
   "headers": [

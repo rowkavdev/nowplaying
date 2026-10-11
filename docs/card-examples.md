@@ -56,7 +56,17 @@ A record display with circular artwork and grooves, monospace type and an amber 
 
 A dark card with blue progress.
 
-![Classic card showing Holocene by Bon Iver](assets/cards/music-playing.svg)
+**Music**
+
+![Classic music card: Holocene by Bon Iver](assets/cards/music-playing.svg)
+
+**Film**
+
+![Classic film card: Spirited Away (2001)](assets/cards/movie-playing.svg)
+
+**TV**
+
+![Classic TV card: Lost, S04E05, The Constant](assets/cards/episode-playing.svg)
 
 ## Paper
 
