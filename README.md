@@ -1,5 +1,3 @@
-# nowplaying
-
 ![nowplaying: see what's playing, everywhere](assets/brand/banner.png)
 
 [![CI](https://github.com/rowkavdev/nowplaying/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rowkavdev/nowplaying/actions/workflows/ci.yml)
