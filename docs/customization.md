@@ -15,7 +15,7 @@ Choose **Appearance** in the settings navigation to open **Card Settings**. Pick
 | Hi-Fi | Record deck, amber display, segmented timeline | `terminal` |
 | Compact | A single title without artwork or progress | `compact` |
 
-[See the card gallery](card-examples.md). Width can be 280–800 pixels. Hosted cards use these styles without artwork. The preview uses your current playback when available; when nothing is playing, it uses sample media and a placeholder cover.
+[See the card gallery](card-examples.md). Width can be 280–800 pixels. The preview uses your current playback and artwork when available; when nothing is playing, it uses sample media and illustrated artwork. Hosted cards can include covers and posters when **Sharing → Hosted Card Settings → Include cover art** is enabled and saved. Privacy controls still apply. [Set up a README card](wiki/Add-a-README-card.md).
 
 **Fine-tune typography, artwork and layout** opens the detailed controls:
 
