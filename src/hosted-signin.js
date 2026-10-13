@@ -46,8 +46,13 @@ export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = proc
     if (now() >= flow.expiresAt) { flow = null; return { status: "expired" }; }
     if (now() < flow.nextPollAt) return { status: "pending" };
     flow.nextPollAt = now() + flow.intervalMs;
+    const requestFlow = flow;
     let res;
-    try { res = await post(TOKEN_URL, { client_id: clientId, device_code: flow.deviceCode, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }); } catch { return { status: "pending" }; }
+    try { res = await post(TOKEN_URL, { client_id: clientId, device_code: requestFlow.deviceCode, grant_type: "urn:ietf:params:oauth:grant-type:device_code" }); } catch { return { status: "pending" }; }
+    // Guard by flow identity: a late reply belongs to the flow it was issued for.
+    // If that flow was cleared or replaced while the request was in flight, the reply
+    // must not touch state, exchange, or save credentials.
+    if (flow !== requestFlow) return { status: "pending" };
     const d = res.data ?? {};
     if (d.error === "authorization_pending") return { status: "pending" };
     if (d.error === "slow_down") { flow.intervalMs += 5000; flow.nextPollAt = now() + flow.intervalMs; return { status: "pending" }; }
