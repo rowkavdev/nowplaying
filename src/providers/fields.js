@@ -61,7 +61,7 @@ export function artistLine(artists, albumArtist) {
 export function artworkRef(provider, itemId, imageTag) {
   const id = optionalText(itemId);
   const tag = optionalText(imageTag);
-  return id && tag && tag.length <= 512 ? { provider, itemId: id, imageTag: tag, type: "primary" } : null;
+  return id && id.length <= 512 && tag && tag.length <= 512 ? { provider, itemId: id, imageTag: tag, type: "primary" } : null;
 }
 
 // Artwork that is addressed by one id (Plex thumb, Navidrome cover): a short
