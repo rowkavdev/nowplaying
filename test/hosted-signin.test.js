@@ -259,3 +259,72 @@ test('late terminal poll from flow A leaves newly started flow B intact (#790)',
     assert.equal(bPolls, 1);
   }
 });
+
+function githubDeferred() {
+  const calls = [];
+  const tokenReplies = [];
+  let deviceCount = 0;
+  const fetchImpl = (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url, body });
+    const reply = (data, status = 200) => (streamJsonFixture({ ok: status < 400, status, json: async () => data }));
+    if (url === "https://github.com/login/device/code") { deviceCount++; return Promise.resolve(reply({ device_code: `dc${deviceCount}`, user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 })); }
+    if (url === "https://github.com/login/oauth/access_token") return new Promise(resolve => { tokenReplies.push(data => resolve(reply(data))); });
+    if (url.endsWith("/api/auth/github")) return Promise.resolve(reply({ login: "octo", deviceId: DEV, token: TOK, cardPath: "/u/octo.svg" }, 201));
+    throw new Error(`unexpected ${url}`);
+  };
+  return { calls, fetchImpl, tokenReplies };
+}
+
+test('a late slow_down reply cannot touch a flow replaced by a new sign-in (#1121)', async () => {
+  let clock = 0;
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const gh = githubDeferred();
+  const s = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl: gh.fetchImpl, now: () => clock });
+  await s.start(); // flow A: next poll at 5000
+  clock = 5000;
+  const latePoll = s.poll(); // flow A token request in flight
+  await s.start(); // flow B replaces flow A: next poll at 10000
+  gh.tokenReplies[0]({ error: "slow_down" }); // flow A's late reply
+  assert.deepEqual(await latePoll, { status: "pending" });
+  clock = 10000;
+  const bPoll = s.poll(); // flow B must still poll on its own schedule
+  gh.tokenReplies[1]({ error: "authorization_pending" });
+  assert.equal((await bPoll).status, "pending");
+  assert.equal(gh.calls.filter(c => c.url.includes("access_token")).length, 2); // flow B polled at 10000, not slowed to 15000
+});
+
+test('a late slow_down reply cannot touch a flow cleared by a concurrent poll (#1121)', async () => {
+  let clock = 0;
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const gh = githubDeferred();
+  const s = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl: gh.fetchImpl, now: () => clock });
+  await s.start();
+  clock = 5000;
+  const latePoll = s.poll(); // in flight
+  clock = 901000; // past expiresAt
+  assert.equal((await s.poll()).status, "expired"); // concurrent poll clears the flow
+  gh.tokenReplies[0]({ error: "slow_down" }); // late reply for the cleared flow
+  assert.deepEqual(await latePoll, { status: "pending" }); // must not throw or touch state
+});
+
+test('a late token from a replaced flow cannot exchange or save credentials (#1121)', async () => {
+  let clock = 0;
+  const credentials = createHostedCredentials({ adapter: memAdapter() });
+  const gh = githubDeferred();
+  const s = createHostedGitHubSignIn({ baseUrl: "https://h.example", credentials, clientId: "id", fetchImpl: gh.fetchImpl, now: () => clock, deviceName: "Desk" });
+  await s.start(); // flow A (dc1)
+  clock = 5000;
+  const latePoll = s.poll(); // flow A token request in flight
+  await s.start(); // flow B (dc2) now owns sign-in
+  gh.tokenReplies[0]({ access_token: "gho_stale" }); // flow A's late success
+  assert.deepEqual(await latePoll, { status: "pending" });
+  assert.equal(gh.calls.filter(c => c.url.endsWith("/api/auth/github")).length, 0); // no exchange
+  assert.equal(await credentials.load(), null); // nothing saved
+  clock = 10000;
+  const bPoll = s.poll(); // flow B still intact and polling
+  gh.tokenReplies[1]({ access_token: "gho_fresh" });
+  assert.equal((await bPoll).status, "signed_in");
+  assert.equal(gh.calls.find(c => c.url.endsWith("/api/auth/github")).body.githubToken, "gho_fresh");
+  assert.deepEqual({ ...(await credentials.load()) }, { login: "octo", deviceId: DEV, token: TOK, baseUrl: "https://h.example" });
+});
