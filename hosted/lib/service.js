@@ -30,6 +30,32 @@ export const MAX_DEVICES_PER_USER = 10;
 export const USER_INGESTS_PER_MINUTE = 60;
 export const SIGNINS_PER_HOUR = 10;
 const LOGIN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+// Stored JSON we cannot parse, or that parses to something other than a
+// plain object, is treated as absent: a corrupt entry fails closed (or
+// renders idle) instead of crashing the request with a 500.
+const parseStored = (raw) => {
+  try {
+    const value = JSON.parse(raw);
+    return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch { return null; }
+};
+
+const USER_ID_PATTERN = /^\d+$/;
+// Token entries come in exactly two shapes, both written by this service:
+// legacy per-PC { cardId, deviceId } and GitHub-signed-in { userId, deviceId }.
+// Anything else under np:tok: is not a credential and fails closed. The
+// returned entry carries only the known fields, so a corrupt or crafted
+// value can never steer the keys ingest writes to (np:state:undefined and
+// friends).
+const parseDeviceEntry = (raw) => {
+  const value = parseStored(raw);
+  if (!value || !isCardId(value.deviceId)) return null;
+  const keys = Object.keys(value).sort().join(",");
+  if (keys === "cardId,deviceId" && isCardId(value.cardId)) return { cardId: value.cardId, deviceId: value.deviceId };
+  if (keys === "deviceId,userId" && typeof value.userId === "string" && USER_ID_PATTERN.test(value.userId)) return { userId: value.userId, deviceId: value.deviceId };
+  return null;
+};
+
 const GITHUB_TOKEN_PATTERN = /^[A-Za-z0-9_]{10,255}$/;
 const DEVICE_NAME_LIMIT = 40;
 
@@ -268,8 +294,9 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
   async function authenticate(token) {
     if (typeof token !== "string" || token.length < 20 || token.length > 128) throw new ServiceError(401, "unauthorized");
     const raw = await cmd("GET", `np:tok:${hashToken(token)}`);
-    if (!raw) throw new ServiceError(401, "unauthorized");
-    return JSON.parse(raw);
+    const device = raw ? parseDeviceEntry(raw) : null;
+    if (!device) throw new ServiceError(401, "unauthorized");
+    return device;
   }
 
   async function ingest({ token, payload }) {
@@ -358,7 +385,13 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const userId = String(id);
 
     const rawUser = await cmd("GET", `np:user:${userId}`);
-    const user = rawUser ? JSON.parse(rawUser) : null;
+    const user = rawUser ? parseStored(rawUser) : null;
+    // A stored user record we cannot read is not a new user. Signing in
+    // anyway would skip the old-login cleanup below and leave the previous
+    // public handle serving this account's playback, with no path to
+    // recover it. Fail closed before any account, mapping, device or token
+    // write, until the record is repaired by hand.
+    if (rawUser && (!user || typeof user.login !== "string" || !isLogin(user.login))) throw new ServiceError(409, "account_needs_repair");
     if (!user) { await bump("np:stats:users"); await countToday("users"); }
     if (user?.login && user.login.toLowerCase() !== login.toLowerCase()) {
       const oldKey = `np:login:${user.login.toLowerCase()}`;
@@ -383,7 +416,7 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     if (typeof legacyToken === "string" && legacyToken.length >= 20 && legacyToken.length <= 128) {
       const legacyHash = hashToken(legacyToken);
       const raw = await cmd("GET", `np:tok:${legacyHash}`);
-      const legacy = raw ? JSON.parse(raw) : null;
+      const legacy = raw ? parseStored(raw) : null;
       if (legacy?.cardId && !legacy.userId) {
         await cmd("DEL", `np:tok:${legacyHash}`);
         await cmd("SET", `np:alias:${legacy.cardId}`, userId);
@@ -467,7 +500,8 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const alias = await cmd("GET", `np:alias:${id}`);
     if (alias) return { userId: alias, presence: await userCardState(alias) };
     const raw = await cmd("GET", `np:state:${id}`);
-    return { cardId: id, presence: raw ? shown(JSON.parse(raw)) : { ...IDLE } };
+    const stored = raw ? parseStored(raw) : null;
+    return { cardId: id, presence: stored ? shown(stored) : { ...IDLE } };
   }
 
   async function readUserCardState(login) {
