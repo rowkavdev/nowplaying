@@ -45,3 +45,18 @@ for (const [name, make] of Object.entries(makers)) {
     assert.equal(p.year, 1999);
   });
 }
+
+for (const [name, make] of Object.entries(makers)) {
+  test(`${name}: an overlong artwork item ID drops artwork without failing playback`, async () => {
+    const presence = await presenceFor(make, { Type: "Audio", Name: "Song", Id: "i".repeat(513), ImageTags: { Primary: "tag" } });
+    assert.equal(presence.state, "playing");
+    assert.equal(presence.title, "Song");
+    assert.equal(presence.artwork, null);
+  });
+
+  test(`${name}: an artwork item ID at the 512-character boundary remains usable`, async () => {
+    const id = "i".repeat(512);
+    const presence = await presenceFor(make, { Type: "Audio", Name: "Song", Id: id, ImageTags: { Primary: "tag" } });
+    assert.deepEqual(presence.artwork, { provider: name, itemId: id, imageId: null, imageTag: "tag", type: "primary" });
+  });
+}
