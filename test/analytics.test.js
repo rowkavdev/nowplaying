@@ -40,6 +40,17 @@ test("overlapping Discord pings send one request and a failed ping can be retrie
   assert.equal(calls, 2);
 });
 
+test("a Discord ping releases the reply body on success and on rejection", async () => {
+  for (const ok of [true, false]) {
+    let cancelled = false;
+    const body = { cancel: async () => { cancelled = true; } };
+    const analytics = createDiscordAnalytics({ enabled: true, endpoint: "https://stats.example.test", installationId: "anonymous-install-01", fetchImpl: async () => ({ ok, status: ok ? 204 : 503, body }) });
+    if (ok) assert.deepEqual(await analytics.ping(), { sent: true });
+    else await assert.rejects(analytics.ping(), /503/);
+    assert.equal(cancelled, true, ok ? "success body left unread" : "rejected body left unread");
+  }
+});
+
 test("a failing analytics write does not fail the card", async () => {
   const resolve = withCardAnalytics(async () => "<svg/>", { store: { recordCard: async () => { throw new Error("disk full"); } }, installationId: "anonymous-installation" });
   assert.equal(await resolve({}), "<svg/>");

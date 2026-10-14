@@ -28,6 +28,10 @@ export function createDiscordAnalytics({ enabled = false, endpoint, installation
       inFlight = true;
       try {
         const response = await fetchImpl(new URL("/analytics/discord", endpoint), { method: "POST", headers: { "X-Nowplaying-Installation": installationId } });
+        // The ping reply carries no usable content; try to cancel a present
+        // body before checking the status. Do not await the cancellation
+        // promise, and ignore cancellation errors.
+        try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch {}
         if (!response.ok) throw new Error(`analytics ping failed (${response.status})`);
         sent = true;
       } finally { inFlight = false; }
