@@ -17,6 +17,10 @@ export async function fetchWithTimeout(fetchImpl, url, init = {}, timeoutMs = RE
       // own. A different port on the same host is a different origin too.
       const response = await fetchImpl(target.toString(), { ...init, signal, redirect: "manual" });
       if (!REDIRECTS.has(response.status)) return response;
+      // Redirect replies are never read. Try to cancel a present hop body
+      // before following or failing. The cancellation promise is not awaited
+      // and errors are ignored; a custom synchronous cancel may still block.
+      discardResponseBody(response);
       if (hops >= MAX_REDIRECTS) throw new Error("Provider request redirected too many times");
       const location = response.headers?.get?.("location");
       if (!location) throw new Error("Provider request redirected without a location");
