@@ -13,7 +13,12 @@ export async function publishRelease({ directory = process.cwd(), tag, repositor
   if (typeof repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new TypeError("release repository must be owner/name");
   if (typeof sha !== "string" || !/^[a-f0-9]{40}$/i.test(sha)) throw new TypeError("release commit must be a full SHA");
   const files = await verifyReleaseArtifacts(directory, tag);
-  const endpoint = `repos/${repository}/releases/tags/${tag}`;
+  // REST's release-by-tag endpoint omits drafts even with owner access.
+  // gh release view resolves authenticated drafts; pin subsequent fresh reads
+  // to its numeric ID so a deleted/recreated release cannot change ownership.
+  const { databaseId } = JSON.parse(await gh(["release", "view", tag, "--repo", repository, "--json", "databaseId"]));
+  if (!Number.isSafeInteger(databaseId) || databaseId <= 0) throw new Error("release lookup returned an invalid release ID");
+  const endpoint = `repos/${repository}/releases/${databaseId}`;
   async function draftRelease() {
     const release = JSON.parse(await gh(["api", endpoint]));
     if (release.tag_name !== tag || release.draft !== true || release.prerelease !== false) throw new Error("refusing to change a published release or a prerelease");

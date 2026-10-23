@@ -8,7 +8,7 @@ import { releaseAssetNames } from "../scripts/release-artifacts.js";
 import { publishRelease } from "../scripts/publish-release.js";
 
 const tag = "v0.2.1", repository = "owner/nowplaying", sha = "a".repeat(40);
-async function fixture(t, { draft = true, commit = sha, existing = [], corruptDownload = null } = {}) {
+async function fixture(t, { draft = true, commit = sha, existing = [], corruptDownload = null, releaseId = 422301019 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "np-publish-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const local = new Map(releaseAssetNames(tag).map(name => [name, Buffer.from(`verified ${name}`)]));
@@ -19,7 +19,18 @@ async function fixture(t, { draft = true, commit = sha, existing = [], corruptDo
   const calls = [];
   async function gh(args) {
     calls.push(args);
-    if (args[0] === "api") return JSON.stringify(args[1].includes("/commits/") ? { sha: commit } : { ...state, assets: [...remote.keys()].map(name => ({ name })) });
+    if (args[0] === "api") {
+      // GitHub's REST by-tag route returns 404 for this authenticated draft.
+      // Only the numeric-ID route exposes the fresh draft and asset state.
+      if (args[1].includes("/releases/tags/")) throw new Error("HTTP 404: Not Found");
+      if (args[1] === `repos/${repository}/commits/${tag}`) return JSON.stringify({ sha: commit });
+      assert.equal(args[1], `repos/${repository}/releases/${releaseId}`);
+      return JSON.stringify({ id: releaseId, ...state, assets: [...remote.keys()].map(name => ({ name })) });
+    }
+    if (args[1] === "view") {
+      assert.deepEqual(args, ["release", "view", tag, "--repo", repository, "--json", "databaseId"]);
+      return JSON.stringify({ databaseId: releaseId });
+    }
     if (args[1] === "upload") {
       assert.ok(!args.includes("--clobber"), "release uploads must never overwrite existing assets");
       for (const file of args.slice(5)) {
@@ -41,11 +52,14 @@ async function fixture(t, { draft = true, commit = sha, existing = [], corruptDo
   return { directory, remote, local, state, calls, run: () => publishRelease({ directory, tag, repository, sha, gh }) };
 }
 
-test("stable publication checks downloaded bytes before promoting the draft", async t => {
+test("authenticated draft lookup uses its release ID when REST by tag returns 404", async t => {
   const f = await fixture(t);
   await f.run();
   assert.equal(f.state.draft, false);
   assert.deepEqual(f.remote, f.local);
+  assert.deepEqual(f.calls[0], ["release", "view", tag, "--repo", repository, "--json", "databaseId"]);
+  assert.equal(f.calls.filter(call => call[0] === "api" && call[1] === `repos/${repository}/releases/422301019`).length, 2, "recheck the same draft ID after verifying uploaded bytes");
+  assert.ok(!f.calls.some(call => call[1]?.includes("/releases/tags/")));
   assert.equal(f.calls.at(-1)[1], "edit");
   assert.ok(f.calls.at(-1).includes("--latest"));
   assert.ok(f.calls.findIndex(call => call[1] === "download") > f.calls.findIndex(call => call[1] === "upload"));
@@ -55,7 +69,7 @@ test("published releases and mismatched immutable tags are refused without mutat
   for (const options of [{ draft: false }, { commit: "b".repeat(40) }]) {
     const f = await fixture(t, options);
     await assert.rejects(f.run(), /published release|verified commit/);
-    assert.ok(f.calls.every(call => call[0] === "api"));
+    assert.ok(f.calls.every(call => call[0] === "api" || call[1] === "view"));
   }
 });
 
@@ -93,5 +107,15 @@ test("incomplete and ambiguous checksum manifests cannot publish", async t => {
     await writeFile(join(f.directory, "SHA256SUMS"), ambiguous ? `${lines.join("\n")}\n${lines[0]}\n` : `${lines.slice(1).join("\n")}\n`);
     await assert.rejects(f.run(), /checksum/);
     assert.deepEqual(f.calls, []);
+  }
+});
+
+
+test("an invalid release ID fails before any GitHub mutation", async t => {
+  for (const releaseId of [null, "422301019", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    const f = await fixture(t, { releaseId });
+    await assert.rejects(f.run(), /invalid release ID/);
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0][1], "view");
   }
 });
