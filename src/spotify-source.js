@@ -2,6 +2,7 @@ import { createSpotifyTokenSource } from "./spotify-auth.js";
 import { createSpotifyProvider } from "./providers/spotify.js";
 import { withProviderBackoff } from "./provider-backoff.js";
 import { presenceItemKey } from "./presence-identity.js";
+import { nextPresenceActivityOrder, PRESENCE_ACTIVITY_ORDER } from "./presence-activity.js";
 
 // Runtime pieces for Spotify (#135).
 
@@ -37,28 +38,35 @@ export function combinePresence({ primary, secondary, prefer = "recent" }) {
   // Process-local activity order survives adjustments to the PC wall clock.
   // Reset a side when it stops; an unchanged item keeps its earlier priority.
   const started = { server: null, other: null };
-  let nextActivityOrder = 0;
-  function track(side, result) {
+  const activityByPresence = new WeakMap();
+  function track(side, source, result) {
     // A failed poll is unknown playback, not a stop/resume.
     if (result.status !== "fulfilled") return;
     const value = result.value;
     if (value?.state !== "playing") { started[side] = null; return; }
     const key = presenceItemKey(value);
-    if (started[side]?.key !== key) started[side] = { key, order: ++nextActivityOrder };
+    const inheritedOrder = source[PRESENCE_ACTIVITY_ORDER]?.(value);
+    if (inheritedOrder != null) started[side] = { key, order: inheritedOrder };
+    else if (started[side]?.key !== key) started[side] = { key, order: nextPresenceActivityOrder() };
+  }
+  function selected(side, result) {
+    if (result.value?.state === "playing") activityByPresence.set(result.value, started[side].order);
+    return result.value;
   }
   return Object.freeze({
+    [PRESENCE_ACTIVITY_ORDER]: (presence) => activityByPresence.get(presence) ?? null,
     async getPresence() {
       const [server, other] = await Promise.allSettled([primary.getPresence(), secondary.getPresence()]);
-      track("server", server);
-      track("other", other);
+      track("server", primary, server);
+      track("other", secondary, other);
       const playing = (result) => result.status === "fulfilled" && result.value?.state === "playing";
       if (playing(server) && playing(other)) {
-        if (prefer === "server") return server.value;
-        if (prefer === "spotify") return other.value;
-        return started.other.order > started.server.order ? other.value : server.value;
+        if (prefer === "server") return selected("server", server);
+        if (prefer === "spotify") return selected("other", other);
+        return started.other.order > started.server.order ? selected("other", other) : selected("server", server);
       }
-      if (playing(server)) return server.value;
-      if (playing(other)) return other.value;
+      if (playing(server)) return selected("server", server);
+      if (playing(other)) return selected("other", other);
       if (server.status === "fulfilled") return server.value;
       throw server.reason;
     },

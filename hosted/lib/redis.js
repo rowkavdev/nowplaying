@@ -96,16 +96,10 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
             else { drop(devices[index]); devices.splice(index, 1); }
             save(); return [1, 1];
           }
-          if (typeof key === "string" && key.includes("np-last-play-v1") && Number(rest[0]) === 2) {
-            const [tokenKey, historyKey, recordText, ttl] = rest.slice(1);
-            if (!live(tokenKey)) return 0;
-            data.set(historyKey, { value: String(recordText), expiresAt: now() + Number(ttl) * 1000 });
-            return 1;
-          }
           // Emulates the hosted ingest script as one synchronous Redis action.
           // No await may split its comparison from the card-state write.
-          if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 4) throw new Error("unsupported script");
-          const [seqKey, stateKey, seenKey, tokenKey, seqText, seqTtl, userFlag, recordText, receivedAt, stateTtl] = rest.slice(1);
+          if (typeof key !== "string" || !key.includes("local previous = tonumber(redis.call('GET', KEYS[1])") || Number(rest[0]) !== 5) throw new Error("unsupported script");
+          const [seqKey, stateKey, seenKey, tokenKey, historyKey, seqText, seqTtl, userFlag, recordText, receivedAt, stateTtl, historyText, historyTtl] = rest.slice(1);
           if (!live(tokenKey)) return [-1, -1];
           const previous = Number(live(seqKey)?.value ?? -1);
           const incoming = Number(seqText);
@@ -122,6 +116,16 @@ export function createMemoryRedis({ now = () => Date.now() } = {}) {
           }
           if (userFlag === "1") data.set(seenKey, { value: String(receivedAt), expiresAt: now() + Number(seqTtl) * 1000 });
           data.set(seqKey, { value: String(seqText), expiresAt: now() + Number(seqTtl) * 1000 });
+          if (historyText) {
+            let priorAt = null;
+            try {
+              const at = JSON.parse(live(historyKey)?.value)?.at;
+              if (at != null && Number.isFinite(Number(at))) priorAt = Number(at);
+            } catch { /* replace corrupt history */ }
+            if (priorAt === null || priorAt <= Number(receivedAt)) {
+              data.set(historyKey, { value: String(historyText), expiresAt: now() + Number(historyTtl) * 1000 });
+            }
+          }
           return [1, previous];
         }
         case "GET": return live(key)?.value ?? null;

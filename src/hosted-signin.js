@@ -67,9 +67,17 @@ export function createHostedGitHubSignIn({ baseUrl, credentials, clientId = proc
   async function finish(githubToken) {
     const stored = await credentials.load().catch(() => null);
     const legacy = hostedCredentialMatches(stored, origin) ? stored : null;
+    const body = { githubToken, deviceName: String(deviceName || "PC").slice(0, 40), ...(legacy?.cardId && legacy?.token ? { legacyToken: legacy.token } : {}), ...(legacy?.login && legacy?.token ? { previousToken: legacy.token } : {}) };
     let res;
     try {
-      res = await post(`${origin}/api/auth/github`, { githubToken, deviceName: String(deviceName || "PC").slice(0, 40), ...(legacy?.cardId && legacy?.token ? { legacyToken: legacy.token } : {}), ...(legacy?.login && legacy?.token ? { previousToken: legacy.token } : {}) });
+      res = await post(`${origin}/api/auth/github`, body);
+      // This PC may have been signed out remotely while it was offline. Its
+      // dead key cannot be replaced, but a fresh GitHub sign-in can register
+      // it again. Only this exact missing-device error permits one retry.
+      if (body.previousToken && res.status === 409 && res.data?.error === "previous_device_missing") {
+        const { previousToken, ...fresh } = body;
+        res = await post(`${origin}/api/auth/github`, fresh);
+      }
     } catch { return { status: "hosted_unreachable" }; }
     const d = res.data;
     if (!res.ok || typeof d?.login !== "string" || typeof d?.deviceId !== "string" || typeof d?.token !== "string") return { status: res.status === 429 ? "rate_limited" : "hosted_error" };

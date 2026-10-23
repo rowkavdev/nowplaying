@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { defineProvider } from "./provider.js";
+import { nextPresenceActivityOrder, PRESENCE_ACTIVITY_ORDER } from "./presence-activity.js";
 
 // YouTube (#136), app side. The extension itself lives in
 // rowkavdev/nowplaying-youtube. The browser extension posts what the active
@@ -106,7 +107,7 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
       event, at: elapsedNow(),
       // Receive order, not adjustable wall time, decides which tab wins.
       activityOrder: ++nextActivityOrder,
-      playingOrder: startedPlaying ? nextActivityOrder : (before?.playingOrder ?? nextActivityOrder),
+      playingOrder: startedPlaying ? nextPresenceActivityOrder() : (before?.playingOrder ?? nextPresenceActivityOrder()),
     });
     return { status: 204 };
   }
@@ -115,17 +116,26 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
     prune();
     const list = [...tabs.values()];
     const playing = list.filter((tab) => tab.event.state === "playing").sort((a, b) => b.playingOrder - a.playingOrder);
-    if (playing.length) return playing[0].event;
+    if (playing.length) return playing[0];
     const paused = list.sort((a, b) => b.activityOrder - a.activityOrder);
-    return paused[0]?.event ?? null;
+    return paused[0] ?? null;
   }
 
-  const provider = defineProvider({
+  const mappedProvider = defineProvider({
     id: "youtube",
     mediaKinds: ["track", "episode", "movie"],
-    async getPresence() {
-      const event = current();
-      if (!event) return { state: "idle" };
+    async getPresence({ tab } = {}) {
+      if (!tab) return { state: "idle" };
+      const { event } = tab;
+      // Events arrive about every ten seconds. Advance a playing position
+      // between those observations so each poll's fresh timestamp describes
+      // the current position, rather than restarting Discord's timer from
+      // the last event. Elapsed time also survives wall-clock corrections.
+      let positionMs = event.positionMs;
+      if (event.state === "playing" && positionMs !== null) {
+        positionMs += Math.max(0, Math.floor(elapsedNow() - tab.at));
+        if (event.durationMs !== null) positionMs = Math.min(positionMs, event.durationMs);
+      }
       return {
         state: event.state,
         // YouTube Music is music. Other videos aren't TV or films, so they
@@ -134,10 +144,22 @@ export function createYouTubeBridge({ token: initialToken, ttlMs = 30_000, now =
         title: event.title,
         subtitle: event.channel,
         artworkUrl: event.thumbnail,
-        positionMs: event.positionMs,
+        positionMs,
         durationMs: event.durationMs,
+        updatedAt: new Date(now()),
       };
     },
+  });
+  const activityByPresence = new WeakMap();
+  const provider = Object.freeze({
+    ...mappedProvider,
+    async getPresence() {
+      const tab = current();
+      const presence = await mappedProvider.getPresence({ tab });
+      if (tab) activityByPresence.set(presence, tab.playingOrder);
+      return presence;
+    },
+    [PRESENCE_ACTIVITY_ORDER]: (presence) => activityByPresence.get(presence) ?? null,
   });
 
   // A new pairing token (reset on the settings page) cuts off the old

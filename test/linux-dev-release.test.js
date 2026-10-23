@@ -3,6 +3,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const beta = readFileSync(new URL("../.github/workflows/beta.yml", import.meta.url), "utf8");
+test("Windows dev download names stay stable when the installer carries build metadata", () => {
+  // Exercise the workflow's replacement with the filenames produced by the
+  // versioned ZIP and the build-labelled installer, as published in dev #719.
+  const [, pattern, replacement] = beta.match(/\$name = \$_\.Name -replace '([^']+)', '([^']+)'/);
+  for (const [filename, expected] of [
+    ["nowplaying-v0.2.0-windows-x64.zip", "nowplaying-dev-windows-x64.zip"],
+    ["nowplaying-v0.2.1-dev+72fe2ab-windows-x64-setup.exe", "nowplaying-dev-windows-x64-setup.exe"],
+    ["nowplaying-v0.3.0-beta.12+abc1234-windows-x64-setup.exe", "nowplaying-dev-windows-x64-setup.exe"],
+  ]) {
+    assert.equal(filename.replace(new RegExp(pattern), replacement), expected);
+  }
+});
+
 test("rolling dev release awaits native distro packages and covers them in checksums and upload", () => {
   assert.match(beta, /linux-native:/);
   assert.match(beta, /needs: \[windows, macos, linux, linux-native, attest\]/);

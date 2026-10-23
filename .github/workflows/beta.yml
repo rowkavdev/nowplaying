@@ -55,7 +55,9 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem dist/windows -File | Where-Object Extension -in '.exe','.zip' | ForEach-Object {
-            $name = $_.Name -replace '^nowplaying-v[0-9]+\.[0-9]+\.[0-9]+-', 'nowplaying-dev-'
+            # Installer versions include a dev suffix and build metadata; strip
+            # the whole version so both downloads keep the documented names.
+            $name = $_.Name -replace '^nowplaying-v.+(?=-windows-x64(?:-setup)?\.(?:exe|zip)$)', 'nowplaying-dev'
             if ($name -ne $_.Name) { Rename-Item $_.FullName $name }
           }
       - name: Upload Windows artifacts

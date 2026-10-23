@@ -101,15 +101,22 @@ else
   redis.call('SET', KEYS[2], cjson.encode(state), 'EX', tonumber(ARGV[6]))
 end
 redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
+-- Commit history with the accepted sequence. A delayed function response must
+-- never write an older title after a newer ingest has already committed.
+if ARGV[7] ~= '' then
+  local prior = redis.pcall('GET', KEYS[5])
+  local priorAt = nil
+  if type(prior) == 'string' then
+    local ok, old = pcall(cjson.decode, prior)
+    if ok and type(old) == 'table' then priorAt = tonumber(old.at) end
+  end
+  -- Devices have independent sequences; retain the latest server observation
+  -- even when an earlier request reaches Redis after another PC's update.
+  if not priorAt or priorAt <= tonumber(ARGV[5]) then
+    redis.pcall('SET', KEYS[5], ARGV[7], 'EX', tonumber(ARGV[8]))
+  end
+end
 return {1, previous}
-`;
-
-// History is best-effort, but its write must not follow token revocation.
-export const LAST_PLAY_ATOMIC_SCRIPT = `
--- np-last-play-v1
-if not redis.call('GET', KEYS[1]) then return 0 end
-redis.call('SET', KEYS[2], ARGV[1], 'EX', tonumber(ARGV[2]))
-return 1
 `;
 
 // All device-list writes and associated token/state changes share this Redis atomic action.
@@ -329,15 +336,13 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const seenKey = device.userId ? `np:dseen:${device.deviceId}` : seqKey;
     const receivedAt = now();
     const record = { ...update, receivedAt };
-    const [accepted, lastSeq] = await cmd("EVAL", INGEST_ATOMIC_SCRIPT, 4, seqKey, stateKey, seenKey, `np:tok:${hashToken(token)}`,
-      String(update.seq), SEQ_TTL_SECONDS, device.userId ? "1" : "0", JSON.stringify(record), String(receivedAt), STATE_TTL_SECONDS);
+    const historyScope = device.userId ? `np:last:user:${device.userId}` : `np:last:card:${device.cardId}`;
+    const history = update.state !== "idle" && update.title
+      ? JSON.stringify({ title: update.title, subtitle: update.subtitle, state: update.state, kind: update.kind, at: receivedAt }) : "";
+    const [accepted, lastSeq] = await cmd("EVAL", INGEST_ATOMIC_SCRIPT, 5, seqKey, stateKey, seenKey, `np:tok:${hashToken(token)}`, `${historyScope}:${update.kind}`,
+      String(update.seq), SEQ_TTL_SECONDS, device.userId ? "1" : "0", JSON.stringify(record), String(receivedAt), STATE_TTL_SECONDS, history, LAST_TTL_SECONDS);
     if (Number(accepted) === -1) throw new ServiceError(401, "unauthorized");
     if (Number(accepted) !== 1) throw new ServiceError(409, "stale_sequence", { lastSeq: Number(lastSeq) });
-    if (update.state !== "idle" && update.title) {
-      // Remember the last playback of each kind for the last-played badge. A
-      // failing record must never fail an accepted ingest.
-      try { await recordLastPlay(device, update, hashToken(token)); } catch { /* ignore */ }
-    }
     await markDeviceActive(device.deviceId);
     return { accepted: true, expiresIn: update.state === "idle" ? 0 : STATE_TTL_SECONDS };
   }
@@ -514,12 +519,6 @@ export function createService({ redis, now = () => Date.now(), githubUser = crea
     const { presence } = await resolvePresence({ id: cardId });
     await countRender();
     return presence;
-  }
-
-  async function recordLastPlay(device, update, tokenHash) {
-    const scope = device.userId != null ? `np:last:user:${device.userId}` : device.cardId != null ? `np:last:card:${device.cardId}` : null;
-    if (!scope) return;
-    await cmd("EVAL", LAST_PLAY_ATOMIC_SCRIPT, 2, `np:tok:${tokenHash}`, `${scope}:${update.kind}`, JSON.stringify({ title: update.title, subtitle: update.subtitle, state: update.state, kind: update.kind, at: now() }), LAST_TTL_SECONDS);
   }
 
   // Move an old per-PC card's last-played records to the user scope during a

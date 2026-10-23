@@ -59,7 +59,7 @@ test("concurrent anonymous ingests cannot let an older sequence overwrite newer 
   const barrier = new Promise((resolve) => { release = resolve; });
   let delayed = false;
   const controlled = { command: async (args) => {
-    if (args[0] === "EVAL" && args[7] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    if (args[0] === "EVAL" && args[8] === "1" && !delayed) { delayed = true; entered(); await barrier; }
     return redis.command(args);
   } };
   const service = createService({ redis: controlled, now });
@@ -284,13 +284,16 @@ test("revoking a legacy card deletes its last-played records", async () => {
   assert.equal(redis.data.get(`np:last:card:${cardId}:track`), undefined);
 });
 
-test("a failing last-played record never fails an accepted ingest", async () => {
+test("last-played history is already committed when ingest receives its Redis response", async () => {
   const { service, redis, now } = setup();
   const { cardId, token } = await service.register();
   const original = redis.command.bind(redis);
   redis.command = async (args) => {
-    if (String(args[0]).toUpperCase() === "EVAL" && String(args[1]).includes("np-last-play-v1")) throw new Error("redis down");
-    return original(args);
+    const result = await original(args);
+    if (args[0] === "EVAL" && String(args[1]).includes("local previous = tonumber")) {
+      assert.equal(JSON.parse(redis.data.get(`np:last:card:${cardId}:track`).value).title, "Song");
+    }
+    return result;
   };
   const result = await service.ingest({ token, payload: update(now(), { seq: 1, kind: "track", title: "Song" }) });
   assert.equal(result.accepted, true);

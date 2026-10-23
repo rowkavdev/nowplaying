@@ -77,6 +77,46 @@ test("silent playback expires by elapsed time after a wall-clock rollback or fre
   assert.equal((await b.provider.getPresence()).state, "idle");
 });
 
+test("playback advances between extension events without resetting Discord's timer", async () => {
+  const { formatDiscordActivity } = await import("../src/discord.js");
+  let wall = 100_000;
+  let elapsed = 0;
+  const b = createYouTubeBridge({ token, now: () => wall, elapsedNow: () => elapsed });
+  b.receive({ method: "POST", headers, body: video() });
+  const before = formatDiscordActivity(await b.provider.getPresence());
+  wall += 4_000;
+  elapsed += 4_000;
+  const presence = await b.provider.getPresence();
+  assert.equal(presence.positionMs, 9_000);
+  const after = formatDiscordActivity(presence);
+  assert.equal(after.startTimestamp, before.startTimestamp);
+  assert.equal(after.endTimestamp, before.endTimestamp);
+
+  // A new event, including a seek, is authoritative over the estimate.
+  b.receive({ method: "POST", headers, body: video({ positionMs: 2_000 }) });
+  elapsed += 1_000;
+  assert.equal((await b.provider.getPresence()).positionMs, 3_000);
+  wall -= 60_000;
+  elapsed += 1_000;
+  assert.equal((await b.provider.getPresence()).positionMs, 4_000, "a wall-clock rollback does not reverse playback");
+});
+
+test("position projection keeps paused and live playback unchanged and clamps at the end", async () => {
+  const { b, tick } = bridge();
+  b.receive({ method: "POST", headers, body: video({ state: "paused" }) });
+  tick(5_000);
+  assert.equal((await b.provider.getPresence()).positionMs, 5_000);
+  b.receive({ method: "POST", headers, body: video({ positionMs: 199_000 }) });
+  tick(5_000);
+  assert.equal((await b.provider.getPresence()).positionMs, 200_000);
+  b.receive({ method: "POST", headers, body: video({ live: true }) });
+  tick(5_000);
+  assert.equal((await b.provider.getPresence()).positionMs, null);
+  b.receive({ method: "POST", headers, body: video({ positionMs: null }) });
+  tick(5_000);
+  assert.equal((await b.provider.getPresence()).positionMs, null);
+});
+
 test("the most recently started tab wins; paused shows when nothing plays", async () => {
   const { b, tick } = bridge();
   b.receive({ method: "POST", headers, body: video({ tabId: "a", title: "First" }) });

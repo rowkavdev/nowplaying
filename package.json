@@ -19,7 +19,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "ghost-deps": "^0.1.6"

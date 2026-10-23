@@ -35,6 +35,7 @@ import { createArtworkCache } from "./artwork-cache.js";
 import { createArtworkService } from "./artwork-service.js";
 import { applyPrivacy } from "./privacy.js";
 import { combinePresence, createSpotifySource } from "./spotify-source.js";
+import { PRESENCE_ACTIVITY_ORDER } from "./presence-activity.js";
 import { YOUTUBE_BRIDGE_PATH, createYouTubeBridge, createYouTubeBridgeHandler, loadYouTubePairingToken, resetYouTubePairingToken } from "./youtube-bridge.js";
 
 // Runs nowplaying from the config the setup wizard writes (config.json). The
@@ -280,10 +281,15 @@ export function resolveAppPort(env = process.env) {
 }
 
 export function youtubeForDiscord(source) {
+  const activityByPresence = new WeakMap();
   return Object.freeze({
+    [PRESENCE_ACTIVITY_ORDER]: (presence) => activityByPresence.get(presence) ?? null,
     async getPresence() {
       const presence = await source.getPresence();
-      return presence?.kind === "unknown" && presence.state !== "idle" ? { ...presence, kind: "show" } : presence;
+      const result = presence?.kind === "unknown" && presence.state !== "idle" ? { ...presence, kind: "show" } : presence;
+      const order = source[PRESENCE_ACTIVITY_ORDER]?.(presence);
+      if (result && order != null) activityByPresence.set(result, order);
+      return result;
     },
   });
 }
@@ -350,6 +356,18 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   // Discord changes from the settings page are saved to config.json first,
   // then the Discord loop restarts with them; no app restart needed.
   const settingsStore = createAppSettingsStore({ file: configFile });
+  // Keep the persisted change and its running loops in the same order. The
+  // store serializes disk writes, but stopping a loop can take longer than the
+  // next save: without this queue an old save can restart Discord after a
+  // newer save disabled it, leaving an untracked loop running.
+  let runtimeChanges = Promise.resolve();
+  let closing = false;
+  function changeSettings(task) {
+    if (closing) return Promise.reject(new Error("app is closing"));
+    const run = runtimeChanges.then(task);
+    runtimeChanges = run.catch(() => {});
+    return run;
+  }
   // Hosted card on/off works the same way. Disconnect stops uploads and
   // revokes the device remotely before deleting its protected local key.
   let revokePending = false;
@@ -375,34 +393,34 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
     read: async () => ({ discord: discordSettingsView(current), hosted: await hostedView(), startup: await startupView(), privacy: privacySettingsView(current), card: cardSettingsView(current) }),
     // Startup launch is the platform autostart entry, not config.json:
     // setup and this page change the same entry.
-    async updateStartup(changes) {
+    updateStartup: (changes) => changeSettings(async () => {
       if (!changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).length !== 1 || typeof changes.enabled !== "boolean") throw new TypeError("startup settings: expected enabled");
       if (!startup) throw new TypeError("startup settings: not available");
       await startup.setEnabled(changes.enabled);
-    },
-    async updateDiscord(changes) {
+    }),
+    updateDiscord: (changes) => changeSettings(async () => {
       const next = await settingsStore.updateDiscord(changes);
       current = next;
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
-    },
+    }),
     // Privacy applies on the next poll; Discord restarts so it updates now
     // and drops any title lookup.
-    async updatePrivacy(changes) {
+    updatePrivacy: (changes) => changeSettings(async () => {
       const next = await settingsStore.updatePrivacy(changes);
       current = next;
       resolveCard.invalidate();
       if (hosted.status === "on") await hosted.privacyChanged();
       await discord.stop().catch(() => {});
       discord = launchDiscord(next);
-    },
+    }),
     // Card appearance (#94): discard prior rendered SVGs after a save so
     // an offline last-good card cannot present the old design as current.
-    async updateCard(changes) {
+    updateCard: (changes) => changeSettings(async () => {
       const next = await settingsStore.updateCard(changes);
       current = next;
       resolveCard.invalidate();
-    },
+    }),
     // Preview for the settings page: what's playing now (privacy applied),
     // or a sample track when nothing is, so layout changes are visible.
     async previewCard(card) {
@@ -445,14 +463,14 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
         return { token };
       },
     } : {}),
-    async updateHosted(changes) {
+    updateHosted: (changes) => changeSettings(async () => {
       if (changes?.enabled === true && await pendingRevoke()) throw new Error("hosted disconnect is pending");
       const next = await settingsStore.updateHosted(changes);
       current = next;
       await hosted.stop().catch(() => {});
       hosted = launchHosted(next);
-    },
-    async disconnectHosted() {
+    }),
+    disconnectHosted: () => changeSettings(async () => {
       const running = hosted;
       await running.stop().catch(() => {});
       hosted = offHosted;
@@ -468,7 +486,7 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
         else if (typeof hostedCredentials?.load === "function") await createHostedUploader({ baseUrl: current.hosted?.url ?? DEFAULT_HOSTED_URL, credentials: hostedCredentials, fetchImpl }).disconnect();
         revokePending = false;
       } catch (error) { revokePending = true; throw error; }
-    },
+    }),
   });
   const statusHandler = createStatusPageHandler({ status, fallback: createCardHandler({ resolveCard, cacheControl: "no-store" }), ...(shutdown ? { shutdown } : {}) });
   // The Logs page reads the app log (no log file, e.g. a dev checkout: empty).
@@ -498,10 +516,19 @@ export async function startAppFromConfig({ configFile, credentialStore, host = "
   status.setHosted(() => hosted.status === "on"
     ? { enabled: true, ...hosted.connection() }
     : { enabled: hosted.status !== "off", state: hosted.status });
-  const close = async () => {
-    await hosted.stop().catch(() => {});
-    await discord.stop().catch(() => {});
-    await server.close();
+  let closePromise;
+  const close = () => {
+    if (closePromise) return closePromise;
+    closing = true;
+    closePromise = (async () => {
+      // A save accepted before shutdown may still be restarting a loop. Wait
+      // for it before the final stop so it cannot restart after app.close().
+      await runtimeChanges;
+      await hosted.stop().catch(() => {});
+      await discord.stop().catch(() => {});
+      await server.close();
+    })();
+    return closePromise;
   };
   return Object.freeze({ config, servers: () => (multi ? multi.servers() : Object.freeze([])), url: `http://${authority}:${address.port}`, get discord() { return discord.status; }, get hosted() { return hosted.status; }, hostedCardUrl: () => hosted.cardUrl(), refreshArtwork: () => discord.refreshArtwork(), safeMode, status, close });
 }

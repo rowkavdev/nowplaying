@@ -30,8 +30,9 @@ export const NEVER_SENT = Object.freeze([
   "Your media server address, username or server name",
   "Provider names, IDs or credentials",
   "Your Discord details",
-  "Listening history (the service keeps only the latest state, for minutes)",
+  "A full playback history",
 ]);
+export const HOSTED_RETENTION = "Live state expires after 10 minutes without an update. The most recent title and subtitle per media type remain public in last-played badges for up to 7 days, including after playback stops or privacy settings change. Sign out everywhere to clear those records; revoking a per-PC card also clears its records.";
 
 const PROTOCOL = new Set(["v", "seq", "observedAt"]);
 
@@ -44,7 +45,7 @@ export function hostedUploadPreview(settings = {}) {
   // A new projection field must get a label here before it can ship.
   if (unknown.length) throw new Error(`hosted preview has no label for: ${unknown.join(", ")}`);
   const withheld = Object.keys(FIELD_LABELS).filter((k) => !keys.has(k) && (k !== "artworkDataUri" || settings.shareArtwork === true)).map((key) => ({ key, label: FIELD_LABELS[key] }));
-  return { sent, withheld, alwaysSent: ALWAYS_SENT, neverSent: NEVER_SENT, sample: payloads[0] };
+  return { sent, withheld, alwaysSent: ALWAYS_SENT, neverSent: NEVER_SENT, retention: HOSTED_RETENTION, sample: payloads[0] };
 }
 
 // Self-hosted endpoint check: GET <url>/healthz, nothing else. Sends no

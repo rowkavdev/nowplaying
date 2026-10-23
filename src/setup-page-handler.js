@@ -525,6 +525,7 @@ const JS = `"use strict";
     }
     parts.push(el("p", { textContent: "Never sent:" }));
     parts.push(el("ul", { id: "hostedNever" }, preview.neverSent.map(function (label) { return el("li", { textContent: label }); })));
+    if (preview.retention) parts.push(el("p", { id: "hostedRetention", textContent: preview.retention }));
     return parts;
   }
 

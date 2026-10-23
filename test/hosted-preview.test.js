@@ -11,6 +11,11 @@ test("default settings preview every card field", () => {
   assert.deepEqual(p.withheld, []);
   assert.ok(p.neverSent.some((s) => /Artwork/.test(s)));
   assert.equal(p.sample.title, "Sample song");
+  assert.match(p.retention, /10 minutes/);
+  assert.match(p.retention, /public.*last-played badges.*7 days/);
+  assert.match(p.retention, /privacy settings change/);
+  assert.match(p.retention, /Sign out everywhere/);
+  assert.ok(!p.neverSent.some((s) => /keeps only the latest state/.test(s)));
 });
 
 test("card and privacy settings remove fields from the preview", () => {

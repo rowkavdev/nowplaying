@@ -85,7 +85,7 @@ test("Exec parts with spaces and $ are quoted and escaped per the desktop entry 
   const text = await readFile(startup.file, "utf8");
   assert.match(
     text,
-    /^Exec="\/opt\/my app\/bin\/node" "\/home\/u\/a\\\$b\/now playing\.js" start$/m,
+    /^Exec="\/opt\/my app\/bin\/node" "\/home\/u\/a\\\\\$b\/now playing\.js" start$/m,
   );
   assert.deepEqual(await startup.status(), { enabled: true, broken: false });
 });
@@ -204,4 +204,33 @@ test("desktop entry Type accepts valid whitespace and ignores other groups", asy
   assert.deepEqual(await startup.status(), { enabled: false, broken: true });
   await writeFile(startup.file, original + "\n[Desktop Action Settings]\nHidden=true\nX-GNOME-Autostart-enabled=false\n");
   assert.deepEqual(await startup.status(), { enabled: true, broken: false });
+});
+
+const hasGio = process.platform === "linux" && (() => {
+  try { execFileSync("gio", ["version"], { stdio: "ignore" }); return true; }
+  catch { return false; }
+})();
+
+test("the desktop launcher preserves reserved characters in real arguments", { skip: !hasGio }, async () => {
+  const { writeFile, rm } = await import("node:fs/promises");
+  const root = await dir();
+  try {
+    // A source checkout can live in any valid folder name. Test the actual
+    // desktop parser, which has a string-escaping layer before Exec quoting.
+    const script = join(root, 'now$playing"`\\.cjs');
+    const output = join(root, "arguments.json");
+    await writeFile(script, 'require("node:fs").writeFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));');
+    const expected = ["a$b", 'a"b', "a`b", "a\\b", "100% done"];
+    const startup = createLinuxStartup({ autostartDir: root, execPath: process.execPath, args: [script, output, ...expected] });
+    await startup.setEnabled(true);
+    execFileSync("gio", ["launch", startup.file], { stdio: "pipe" });
+    const deadline = Date.now() + 5000;
+    let args;
+    while (Date.now() < deadline) {
+      try { args = JSON.parse(await readFile(output, "utf8")); break; }
+      catch (error) { if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error; }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    assert.deepEqual(args, expected);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -107,7 +107,7 @@ test("concurrent signed-in ingests preserve the newer device state and sequence"
   const barrier = new Promise((resolve) => { release = resolve; });
   let delayed = false;
   const controlled = { command: async (args) => {
-    if (args[0] === "EVAL" && args[7] === "1" && !delayed) { delayed = true; entered(); await barrier; }
+    if (args[0] === "EVAL" && args[8] === "1" && !delayed) { delayed = true; entered(); await barrier; }
     return redis.command(args);
   } };
   const service = createService({ redis: controlled, now, githubUser: async () => ({ id: 101, login: "RowKav" }) });
