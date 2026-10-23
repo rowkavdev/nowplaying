@@ -4,11 +4,11 @@ Two ways to run nowplaying on Windows. The installer is the easy path; the porta
 
 ## Installer (recommended)
 
-1. For the current development build, open the [rolling dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev) and download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS`. This prerelease is still being tested.
+1. Open the [v0.2.1 release](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1) and download `nowplaying-v0.2.1-windows-x64-setup.exe` and `SHA256SUMS`. Development builds remain available separately on the [dev prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev).
 2. Check the download in PowerShell:
 
    ```powershell
-   Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\nowplaying-v0.2.1-windows-x64-setup.exe -Algorithm SHA256
    ```
 
    The hash must match the file's line in `SHA256SUMS`.

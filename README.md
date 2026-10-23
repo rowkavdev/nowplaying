@@ -20,16 +20,18 @@ Studio puts artwork behind the card. Editorial pairs a large cover with warm pap
 
 *Examples rendered by the app with illustrated sample artwork. Your card uses the current album cover or poster; hosted covers require **Include cover art** in Settings.*
 
-> **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
+> **Stable release:** [v0.2.1](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1) has a Windows x64 installer and portable ZIP, plus a Node.js source bundle. Downloads are unsigned; verify their checksums before running them. [Release notes and upgrade guidance](docs/release-notes/v0.2.1.md).
+>
+> **Experimental desktops:** Linux x86_64 RPM, DEB, Arch and portable packages, and macOS builds, remain on the moving [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev). [Linux installation and requirements](docs/wiki/Install-on-Linux.md).
 
 ## Get it running
 
 On Linux, follow [Install on Linux](docs/wiki/Install-on-Linux.md) to choose an RPM, DEB, Arch package or portable tarball. The Windows steps are below; both use the same browser Settings and playback setup.
 
-1. Download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS` from the [dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev). The [portable ZIP](docs/wiki/Install-on-Windows.md#portable-zip) is an alternative. In PowerShell, compare the installer hash with its line in `SHA256SUMS`:
+1. Download `nowplaying-v0.2.1-windows-x64-setup.exe` and `SHA256SUMS` from the [v0.2.1 release](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1). The [portable ZIP](docs/wiki/Install-on-Windows.md#portable-zip) is an alternative. In PowerShell, compare the installer hash with its line in `SHA256SUMS`:
 
    ```powershell
-   Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\nowplaying-v0.2.1-windows-x64-setup.exe -Algorithm SHA256
    ```
 
 2. Install it for your Windows user. On first launch, **Settings opens in your browser**. Find a media server or enter its address, then sign in. A full subnet scan only runs when you enter that subnet yourself. You can connect more than one server.
