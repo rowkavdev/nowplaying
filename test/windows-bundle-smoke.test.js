@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,11 +74,12 @@ test("bundle smoke verifies real child output, isolation, errors and GUI timeout
   }
 });
 
-test("Windows build ships standalone real launchers and rejects a framework-dependent EXE on an SDK runner", { skip: process.platform !== "win32", timeout: 240_000 }, async (t) => {
+test("Windows build ships standalone real launchers and rejects a framework-dependent EXE on an SDK runner", { skip: process.platform !== "win32", timeout: 420_000 }, async (t) => {
   const dir = tempFixture(t);
   for (const folder of ["scripts", "src", "assets", "node_modules", "tools"]) mkdirSync(join(dir, folder));
-  for (const file of ["scripts/build-windows.ps1", "scripts/windows-launcher.cs", "scripts/windows-bundle-smoke.js", "assets/nowplaying.ico"]) copyFileSync(join(root, file), join(dir, file));
-  for (const file of ["NOTICE", "LICENSE", "README.md", "scripts/windows-installer.iss"]) writeFileSync(join(dir, file), "fixture\n");
+  for (const file of ["scripts/build-windows.ps1", "scripts/windows-launcher.cs", "scripts/windows-bundle-smoke.js", "scripts/windows-installer.iss"]) copyFileSync(join(root, file), join(dir, file));
+  cpSync(join(root, "assets"), join(dir, "assets"), { recursive: true });
+  for (const file of ["NOTICE", "LICENSE", "README.md"]) writeFileSync(join(dir, file), "fixture\n");
   writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "module", version: "1.2.3" }));
   writeFileSync(join(dir, "scripts", "windows-entry.js"), entry());
   writeFileSync(join(dir, "tools", "iscc.cmd"), "@exit /b 0\r\n");
@@ -86,7 +87,7 @@ test("Windows build ships standalone real launchers and rejects a framework-depe
   const buildArgs = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", join(dir, "scripts", "build-windows.ps1")];
   // Exercise the actual release script, including all publish flags and the
   // smoke it must pass before the installer/ZIP can be created.
-  await exec("powershell.exe", buildArgs, { cwd: dir, env, windowsHide: true, timeout: 180_000, maxBuffer: 2 * 1024 * 1024 });
+  await exec("powershell.exe", buildArgs, { cwd: dir, env, windowsHide: true, timeout: 300_000, maxBuffer: 2 * 1024 * 1024 });
   const bundle = join(dir, "dist", "windows", "nowplaying-v1.2.3-windows-x64");
   assert.equal(readFileSync(join(bundle, "entry-calls.log"), "utf8"), "--version\n--help\n--version\n");
   assert.ok(existsSync(`${bundle}.zip`));
@@ -117,7 +118,10 @@ test("Windows build ships standalone real launchers and rejects a framework-depe
   });
 
   await t.test("native publish setup failure stops the build before using stale output", async () => {
-    writeFileSync(join(dir, "tools", "dotnet.cmd"), "@exit /b 23\r\n");
+    // Use an actual EXE so PowerShell's executable/PATHEXT precedence cannot
+    // select the runner's real dotnet.exe instead of the deliberate failure.
+    writeFileSync(join(dir, "dist", "launcher", "Program.cs"), "return 23;\n");
+    execFileSync("dotnet", ["publish", join(dir, "dist", "launcher", "Launcher.csproj"), "--configuration", "Release", "--runtime", "win-x64", "--self-contained", "false", "-p:PublishSingleFile=true", "-p:UseAppHost=true", "-p:AssemblyName=dotnet", "--output", join(dir, "tools")], { cwd: dir, env, windowsHide: true, timeout: 90_000, stdio: "pipe" });
     await assert.rejects(exec("powershell.exe", buildArgs, { cwd: dir, env, windowsHide: true, timeout: 30_000 }), (error) => {
       assert.match(error.stderr, /dotnet new failed with exit code 23/);
       return true;

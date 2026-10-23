@@ -33,11 +33,12 @@ $LauncherProject = Join-Path $Root 'dist/launcher/Launcher.csproj'
 # MSBuild's Copy task fails the build if either required notice is missing.
 $RuntimeNoticesTarget = @'
   <Target Name="CopyBundledRuntimeNotices" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
-    <Error Condition="'@(ResolvedRuntimePack)' == ''" Text="No resolved runtime pack to license." />
     <ItemGroup>
-      <_BundledRuntimeNotice Include="@(ResolvedRuntimePack->'%(PackageDirectory)/LICENSE.TXT')" />
-      <_BundledRuntimeNotice Include="@(ResolvedRuntimePack->'%(PackageDirectory)/THIRD-PARTY-NOTICES.TXT')" />
+      <_BundledRuntimePack Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+      <_BundledRuntimeNotice Include="@(_BundledRuntimePack->'%(PackageDirectory)/LICENSE.TXT')" />
+      <_BundledRuntimeNotice Include="@(_BundledRuntimePack->'%(PackageDirectory)/THIRD-PARTY-NOTICES.TXT')" />
     </ItemGroup>
+    <Error Condition="'@(_BundledRuntimePack)' == ''" Text="No resolved .NET runtime pack to license." />
     <Copy SourceFiles="@(_BundledRuntimeNotice)" DestinationFolder="$(PublishDir)dotnet-notices" />
   </Target>
 '@
