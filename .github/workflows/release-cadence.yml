@@ -85,7 +85,10 @@ jobs:
           set -euo pipefail
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected tag: $TAG"; exit 1; }
           git fetch --quiet --tags origin
-          previous=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$TAG" | head -1 || true)
+          # An abandoned draft may already have a protected version tag. Only
+          # a published stable release is a public changelog baseline.
+          previous=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 100 --json tagName --jq '.[0].tagName // empty')
+          [[ -z "$previous" || "$previous" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected previous release tag: $previous"; exit 1; }
           if [[ -z "$previous" ]]; then
             previous=$(git rev-list --max-parents=0 "$TAG" | tail -1)
           fi
@@ -117,7 +120,7 @@ jobs:
   # The tag above was created with GITHUB_TOKEN, which never starts the
   # tag-triggered Release workflow. Dispatch it on the new tag instead (#353).
   start-release-workflow:
-    needs: release-please
+    needs: [release-please, stable-release-notes]
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
