@@ -33,6 +33,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: npm ci --omit=dev
+      - name: Verify launchers without an installed .NET runtime
+        run: node --test test/windows-bundle-smoke.test.js
       - name: Build and smoke-test EXE bundle
         shell: pwsh
         run: ./scripts/build-windows.ps1

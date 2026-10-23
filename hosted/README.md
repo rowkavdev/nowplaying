@@ -5,8 +5,10 @@ The public card endpoint for people who can't expose their own server. The deskt
 What it never does:
 
 - connect to anyone's Plex, Jellyfin, Navidrome, Emby, browser or Discord
-- store provider credentials, raw provider responses or listening history
+- store provider credentials, raw provider responses or a full playback history
 - log titles, artists, usernames or tokens
+
+Live state expires after 10 minutes without an update. One last-played record per media type is also kept for up to 7 days; its title and subtitle remain public through the last-played badges after playback stops or privacy settings change. See [storage and counters](#storage-and-counters) for the stored fields and deletion rules.
 
 ## Endpoints
 
@@ -43,7 +45,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 ```
 
 - Unknown fields are rejected, so a client bug can't upload extra data.
-- Body limit 2 KB, text fields 200 characters.
+- Body limit is the maximum artwork data URI plus 2 KB; text fields are limited to 200 UTF-16 units.
 - `seq` must go up for each device; replays and out-of-order updates get `409 stale_sequence` with `lastSeq` only after device-token authentication. The desktop retries once with `lastSeq + 1`, allowing recovery after a clock rollback across restarts without accepting a replay. If an older service omits `lastSeq`, the app reports `sequence_recovery_unavailable` rather than guessing a sequence; update the hosted service to restore uploads on the same card.
 - Each device can send 30 updates a minute; more get `429`. The app sends on change plus a 4-minute heartbeat, so this only stops runaway clients.
 - `observedAt` must be within 2 minutes of server time. After device-token authentication, a `400 clock_skew` response includes `serverTime` so the desktop can correct its offset and retry once. If the service cannot give a valid time, the app reports `clock_recovery_unavailable`.
@@ -52,7 +54,7 @@ The device token is only stored as a SHA-256 hash. The card ID is random and can
 
 ## Storage and counters
 
-State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The counters are aggregate only. Totals: `np:stats:cards_rendered`, `np:stats:registrations` and `np:stats:users`. Per UTC day, for the private usage dashboard (#218): `np:stats:day:<date>:renders`, `np:stats:day:<date>:registrations` and `np:stats:day:<date>:users` (plain counts), `np:stats:day:<date>:devices`, a HyperLogLog of hashed device IDs, and `np:stats:day:<date>:active_devices`, a counter that goes up when that HyperLogLog sees a new device. Together they estimate how many devices sent updates that day, never which ones. The per-day keys expire after 400 days. A failing stats write never fails a request. Last-played records for the `/badges/last.json` badge live in `np:last:user:<githubId>:<kind>` and `np:last:card:<cardId>:<kind>`: the kind, title, subtitle and last state the public card already showed, expiring after 7 days. A legacy card's records move to the user's scope when it aliases during GitHub sign-in.
+State lives in Upstash Redis (Frankfurt, `eu-central-1`; functions run in `fra1` next to it) (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`) with a TTL, so nothing depends on function memory. The counters are aggregate only. Totals: `np:stats:cards_rendered`, `np:stats:registrations` and `np:stats:users`. Per UTC day, for the private usage dashboard (#218): `np:stats:day:<date>:renders`, `np:stats:day:<date>:registrations` and `np:stats:day:<date>:users` (plain counts), `np:stats:day:<date>:devices`, a HyperLogLog of hashed device IDs, and `np:stats:day:<date>:active_devices`, a counter that goes up when that HyperLogLog sees a new device. Together they estimate how many devices sent updates that day, never which ones. The per-day keys expire after 400 days. A failing stats write never fails a request. Last-played records for the `/badges/last.json` badge live in `np:last:user:<githubId>:<kind>` and `np:last:card:<cardId>:<kind>`: the kind, title, subtitle and last state the public card already showed, plus the server update time, expiring after 7 days. Signing out everywhere, or revoking a legacy per-PC card, deletes these records. A legacy card's records move to the user's scope when it aliases during GitHub sign-in.
 
 Three totals are published as [Shields endpoint badges](https://shields.io/badges/endpoint-badge), cached for 5 minutes, each a single public number with nothing per card, user or device:
 

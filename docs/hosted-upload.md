@@ -26,7 +26,7 @@ With privacy mode set to private, or for a media type you've hidden, the card on
 - Your server sign-in or API key
 - Artwork links (optional uploads contain image pixels only)
 - Discord details (Discord presence stays on your PC)
-- A history of what you've played
+- A full playback history (the most recent item per media type is retained as described below)
 
 ## Cover art
 
@@ -36,8 +36,8 @@ Deploy the updated hosted service before enabling cover sharing in the updated d
 
 ## How it's stored
 
-- The service keeps only the latest update from each of your PCs, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
-- For the last-played badge, the service keeps the title and subtitle of the most recent playback of each media kind for 7 days after it was last shown. Nothing else about that playback is kept. Signing out everywhere, or revoking a legacy per-PC card, deletes those records right away; otherwise they expire on their own.
+- The service keeps the latest live update from each of your PCs, and deletes it 10 minutes after the last one. Stop playing or close the app and the card goes back to "Not playing".
+- For the last-played badge, the service also keeps one record per media type for up to 7 days: its title, subtitle, type, last playback state and update time. The title and subtitle remain public in last-played badges after playback stops or privacy settings change. Signing out everywhere, or revoking a legacy per-PC card, deletes those records right away; otherwise they expire on their own.
 - The service's logs and counters never contain titles, artists, usernames or keys. The only counters are totals: cards shown, PCs registered and people signed in. Each total is also published as a public badge; see [Usage badges](#usage-badges).
 
 ## Usage badges

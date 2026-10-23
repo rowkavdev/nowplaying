@@ -1,9 +1,11 @@
 
 # Releases and versioning
 
-Automated, versioned releases use `.github/workflows/release.yml`. No stable release has been published yet. This guide defines the live process and the checks required before creating the first protected tag.
+Automated, versioned releases use `.github/workflows/release.yml`. Release Please maintains the version PR. Merging that PR creates a tagged draft, rewrites its release notes and dispatches the release workflow on that exact tag.
 
-The release workflow runs only for semantic version tags, separates verification from publication, and requires the protected `release` environment for the write-capable job.
+The release workflow runs only for semantic version tags, separates verification from publication, and uses the `release` environment for its write-capable job. It tests the source, smoke-tests the extracted source archive and Windows launchers, and builds the packages once. Publication verifies checksums, uploads without replacing existing files, downloads the assets again and compares their bytes before publishing the draft as the latest stable release.
+
+An existing version tag remains tied to its original commit, including when its release is still a draft. Use a new version for newer source. For example, the audited second public release uses `v0.2.1` while the earlier `v0.2.0` tag remains unchanged.
 
 ## Goals
 
@@ -73,7 +75,7 @@ Every release must include or carry:
 
 Generated test reports and development caches are not release artifacts.
 
-## Proposed release workflow
+## Release workflow
 
 ### 1. Prepare
 

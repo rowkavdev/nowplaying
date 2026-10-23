@@ -1,14 +1,14 @@
 # Quick start
 
-Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This guide uses the rolling development build, which is still being tested. The first-run page is in your browser, not a native setup wizard.
+Use a Windows PC and a running Plex, Jellyfin, Navidrome or Emby server. This guide uses the stable v0.2.1 release. The first-run page is in your browser.
 
-## 1. Download and check the development build
+## 1. Download and check the release
 
-1. Open the [rolling dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev) and download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS`.
+1. Open the [v0.2.1 release](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1) and download `nowplaying-v0.2.1-windows-x64-setup.exe` and `SHA256SUMS`.
 2. In PowerShell, in your Downloads folder, run:
 
    ```powershell
-   Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\nowplaying-v0.2.1-windows-x64-setup.exe -Algorithm SHA256
    ```
 
    Success looks like: the long hash matches the line for the same file name in `SHA256SUMS`. If it doesn't match, delete the file and download again.

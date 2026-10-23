@@ -62,7 +62,9 @@ async function windowsInstall() {
     ["checksums-published", async () => {
       const release = await readFile(join(ROOT, ".github/workflows/release.yml"), "utf8");
       expect(/sha256sum[^\n]*windows-x64-setup\.exe/.test(release), "release must checksum the Windows setup exe");
-      expect(/release upload[^\n]*SHA256SUMS/.test(release), "release must upload SHA256SUMS alongside the assets");
+      const publish = await readFile(join(ROOT, "scripts/publish-release.js"), "utf8");
+      const artifacts = await readFile(join(ROOT, "scripts/release-artifacts.js"), "utf8");
+      expect(release.includes("node scripts/publish-release.js") && publish.includes("verifyReleaseArtifacts") && artifacts.includes('"SHA256SUMS"'), "release must verify and upload SHA256SUMS alongside the assets");
     }],
     ["unsigned-build-guidance", async () => {
       const guide = await readFile(join(ROOT, "docs/testing-dev-build.md"), "utf8");

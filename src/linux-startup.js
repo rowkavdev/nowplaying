@@ -23,12 +23,14 @@ export function xdgAutostartDir({ env = process.env, home = env?.HOME } = {}) {
 // The desktop entry spec quotes arguments containing reserved characters
 // (space, tab, newline, double quote, single quote, backslash and the
 // ASCII punctuation it lists) in double quotes, with " ` $ \ escaped.
+// The resulting backslashes must be doubled again for the desktop entry
+// string parser, which unescapes values before parsing the Exec arguments.
 // A literal % must be doubled to %%: single percent signs start field
 // codes (%f, %U, ...) that the launcher expands or rejects.
 function quoteExecArg(arg) {
   const escaped = arg.replaceAll("%", "%%");
   if (!/[ \t"'\\|><~$&*?#()`;]/.test(arg)) return escaped;
-  return `"${escaped.replace(/["`$\\]/g, "\\$&")}"`;
+  return `"${escaped.replace(/["`$\\]/g, "\\$&")}"`.replaceAll("\\", "\\\\");
 }
 
 function checkExec(execPath, args) {

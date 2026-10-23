@@ -8,6 +8,7 @@
 // one-server setup behaves exactly the same.
 import { classifyFailure } from "./resilient-card.js";
 import { presenceItemKey } from "./presence-identity.js";
+import { nextPresenceActivityOrder, PRESENCE_ACTIVITY_ORDER } from "./presence-activity.js";
 
 export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   if (!Array.isArray(entries) || entries.length < 1) throw new TypeError("servers: expected at least one server");
@@ -25,7 +26,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   const activeOrder = entries.map(() => null);
   // Errors remain visible in latest but do not prove playback stopped.
   const lastSuccessful = entries.map(() => null);
-  let nextActivityOrder = 0;
+  const activityByPresence = new WeakMap();
   let inflight = null;
 
   function noteActivity(index, before, presence) {
@@ -34,7 +35,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
     const wasActive = was?.state === "playing" || was?.state === "paused";
     const newItem = !wasActive || presenceItemKey(was) !== presenceItemKey(presence);
     const resumed = presence.state === "playing" && was?.state !== "playing";
-    if (newItem || resumed) activeOrder[index] = ++nextActivityOrder;
+    if (newItem || resumed) activeOrder[index] = nextPresenceActivityOrder();
   }
 
   async function pollAll() {
@@ -66,7 +67,11 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
         if (result.state !== "ok" || result.presence?.state !== wanted) return;
         if (best === -1 || (activeOrder[index] ?? -Infinity) > (activeOrder[best] ?? -Infinity)) best = index;
       });
-      if (best !== -1) return results[best].presence;
+      if (best !== -1) {
+        const presence = results[best].presence;
+        activityByPresence.set(presence, activeOrder[best]);
+        return presence;
+      }
     }
     const [primary] = results;
     if (primary.state === "error") throw primary.error;
@@ -97,5 +102,7 @@ export function createMultiServerProvider(entries, { now = Date.now } = {}) {
   }
 
   // Anything else the first server's provider offers stays available.
-  return Object.freeze({ ...(entries[0].provider ?? {}), getPresence, servers });
+  return Object.freeze({ ...(entries[0].provider ?? {}), getPresence, servers,
+    [PRESENCE_ACTIVITY_ORDER]: (presence) => activityByPresence.get(presence) ?? null,
+  });
 }

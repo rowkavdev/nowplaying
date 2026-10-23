@@ -126,10 +126,71 @@ test("combinePresence: a side that stops resets, playing beats paused, both idle
   assert.equal((await card.getPresence()).state, "idle");
 });
 
+test("nested source selection keeps the original start order when the newer inner source stops", async () => {
+  const source = (title) => ({ value: { state: "idle" }, getPresence: async function () { return this.value; }, play() { this.value = { state: "playing", kind: "track", title }; } });
+  const server = source("Server");
+  const spotify = source("Spotify");
+  const youtube = source("YouTube");
+  const card = combinePresence({ primary: combinePresence({ primary: server, secondary: spotify }), secondary: youtube });
+  server.play();
+  assert.equal((await card.getPresence()).title, "Server");
+  youtube.play();
+  assert.equal((await card.getPresence()).title, "YouTube");
+  spotify.play();
+  assert.equal((await card.getPresence()).title, "Spotify");
+  spotify.value = { state: "idle" };
+  assert.equal((await card.getPresence()).title, "YouTube", "the older server did not start again when Spotify stopped");
+  server.value = { state: "paused", kind: "track", title: "Server" };
+  await card.getPresence();
+  server.play();
+  assert.equal((await card.getPresence()).title, "Server", "an actual resume still outranks YouTube");
+});
+
+test("combined multi-server selection preserves original activity when falling back to an older server", async () => {
+  const a = { value: { state: "playing", kind: "track", title: "Older server" }, getPresence: async function () { return this.value; } };
+  const b = { value: { state: "idle" }, getPresence: async function () { return this.value; } };
+  const youtube = { value: { state: "idle" }, getPresence: async function () { return this.value; } };
+  const multi = createMultiServerProvider([{ ...serverEntry("plex"), provider: a }, { ...serverEntry("jellyfin"), provider: b }]);
+  const card = combinePresence({ primary: multi, secondary: youtube });
+  await card.getPresence();
+  youtube.value = { state: "playing", kind: "track", title: "YouTube" };
+  assert.equal((await card.getPresence()).title, "YouTube");
+  b.value = { state: "playing", kind: "track", title: "Newer server" };
+  assert.equal((await card.getPresence()).title, "Newer server");
+  b.value = { state: "idle" };
+  assert.equal((await card.getPresence()).title, "YouTube", "falling back to the older server retains its original priority");
+  a.value = { state: "playing", kind: "track", title: "Actually new item" };
+  assert.equal((await card.getPresence()).title, "Actually new item");
+});
+
 const token = "t".repeat(40);
 const origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
 const headers = { origin, authorization: `Bearer ${token}` };
 const video = (tabId, title, state = "playing") => ({ tabId, videoId: "dQw4w9WgXcQ", title, channel: "A channel", thumbnail: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", positionMs: 5000, durationMs: 200000, state, music: true });
+
+test("closing the newer YouTube tab preserves the older tab's priority on cards and Discord", async () => {
+  const { youtubeForDiscord } = await import("../src/app-config.js");
+  for (const wrap of [(source) => source, youtubeForDiscord]) {
+    const server = { value: { state: "idle" }, getPresence: async function () { return this.value; } };
+    const bridge = createYouTubeBridge({ token, elapsedNow: () => 0 });
+    const card = combinePresence({ primary: server, secondary: wrap(bridge.provider) });
+    const send = (tab, title, state = "playing") => bridge.receive({ method: "POST", headers, body: { ...video(tab, title, state), music: false } });
+    send("older", "Older tab");
+    assert.equal((await card.getPresence()).title, "Older tab");
+    server.value = { state: "playing", kind: "track", title: "Server" };
+    assert.equal((await card.getPresence()).title, "Server");
+    send("newer", "Newer tab");
+    const presence = await card.getPresence();
+    assert.equal(presence.title, "Newer tab");
+    assert.deepEqual(Object.getOwnPropertySymbols(presence), [], "internal activity metadata stays off public presences");
+    bridge.receive({ method: "POST", headers, body: { tabId: "newer", state: "stopped" } });
+    assert.equal((await card.getPresence()).title, "Server", "the older tab did not restart when the newer tab closed");
+    send("older", "Older tab", "paused");
+    await card.getPresence();
+    send("older", "Older tab");
+    assert.equal((await card.getPresence()).title, "Older tab", "an actual resume gets a new priority");
+  }
+});
 
 test("youtube bridge: a backward wall-clock correction cannot make an older tab win (#619)", async () => {
   let t = 10000;

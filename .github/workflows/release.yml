@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -31,7 +35,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: npm ci
-      - run: node --check src/*.js src/providers/*.js test/*.js
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run check
       - run: npm test
       - run: npm run build
       - name: Verify tag matches package version
@@ -48,8 +53,9 @@ jobs:
         run: mv nowplaying.spdx.json "nowplaying-${GITHUB_REF_NAME}.spdx.json"
       - name: Pack immutable artifact
         run: |
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "nowplaying-${GITHUB_REF_NAME}.tar.gz" dist LICENSE README.md package.json
-          sha256sum "nowplaying-${GITHUB_REF_NAME}.tar.gz" > SHA256SUMS
+          node scripts/pack-source-release.js
+          node scripts/check-source-release.js "nowplaying-${GITHUB_REF_NAME}.tar.gz"
+          sha256sum "nowplaying-${GITHUB_REF_NAME}.tar.gz" "nowplaying-${GITHUB_REF_NAME}.spdx.json" > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-${{ github.ref_name }}
@@ -74,6 +80,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: npm ci --omit=dev
+      - name: Verify isolated Windows launcher packaging
+        run: node --test test/windows-bundle-smoke.test.js
       - name: Build installer and portable ZIP
         shell: pwsh
         env:
@@ -107,6 +115,13 @@ jobs:
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          package-manager-cache: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-${{ github.ref_name }}
@@ -114,7 +129,9 @@ jobs:
         with:
           name: release-windows-${{ github.ref_name }}
       - name: One SHA256SUMS for every asset
-        run: sha256sum "nowplaying-${GITHUB_REF_NAME}-windows-x64-setup.exe" "nowplaying-${GITHUB_REF_NAME}-windows-x64.zip" >> SHA256SUMS && cat SHA256SUMS
+        run: |
+          sha256sum "nowplaying-${GITHUB_REF_NAME}.tar.gz" "nowplaying-${GITHUB_REF_NAME}.spdx.json" "nowplaying-${GITHUB_REF_NAME}-windows-x64-setup.exe" "nowplaying-${GITHUB_REF_NAME}-windows-x64.zip" > SHA256SUMS
+          sha256sum --check SHA256SUMS
       - name: Attest public-repository build provenance
         if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
@@ -123,6 +140,7 @@ jobs:
             nowplaying-${{ github.ref_name }}.tar.gz
             nowplaying-${{ github.ref_name }}-windows-x64-setup.exe
             nowplaying-${{ github.ref_name }}-windows-x64.zip
-      - env:
+      - name: Verify draft assets before publishing the stable release
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" "nowplaying-${GITHUB_REF_NAME}.tar.gz" "nowplaying-${GITHUB_REF_NAME}.spdx.json" "nowplaying-${GITHUB_REF_NAME}-windows-x64-setup.exe" "nowplaying-${GITHUB_REF_NAME}-windows-x64.zip" SHA256SUMS --clobber --repo "${GITHUB_REPOSITORY}"
+        run: node scripts/publish-release.js

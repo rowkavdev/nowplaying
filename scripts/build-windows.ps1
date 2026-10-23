@@ -8,9 +8,11 @@ $Version = (Get-Content (Join-Path $Root 'package.json') | ConvertFrom-Json).ver
 $InstallerVersion = if ($env:NOWPLAYING_VERSION) { $env:NOWPLAYING_VERSION } else { $Version }
 $Bundle = Join-Path $Root "dist/windows/nowplaying-v$Version-windows-x64"
 
-
-
-
+# Windows PowerShell 5.1 does not turn a native nonzero exit into an error,
+# even with ErrorActionPreference=Stop. Never package stale/partial output.
+function Assert-NativeSuccess([string] $Command) {
+    if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE" }
+}
 Remove-Item (Join-Path $Root 'dist/windows') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item (Join-Path $Bundle 'runtime') -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $Bundle 'app') -ItemType Directory -Force | Out-Null
@@ -20,21 +22,51 @@ if (-not (Test-Path (Join-Path $Root 'assets/nowplaying.ico'))) { throw 'assets/
 
 
 
-# Compile the tiny native launcher. Node and Sharp remain real files so native loading is reliable.
+# Bundle the .NET runtime, including its native libraries, into each launcher.
+# Only the EXEs are shipped; neither may require a machine-wide .NET install.
+# Trim the launcher's static dependencies to keep the portable ZIP inside the
+# existing updater download limit; both real launchers are smoke-tested below.
+# Node and Sharp remain real files so native loading is reliable.
 dotnet new console --name Launcher --output (Join-Path $Root 'dist/launcher') --framework net8.0 --force | Out-Null
+Assert-NativeSuccess 'dotnet new'
+$LauncherProject = Join-Path $Root 'dist/launcher/Launcher.csproj'
+# Copy the license and third-party notices from the exact runtime pack used by
+# publish, rather than a potentially different SDK/runtime installed on CI.
+# MSBuild's Copy task fails the build if either required notice is missing.
+$RuntimeNoticesTarget = @'
+  <Target Name="CopyBundledRuntimeNotices" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <_BundledRuntimePack Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+      <_BundledRuntimeNotice Include="@(_BundledRuntimePack->'%(PackageDirectory)/LICENSE.TXT')" />
+      <_BundledRuntimeNotice Include="@(_BundledRuntimePack->'%(PackageDirectory)/THIRD-PARTY-NOTICES.TXT')" />
+    </ItemGroup>
+    <Error Condition="'@(_BundledRuntimePack)' == ''" Text="No resolved .NET runtime pack to license." />
+    <Copy SourceFiles="@(_BundledRuntimeNotice)" DestinationFolder="$(PublishDir)dotnet-notices" />
+  </Target>
+'@
+$ProjectXml = [System.IO.File]::ReadAllText($LauncherProject)
+[System.IO.File]::WriteAllText($LauncherProject, $ProjectXml.Replace('</Project>', "$RuntimeNoticesTarget`n</Project>"), [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'scripts/windows-launcher.cs') (Join-Path $Root 'dist/launcher/Program.cs') -Force
-dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained false -p:PublishSingleFile=true -p:UseAppHost=true -p:AssemblyName=nowplaying --output (Join-Path $Root 'dist/launcher/publish') | Out-Null
+dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true -p:UseAppHost=true -p:AssemblyName=nowplaying --output (Join-Path $Root 'dist/launcher/publish') | Out-Null
+Assert-NativeSuccess 'dotnet publish (console launcher)'
 Copy-Item (Join-Path $Root 'dist/launcher/publish/nowplaying.exe') (Join-Path $Bundle 'nowplaying.exe')
 # Same launcher as a Windows GUI program for shortcuts: no console window for end users.
-dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained false -p:PublishSingleFile=true -p:UseAppHost=true -p:AssemblyName=nowplayingw -p:OutputType=WinExe -p:DefineConstants=NOWPLAYING_GUI --output (Join-Path $Root 'dist/launcher/publish-gui') | Out-Null
+dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true -p:UseAppHost=true -p:AssemblyName=nowplayingw -p:OutputType=WinExe -p:DefineConstants=NOWPLAYING_GUI --output (Join-Path $Root 'dist/launcher/publish-gui') | Out-Null
+Assert-NativeSuccess 'dotnet publish (GUI launcher)'
 Copy-Item (Join-Path $Root 'dist/launcher/publish-gui/nowplayingw.exe') (Join-Path $Bundle 'nowplayingw.exe')
+New-Item (Join-Path $Bundle 'licenses') -ItemType Directory -Force | Out-Null
+Copy-Item (Join-Path $Root 'dist/launcher/publish/dotnet-notices') (Join-Path $Bundle 'licenses/dotnet') -Recurse
 Copy-Item (Get-Command node).Source (Join-Path $Bundle 'runtime/node.exe')
 Copy-Item (Join-Path $Root 'src') (Join-Path $Bundle 'app/src') -Recurse
 Copy-Item (Join-Path $Root 'scripts') (Join-Path $Bundle 'app/scripts') -Recurse
 Copy-Item (Join-Path $Root 'node_modules') (Join-Path $Bundle 'app/node_modules') -Recurse
 Copy-Item (Join-Path $Root 'package.json') (Join-Path $Bundle 'app/package.json')
 # Build details for the status page and diagnostics (#119). Unsigned until code signing ships.
-$Commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { (git -C $Root rev-parse HEAD).Trim() }
+$Commit = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else {
+    $CommitOutput = git -C $Root rev-parse HEAD
+    Assert-NativeSuccess 'git rev-parse HEAD'
+    ($CommitOutput -join '').Trim()
+}
 $Channel = if ($env:NOWPLAYING_CHANNEL) { $env:NOWPLAYING_CHANNEL } else { 'development' }
 $BuildInfo = [ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"); channel = $Channel; signed = $false } | ConvertTo-Json
 # UTF-8 without a BOM on both Windows PowerShell 5.1 and PowerShell 7+
@@ -42,20 +74,21 @@ $BuildInfo = [ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buil
 [System.IO.File]::WriteAllText((Join-Path $Bundle 'app/build-info.json'), $BuildInfo, [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
-foreach ($InfoFile in @('NOTICE', 'README.md', 'LICENSE')) { Copy-Item (Join-Path $Root $InfoFile) (Join-Path $Bundle 'app' $InfoFile) }
+foreach ($InfoFile in @('NOTICE', 'README.md', 'LICENSE')) { Copy-Item (Join-Path $Root $InfoFile) (Join-Path (Join-Path $Bundle 'app') $InfoFile) }
 Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse
+
+# Hide the runner's installed .NET and bound all three real launcher probes.
+# Smoke the app files that will actually ship before creating release artifacts.
+& (Get-Command node).Source (Join-Path $Root 'scripts/windows-bundle-smoke.js') $Bundle
+Assert-NativeSuccess 'Windows bundle smoke test'
 
 $Iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue).Source
 if (-not $Iscc) { $Iscc = (Get-Command iscc -ErrorAction Stop).Source }
 & $Iscc ('/DAppVersion=' + $InstallerVersion) ('/DBundleDir=' + $Bundle) (Join-Path $Root 'scripts/windows-installer.iss')
-
-
-
-
-& (Join-Path $Bundle 'nowplaying.exe') --version
-& (Join-Path $Bundle 'nowplaying.exe') --help
-# The GUI launcher must run the same app and exit cleanly without a console.
-$gui = Start-Process -FilePath (Join-Path $Bundle 'nowplayingw.exe') -ArgumentList '--version' -WorkingDirectory $Bundle -Wait -PassThru
-if ($gui.ExitCode -ne 0) { throw "nowplayingw.exe --version exited with $($gui.ExitCode)" }
+Assert-NativeSuccess 'Inno Setup compiler'
 Compress-Archive -Path (Join-Path $Bundle '*') -DestinationPath "$Bundle.zip"
+# The updater deliberately rejects downloads larger than 100 MiB. Keep every
+# generated portable release within that same bound instead of shipping an
+# update that current installs can never download.
+if ((Get-Item "$Bundle.zip").Length -gt (100 * 1024 * 1024)) { throw 'Windows portable ZIP exceeds the updater limit of 100 MiB' }
 Write-Output "$Bundle.zip"

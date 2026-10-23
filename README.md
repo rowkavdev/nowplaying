@@ -20,16 +20,18 @@ Studio puts artwork behind the card. Editorial pairs a large cover with warm pap
 
 *Examples rendered by the app with illustrated sample artwork. Your card uses the current album cover or poster; hosted covers require **Include cover art** in Settings.*
 
-> **Development builds:** The [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev) is a moving test build, not an accepted stable release. It can break. Downloads are not code-signed; verify the checksum before running one. Windows has an installer and portable ZIP. **Linux x86_64 is experimental:** RPM, DEB, Arch and portable tarball downloads are available for desktop testing. [Linux installation and requirements](docs/wiki/Install-on-Linux.md). macOS desktop support is still experimental.
+> **Stable release:** [v0.2.1](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1) has a Windows x64 installer and portable ZIP, plus a Node.js source bundle. Downloads are unsigned; verify their checksums before running them. [Release notes and upgrade guidance](docs/release-notes/v0.2.1.md).
+>
+> **Experimental desktops:** Linux x86_64 RPM, DEB, Arch and portable packages, and macOS builds, remain on the moving [`dev` prerelease](https://github.com/rowkavdev/nowplaying/releases/tag/dev). [Linux installation and requirements](docs/wiki/Install-on-Linux.md).
 
 ## Get it running
 
 On Linux, follow [Install on Linux](docs/wiki/Install-on-Linux.md) to choose an RPM, DEB, Arch package or portable tarball. The Windows steps are below; both use the same browser Settings and playback setup.
 
-1. Download `nowplaying-dev-windows-x64-setup.exe` and `SHA256SUMS` from the [dev release](https://github.com/rowkavdev/nowplaying/releases/tag/dev). The [portable ZIP](docs/wiki/Install-on-Windows.md#portable-zip) is an alternative. In PowerShell, compare the installer hash with its line in `SHA256SUMS`:
+1. Download `nowplaying-v0.2.1-windows-x64-setup.exe` and `SHA256SUMS` from the [v0.2.1 release](https://github.com/rowkavdev/nowplaying/releases/tag/v0.2.1). The [portable ZIP](docs/wiki/Install-on-Windows.md#portable-zip) is an alternative. In PowerShell, compare the installer hash with its line in `SHA256SUMS`:
 
    ```powershell
-   Get-FileHash .\nowplaying-dev-windows-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\nowplaying-v0.2.1-windows-x64-setup.exe -Algorithm SHA256
    ```
 
 2. Install it for your Windows user. On first launch, **Settings opens in your browser**. Find a media server or enter its address, then sign in. A full subnet scan only runs when you enter that subnet yourself. You can connect more than one server.
@@ -50,7 +52,7 @@ Provider sign-in: [Plex](docs/wiki/Connect-Plex.md) · [Jellyfin](docs/wiki/Conn
 
 ## Privacy is set on your PC
 
-- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, not your server address, username, password, token, artwork links or listening history. **Include cover art** optionally adds a small sanitized image. Its latest update expires after ten minutes. [See exactly what leaves your PC](docs/hosted-upload.md).
+- **Hosted cards are off until you turn them on.** The public service receives the card's filtered state, without your server address, username, password, token or artwork links. **Include cover art** optionally adds a small sanitized image. Live state expires after ten minutes; the latest title and subtitle per media type remain public in last-played badges for up to seven days, including after playback stops or privacy settings change. [See exactly what leaves your PC and how to clear it](docs/hosted-upload.md).
 - **Sign-ins stay in the operating system credential store:** Windows Credential Manager or Linux Secret Service. Settings and server addresses are in `%LOCALAPPDATA%\nowplaying\config.json` on Windows or `~/.config/nowplaying/config.json` on Linux, with XDG directory overrides respected. These files do not contain passwords or tokens; check server addresses before sharing them.
 - **Settings > Privacy** can hide titles, artwork, progress or whole media types before they reach the card or Discord. A hidden type looks like nothing playing. [Privacy guide](docs/wiki/Privacy-and-safe-configuration.md).
 - **Discord cover art is uploaded to a temporary host.** Discord can't reach a private Plex, Jellyfin or Emby address, so "Show my server's cover" is on for a new setup and sends the cover to Litterbox (72-hour retention), with tmpfiles.org (48-hour retention) as a fallback when the first host fails. An existing install keeps it off until you tick it in Settings > Discord, and you can untick it there at any time. [Details](docs/artwork.md#discord-cover-upload).
