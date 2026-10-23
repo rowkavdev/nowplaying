@@ -24,6 +24,8 @@ if (-not (Test-Path (Join-Path $Root 'assets/nowplaying.ico'))) { throw 'assets/
 
 # Bundle the .NET runtime, including its native libraries, into each launcher.
 # Only the EXEs are shipped; neither may require a machine-wide .NET install.
+# Trim the launcher's static dependencies to keep the portable ZIP inside the
+# existing updater download limit; both real launchers are smoke-tested below.
 # Node and Sharp remain real files so native loading is reliable.
 dotnet new console --name Launcher --output (Join-Path $Root 'dist/launcher') --framework net8.0 --force | Out-Null
 Assert-NativeSuccess 'dotnet new'
@@ -45,11 +47,11 @@ $RuntimeNoticesTarget = @'
 $ProjectXml = [System.IO.File]::ReadAllText($LauncherProject)
 [System.IO.File]::WriteAllText($LauncherProject, $ProjectXml.Replace('</Project>', "$RuntimeNoticesTarget`n</Project>"), [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'scripts/windows-launcher.cs') (Join-Path $Root 'dist/launcher/Program.cs') -Force
-dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UseAppHost=true -p:AssemblyName=nowplaying --output (Join-Path $Root 'dist/launcher/publish') | Out-Null
+dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true -p:UseAppHost=true -p:AssemblyName=nowplaying --output (Join-Path $Root 'dist/launcher/publish') | Out-Null
 Assert-NativeSuccess 'dotnet publish (console launcher)'
 Copy-Item (Join-Path $Root 'dist/launcher/publish/nowplaying.exe') (Join-Path $Bundle 'nowplaying.exe')
 # Same launcher as a Windows GUI program for shortcuts: no console window for end users.
-dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:UseAppHost=true -p:AssemblyName=nowplayingw -p:OutputType=WinExe -p:DefineConstants=NOWPLAYING_GUI --output (Join-Path $Root 'dist/launcher/publish-gui') | Out-Null
+dotnet publish (Join-Path $Root 'dist/launcher/Launcher.csproj') --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=true -p:UseAppHost=true -p:AssemblyName=nowplayingw -p:OutputType=WinExe -p:DefineConstants=NOWPLAYING_GUI --output (Join-Path $Root 'dist/launcher/publish-gui') | Out-Null
 Assert-NativeSuccess 'dotnet publish (GUI launcher)'
 Copy-Item (Join-Path $Root 'dist/launcher/publish-gui/nowplayingw.exe') (Join-Path $Bundle 'nowplayingw.exe')
 New-Item (Join-Path $Bundle 'licenses') -ItemType Directory -Force | Out-Null
@@ -72,7 +74,7 @@ $BuildInfo = [ordered]@{ version = $Version; commitSha = $Commit.ToLower(); buil
 [System.IO.File]::WriteAllText((Join-Path $Bundle 'app/build-info.json'), $BuildInfo, [System.Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Bundle 'LICENSE')
 Copy-Item (Join-Path $Root 'NOTICE') (Join-Path $Bundle 'NOTICE')
-foreach ($InfoFile in @('NOTICE', 'README.md', 'LICENSE')) { Copy-Item (Join-Path $Root $InfoFile) (Join-Path $Bundle 'app' $InfoFile) }
+foreach ($InfoFile in @('NOTICE', 'README.md', 'LICENSE')) { Copy-Item (Join-Path $Root $InfoFile) (Join-Path (Join-Path $Bundle 'app') $InfoFile) }
 Copy-Item (Join-Path $Root 'assets') (Join-Path $Bundle 'assets') -Recurse
 
 # Hide the runner's installed .NET and bound all three real launcher probes.
