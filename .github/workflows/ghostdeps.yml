@@ -11,7 +11,11 @@ on:
 permissions:
   contents: read
   checks: write
-  pull-requests: read
+  pull-requests: write # Maintain the opt-in PR report.
+
+concurrency:
+  group: ghostdeps-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   ghostdeps:
@@ -22,6 +26,7 @@ jobs:
           persist-credentials: false
       - name: GhostDeps scan
         continue-on-error: true
-        uses: rowkavdev/ghostdeps/packages/action@39ca6d615ad40f8acc1b4ca324dd80de18477f7a
+        uses: rowkavdev/ghostdeps/packages/action@9e7ca357cbb6db890a2657470bb03878a209128a
         with:
           path: "."
+          comment: "true"
