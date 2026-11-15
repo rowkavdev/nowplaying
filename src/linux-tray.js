@@ -9,7 +9,10 @@ export function openLinuxWebUiUrl(url, { spawnProcess = spawn, env = process.env
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !["/", "/settings", "/logs"].includes(parsed.pathname) || parsed.search || parsed.hash || parsed.username || parsed.password)
     throw new TypeError("Web UI URL must be an allowed loopback page");
-  const child = spawnProcess("xdg-open", [parsed.href], { env: linuxDesktopEnv(env), detached: true, stdio: "ignore", shell: false });
+  const desktopEnv = linuxDesktopEnv(env);
+  // xdg-open uses this to select the Plasma launcher instead of kfmclient.
+  if (env.KDE_SESSION_VERSION) desktopEnv.KDE_SESSION_VERSION = env.KDE_SESSION_VERSION;
+  const child = spawnProcess("xdg-open", [parsed.href], { env: desktopEnv, detached: true, stdio: "ignore", shell: false });
   child.on?.("error", () => {});
   child.unref?.();
   return parsed.href;

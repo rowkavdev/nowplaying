@@ -81,9 +81,10 @@ test("closing before ready settles ready and ignores subsequent menu actions", a
 test("real WebUI opener validates all menu destinations and filters child secrets", () => {
   for (const path of ["/", "/settings", "/logs"]) {
     let call;
-    openLinuxWebUiUrl(`http://127.0.0.1:47832${path}`, { spawnProcess: (...args) => { call = args; return fakeChild(); }, env: { HOME: "/tmp/home", DISPLAY: ":1", GH_TOKEN: "must-not-pass" } });
+    openLinuxWebUiUrl(`http://127.0.0.1:47832${path}`, { spawnProcess: (...args) => { call = args; return fakeChild(); }, env: { HOME: "/tmp/home", DISPLAY: ":1", XDG_CURRENT_DESKTOP: "KDE", KDE_SESSION_VERSION: "6", GH_TOKEN: "must-not-pass" } });
     assert.equal(call[0], "xdg-open");
     assert.equal(call[1][0], `http://127.0.0.1:47832${path}`);
+    assert.equal(call[2].env.KDE_SESSION_VERSION, "6");
     assert.equal(call[2].env.GH_TOKEN, undefined);
   }
   for (const url of ["http://outside.example/", "http://127.0.0.1/private", "http://127.0.0.1/logs?token=x"])
