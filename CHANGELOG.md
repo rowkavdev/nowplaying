@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/rowkavdev/nowplaying/compare/v0.2.1...v0.2.2) (2026-11-15)
+
+
+### Fixes
+
+* isolate bundle smoke tests from user settings ([#1203](https://github.com/rowkavdev/nowplaying/issues/1203)) ([21cbba1](https://github.com/rowkavdev/nowplaying/commit/21cbba1cd8090c4b4bcb29a2672ae97bfac5ca2a))
+* open NowPlaying tray links on KDE Plasma ([#1200](https://github.com/rowkavdev/nowplaying/issues/1200)) ([fb851b1](https://github.com/rowkavdev/nowplaying/commit/fb851b1ba5bdb95817b15ec7ad756e45e0c7c8c8))
+* preserve server settings and playback privacy ([#1202](https://github.com/rowkavdev/nowplaying/issues/1202)) ([8505f31](https://github.com/rowkavdev/nowplaying/commit/8505f31ec33be4d7968b9636833c28daff254158))
+
 ## [0.2.1](https://github.com/rowkavdev/nowplaying/compare/v0.2.0...v0.2.1) (2026-10-23)
 
 
