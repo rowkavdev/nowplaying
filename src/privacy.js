@@ -43,8 +43,11 @@ export function applyPrivacy(presence, input = {}) {
   assertObject(presence, "presence");
   const policy = createPrivacyPolicy(input);
   if (policy.mode === "private" || policy.suppressMediaKinds.includes(presence.kind)) return createPresence({ state: "idle", updatedAt: presence.updatedAt });
+  // The normalized presence has no user identity fields, so they stay out
+  // even when callers use an adapter that returns a richer object.
   return createPresence({
     ...presence,
+    provider: policy.hideProviders ? null : presence.provider,
     title: policy.redactTitles && presence.state !== "idle" ? policy.titleReplacement : presence.title,
     subtitle: policy.redactTitles ? null : presence.subtitle,
     artist: policy.redactTitles ? null : presence.artist,

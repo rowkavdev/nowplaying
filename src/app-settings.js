@@ -12,7 +12,7 @@ import { validateTemplate } from "./template.js";
 
 const DISCORD_KEYS = new Set(["enabled", "timestamps", "artworkLookup", "artworkUpload", "idleBehavior", "name", "statusDisplayType"]);
 const HOSTED_KEYS = new Set(["enabled", "artwork"]);
-const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]);
+const PRIVACY_KEYS = new Set(["hideTitles", "hideArtwork", "hideProgress", "hideProviders", "hideMovies", "hideEpisodes", "hideMusic"]);
 const PRIVACY_KIND_KEYS = Object.freeze([["hideMovies", "movie"], ["hideEpisodes", "episode"], ["hideMusic", "track"]]);
 
 export function discordSettingsView(config) {
@@ -38,6 +38,7 @@ export function privacySettingsView(config) {
     hideTitles: privacy.redactTitles === true,
     hideArtwork: privacy.hideArtwork === true,
     hideProgress: privacy.hideProgress === true,
+    hideProviders: privacy.hideProviders === true,
     ...Object.fromEntries(PRIVACY_KIND_KEYS.map(([key, kind]) => [key, kinds.includes(kind)])),
   });
 }
@@ -89,7 +90,7 @@ function checkChanges(changes, allowed, name) {
 function rewrite(config, { servers = config.servers, discord = { ...discordSettingsView(config), timestamps: config.discord?.timestamps }, hosted = config.hosted, privacy = config.privacy, card = config.card, spotify = config.spotify } = {}) {
   const text = serializeSetupConfig({
     // Every server is kept; settings changes never drop one (#252).
-    servers: servers.map(({ provider, serverUrl, identity }) => ({ provider, ...(serverUrl ? { serverUrl } : {}), identity })),
+    servers,
     credentialStored: true,
     discordEnabled: discord.enabled,
     discordIdleBehavior: discord.idleBehavior,
@@ -141,6 +142,7 @@ export function applyPrivacyChanges(config, changes) {
     redactTitles: view.hideTitles,
     hideArtwork: view.hideArtwork,
     hideProgress: view.hideProgress,
+    ...(view.hideProviders ? { hideProviders: true } : {}),
     suppressMediaKinds: PRIVACY_KIND_KEYS.filter(([key]) => view[key]).map(([, kind]) => kind),
   } });
 }

@@ -11,7 +11,7 @@ const input = {
 test("creates a versioned config with a stable OS credential reference", () => {
   const config = createSetupConfig(input);
   assert.deepEqual(config, {
-    version: 2,
+    version: 3,
     servers: [{ provider: "plex", identity: { id: "user-42", displayName: "Rowan" }, credentialRef: { provider: "plex", identityId: "user-42" } }],
     discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off" },
   });

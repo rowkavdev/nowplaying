@@ -210,6 +210,7 @@ ${Object.entries(cardPresets).map(([key, preset]) => `<option value="${key}">${p
 <p class="row"><label><input type="checkbox" id="privacy-hideTitles"> Hide titles (shows "Private media")</label></p>
 <p class="row"><label><input type="checkbox" id="privacy-hideArtwork"> Hide album art</label></p>
 <p class="row"><label><input type="checkbox" id="privacy-hideProgress"> Hide progress and timer</label></p>
+<p class="row"><label><input type="checkbox" id="privacy-hideProviders"> Hide the source name in Discord</label></p>
 <fieldset><legend>Don't show when I'm playing</legend>
 <p class="row"><label><input type="checkbox" id="privacy-hideMovies"> Movies</label> <label><input type="checkbox" id="privacy-hideEpisodes"> TV episodes</label> <label><input type="checkbox" id="privacy-hideMusic"> Music</label></p>
 </fieldset>
@@ -581,7 +582,7 @@ document.getElementById("refresh-art").addEventListener("click", async (event) =
     if (restoreButtonFocus && document.activeElement === document.body) button.focus();
   }
 });
-const PRIVACY_KEYS = ["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"];
+const PRIVACY_KEYS = ["hideTitles", "hideArtwork", "hideProgress", "hideProviders", "hideMovies", "hideEpisodes", "hideMusic"];
 const privacy = { form: document.getElementById("privacy-form"), save: document.getElementById("privacy-save") };
 function privacySay(text, tone) { const el = document.getElementById("privacy-result"); el.textContent = text; el.className = tone || ""; }
 function showPrivacy(p) { privacy.form.hidden = !p; if (p) for (const key of PRIVACY_KEYS) document.getElementById("privacy-" + key).checked = p[key] === true; }

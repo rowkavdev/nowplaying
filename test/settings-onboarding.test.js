@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { startAppFromConfig } from "../src/app-config.js";
+import { parseAppConfig, startAppFromConfig } from "../src/app-config.js";
+import { applyPrivacyChanges } from "../src/app-settings.js";
 import { createSettingsServers } from "../src/settings-servers.js";
 import { createFirstRunSettingsHandler } from "../src/settings-page-handler.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
@@ -56,8 +57,10 @@ test("first signed-in server saves valid credential-free config and signals acti
   const auth = await mgmt.handler(post("/api/setup/signin", { action: "password", provider: "navidrome", baseUrl: "http://10.1.2.3:4533", username: "rowan", password: "not-stored" }));
   assert.equal(auth.status, 200);
   assert.equal(JSON.parse(auth.body).status, "signed_in");
-  assert.deepEqual(secrets, [{ ref: { provider: "navidrome", identityId: "rowan" }, secret: "stored-credential" }]);
   const config = JSON.parse(await readFile(file, "utf8"));
+  assert.deepEqual(secrets, [{ ref: config.servers[0].credentialRef, secret: "stored-credential" }]);
+  assert.match(config.servers[0].credentialRef.identityId, /^server:/);
+  assert.equal(config.discord.enabled, false);
   assert.equal(config.servers[0].serverUrl, "http://10.1.2.3:4533");
   assert.doesNotMatch(JSON.stringify(config), /not-stored|stored-credential/);
   await activation;
@@ -86,7 +89,7 @@ test("adding a second server keeps current settings and never writes a password"
   await writeFile(file, serializeSetupConfig({
     servers: [{ provider: "jellyfin", serverUrl: "http://192.168.1.20:8096", identity: { id: "first", displayName: "One" } }],
     credentialStored: true, discordEnabled: false, discordIdleBehavior: "recent", discordArtworkLookup: "off",
-    privacy: { redactTitles: true }, card: { theme: "paper" }, hostedEnabled: false,
+    privacy: { redactTitles: true }, card: { theme: "paper" }, hostedEnabled: true, hostedArtwork: true,
   }));
   const mgmt = createSettingsServers({ file, deviceId, credentialStore: store, onConfigured: () => {}, signIn: {
     signInNavidrome: async () => ({ provider: "navidrome", identity: { id: "two", displayName: "Two" }, secret: "new-secret" }),
@@ -101,10 +104,13 @@ test("adding a second server keeps current settings and never writes a password"
   assert.equal(config.discord.idleBehavior, "recent");
   assert.equal(config.privacy.redactTitles, true);
   assert.equal(config.card.theme, "paper");
+  assert.deepEqual(config.hosted, { enabled: true, artwork: true });
   assert.doesNotMatch(JSON.stringify(config), /new-secret|unsaved-password/);
   const last = await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "jellyfin", id: "first" }) });
   assert.equal(last.status, 200);
-  assert.equal((await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: "two" }) })).status, 409);
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")).hosted, config.hosted);
+  const id = config.servers[1].credentialRef.identityId;
+  assert.equal((await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id }) })).status, 409);
 });
 
 test("server removal deletes only its saved credential after config persists", async () => {
@@ -122,6 +128,48 @@ test("server removal deletes only its saved credential after config persists", a
   assert.deepEqual(seen[0].config.servers.map((s) => s.identity.id), ["two"]);
   assert.equal((await del("navidrome", "two")).status, 409);
   assert.equal(seen.length, 1);
+});
+
+test("the same username on two addresses gets independent sign-ins and removal", async () => {
+  const file = await fixture();
+  const credentials = new Map();
+  const key = (ref) => `${ref.provider}:${ref.identityId}`;
+  const credentialStore = {
+    read: async ref => credentials.get(key(ref)),
+    save: async (ref, secret) => credentials.set(key(ref), secret),
+    remove: async ref => credentials.delete(key(ref)),
+  };
+  const mgmt = createSettingsServers({ file, deviceId, credentialStore, signIn: {
+    signInNavidrome: async ({ username, password }) => ({
+      provider: "navidrome", identity: { id: username, displayName: username }, secret: password,
+    }),
+  } });
+  const first = "http://127.0.0.1:4533";
+  const second = "http://127.0.0.1:4534";
+  async function connect(baseUrl, password) {
+    const result = await mgmt.handler(post("/api/setup/signin", {
+      action: "password", provider: "navidrome", baseUrl, username: "alex", password,
+    }));
+    assert.equal(result.status, 200, result.body);
+  }
+  await connect(first, "one");
+  await connect(second, "two");
+  const initial = parseAppConfig(await readFile(file, "utf8"));
+  assert.deepEqual(initial.servers.map(s => s.serverUrl), [first, second]);
+  const [a, b] = initial.servers.map(s => s.credentialRef);
+  assert.notDeepEqual(a, b);
+  assert.deepEqual(await Promise.all([credentialStore.read(a), credentialStore.read(b)]), ["one", "two"]);
+  const edited = applyPrivacyChanges(initial, { hideTitles: true });
+  await writeFile(file, edited.text);
+  await connect(first + "/", "updated");
+  assert.deepEqual(parseAppConfig(await readFile(file, "utf8")).servers.map(s => s.credentialRef), [a, b]);
+  assert.deepEqual(await Promise.all([credentialStore.read(a), credentialStore.read(b)]), ["updated", "two"]);
+  const { servers } = JSON.parse((await mgmt.handler({ url: "/api/settings/servers" })).body);
+  const remove = await mgmt.handler({ method: "DELETE", url: "/api/settings/servers", body: JSON.stringify({ provider: "navidrome", id: servers[0].id }) });
+  assert.deepEqual([remove.status, JSON.parse(remove.body).tokenRemoved], [200, true]);
+  assert.equal(await credentialStore.read(a), undefined);
+  assert.equal(await credentialStore.read(b), "two");
+  assert.deepEqual(parseAppConfig(await readFile(file, "utf8")).servers.map(s => s.serverUrl), [second]);
 });
 
 test("server removal reports a failed keychain delete while preserving config removal", async () => {
@@ -303,6 +351,7 @@ test('#816 current first-run entry commits staged Spotify and hosted with the fi
     assert.equal(config.spotify.identity.id, 'spotify');
     assert.deepEqual(config.hosted, { enabled: true, url: 'https://cards.example' });
     assert.equal(config.servers[0].identity.id, 'media');
+    assert.equal(config.discord.enabled, false);
   } finally { await app.close(); }
 });
 
@@ -347,8 +396,9 @@ for (const provider of ['navidrome', 'emby', 'plex', 'jellyfin']) {
       ? await req({ action: 'poll', flowId: JSON.parse((await req({ action: 'start', provider, baseUrl: 'http://127.0.0.1:4533' })).body).flowId })
       : await req({ action: 'password', provider, baseUrl: 'http://127.0.0.1:4533', username: 'remove', password: 'pw' });
     assert.equal(again.status, 200);
-    assert.equal(values.get(`${provider}:remove`), 'new-token');
-    assert.equal((await mgmt.handler({ method: 'DELETE', url: '/api/settings/servers', body: JSON.stringify({ provider, id: 'remove' }) })).status, 200);
-    assert.equal(values.has(`${provider}:remove`), false);
+    const ref = parseAppConfig(await readFile(file, 'utf8')).servers[1].credentialRef;
+    assert.equal(values.get(key(ref)), 'new-token');
+    assert.equal((await mgmt.handler({ method: 'DELETE', url: '/api/settings/servers', body: JSON.stringify({ provider, id: ref.identityId }) })).status, 200);
+    assert.equal(values.has(key(ref)), false);
   });
 }

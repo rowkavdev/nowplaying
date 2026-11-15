@@ -34,7 +34,7 @@ export function createSetupTestHandler({ store, credentialStore, fetchImpl = fet
     if (!config.serverUrl) return json(200, { ok: false, status: "missing_server" });
     let secret;
     try {
-      secret = await credentialStore.read({ provider: account.provider, identityId: account.id });
+      secret = await credentialStore.read({ provider: account.provider, identityId: account.credentialId ?? account.id });
     } catch {
       return json(200, { ok: false, status: "credential_unavailable" });
     }

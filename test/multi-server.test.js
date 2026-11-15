@@ -21,13 +21,13 @@ test("polls every server together; a playing server wins over an idle first serv
   ]);
 });
 
-test("a failing first server fails like before; a failing other server only shows on its own row (#252)", async () => {
+test("an idle answer wins over errors regardless of server order (#252)", async () => {
   const down = Object.assign(new Error("secret http://10.0.0.2 detail"), { code: "ECONNREFUSED" });
   const first = createMultiServerProvider([
     { server: server("jellyfin"), provider: { getPresence: async () => { throw down; } } },
     { server: server("emby"), provider: { getPresence: async () => ({ state: "idle" }) } },
   ]);
-  await assert.rejects(first.getPresence(), (error) => error === down);
+  assert.deepEqual(await first.getPresence(), { state: "idle" });
   assert.deepEqual(first.servers().map((s) => [s.state, s.reason]), [["error", "unreachable"], ["idle", undefined]]);
   assert.doesNotMatch(JSON.stringify(first.servers()), /10\.0\.0\.2|secret/);
   const other = createMultiServerProvider([
@@ -62,6 +62,43 @@ test("most recent request wins: the server that started or resumed last shows (#
   state.plex = { state: "idle" };
   state.jellyfin = { state: "paused", kind: "movie", title: "B" };
   assert.equal((await tick()).title, "B", "a paused server shows over idle ones");
+});
+
+test("slow polling does not block fresh results or send a duplicate request", { timeout: 2000 }, async () => {
+  let settleSlow;
+  let slowCalls = 0;
+  let track = "First";
+  const multi = createMultiServerProvider([
+    { server: server("plex"), provider: { getPresence: () => {
+      slowCalls++;
+      return new Promise(resolve => { settleSlow = resolve; });
+    } } },
+    { server: server("emby"), provider: { getPresence: async () => ({ state: "playing", title: track }) } },
+  ], { settleMs: 5 });
+  assert.equal((await multi.getPresence()).title, "First");
+  track = "Second";
+  assert.equal((await multi.getPresence()).title, "Second");
+  assert.equal(slowCalls, 1);
+  settleSlow({ state: "idle" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(multi.servers()[0].state, "idle");
+});
+
+test("a healthy slower server stays eligible while its recent sample is fresh", { timeout: 2000 }, async () => {
+  let resolveSlow;
+  let elapsed = 0;
+  const multi = createMultiServerProvider([
+    { server: server("plex"), provider: { getPresence: () => new Promise(resolve => { resolveSlow = resolve; }) } },
+    { server: server("emby"), provider: { getPresence: async () => ({ state: "idle" }) } },
+  ], { settleMs: 5, elapsedNow: () => elapsed });
+  assert.equal((await multi.getPresence()).state, "idle");
+  resolveSlow({ state: "playing", title: "Slower server" });
+  await new Promise(resolve => setImmediate(resolve));
+  elapsed = 15_000;
+  assert.equal((await multi.getPresence()).title, "Slower server");
+  elapsed = 30_001;
+  assert.equal((await multi.getPresence()).state, "idle");
+  resolveSlow({ state: "idle" });
 });
 
 test("latest activity wins after a backward wall-clock correction", async () => {

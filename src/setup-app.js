@@ -13,7 +13,8 @@ import { createSetupSpotifyHandler } from "./setup-spotify-handler.js";
 import { cardRenderOptions, serializeSetupConfig } from "./setup-config.js";
 import { createSetupPreviewHandler } from "./setup-preview.js";
 import { createSetupDiscordTestHandler } from "./setup-discord-test.js";
-import { createSetupDraft, setupAccounts } from "./setup.js";
+import { createSetupDraft, setupAccountKey, setupAccounts } from "./setup.js";
+import { serverAccountKey, serverCredentialRef } from "./server-connection.js";
 import { hostedUploadSettings, migrateAppConfig, parseAppConfig } from "./app-config.js";
 import { createSetupHostedHandler } from "./setup-hosted-handler.js";
 
@@ -52,14 +53,15 @@ export async function writeSetupConfig(file, draft) {
     provider: account.provider,
     ...(account.serverUrl ? { serverUrl: account.serverUrl } : {}),
     identity: { id: account.id, displayName: account.displayName },
+    ...(account.credentialId ? { credentialRef: { provider: account.provider, identityId: account.credentialId } } : {}),
   }));
   const body = serializeSetupConfig({
     servers,
     credentialStored: true,
-    discordEnabled: draft.discordEnabled,
+    discordEnabled: draft.discordEnabled === true,
     discordIdleBehavior: draft.discordIdleBehavior,
     discordArtworkLookup: draft.discordArtworkLookup === false ? "off" : "musicbrainz",
-    discordArtworkUpload: true,
+    discordArtworkUpload: false,
     ...(draft.spotify ? { spotify: { clientId: draft.spotify.clientId, identity: draft.spotify.identity } } : {}),
     ...keptSettings(await readCurrentConfig(file)),
     // A hosting choice made in setup replaces the installed one.
@@ -78,7 +80,7 @@ function keptSettings(current) {
     ...(current.discord?.timestamps !== undefined ? { discordTimestamps: current.discord.timestamps } : {}),
     ...(current.discord?.name ? { discordName: current.discord.name } : {}),
     ...(current.discord?.statusDisplayType ? { discordStatusDisplayType: current.discord.statusDisplayType } : {}),
-    ...(current.hosted ? { hostedEnabled: current.hosted.enabled, ...(current.hosted.url ? { hostedUrl: current.hosted.url } : {}) } : {}),
+    ...(current.hosted ? { hostedEnabled: current.hosted.enabled, hostedArtwork: current.hosted.artwork, ...(current.hosted.url ? { hostedUrl: current.hosted.url } : {}) } : {}),
     ...(current.privacy ? { privacy: current.privacy } : {}),
     ...(current.card ? { card: current.card } : {}),
   };
@@ -131,12 +133,22 @@ export async function startSetupApp({ draftFile, configFile, host = "127.0.0.1",
   });
   const discovery = createSetupDiscoveryHandler(discover ? { discover } : {});
   // A successful sign-in records who signed in on the draft (never the secret).
-  const onSignedIn = async ({ provider, identity, serverUrl }) => store.transaction(async () => {
+  const onSignedIn = async ({ provider, identity, serverUrl }, ref) => store.transaction(async () => {
     const { draft: current } = await store.load();
-    await store.save({ ...current, provider, account: { provider, id: identity.id, displayName: identity.displayName, ...(serverUrl ? { serverUrl } : {}) } });
+    const account = { provider, id: identity.id, displayName: identity.displayName, ...(serverUrl ? { serverUrl } : {}) };
+    if (ref.identityId !== identity.id) account.credentialId = ref.identityId;
+    await store.save({ ...current, provider, account });
   });
+  const credentialRefFor = async (event) => {
+    const { draft } = await store.load();
+    const key = serverAccountKey(event);
+    const existing = setupAccounts(draft).find((account) => setupAccountKey(account) === key);
+    return existing
+      ? { provider: event.provider, identityId: existing.credentialId ?? existing.id }
+      : serverCredentialRef(event);
+  };
   const signIn = credentialStore
-    ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, ...(signInApi ? { signIn: signInApi } : {}) })
+    ? createSetupSignInHandler({ credentialStore, deviceId, version, onSignedIn, credentialRefFor, ...(signInApi ? { signIn: signInApi } : {}) })
     : async () => null;
   // Optional Spotify sign-in for the card (#135); like the media server
   // sign-in it needs somewhere safe to keep the refresh token.
@@ -192,6 +204,7 @@ export function setupDraftFromConfig(config) {
       id: server.identity.id,
       displayName: server.identity.displayName,
       ...(server.serverUrl ? { serverUrl: server.serverUrl } : {}),
+      ...(server.credentialRef?.identityId !== undefined && server.credentialRef.identityId !== server.identity.id ? { credentialId: server.credentialRef.identityId } : {}),
     }));
     const account = accounts.at(-1);
     return createSetupDraft({

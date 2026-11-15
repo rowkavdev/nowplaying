@@ -351,7 +351,8 @@ test('#831 disconnect cannot race a staged snapshot in the first-server transact
   assert.deepEqual(JSON.parse(removed.body), { removed: true, tokenRemoved: true });
   assert.equal(JSON.parse(await readFile(file, 'utf8')).spotify, undefined);
   assert.equal(values.has('spotify:spotify'), false);
-  assert.equal(values.get('navidrome:server'), 'server-token');
+  const { provider, identityId } = JSON.parse(await readFile(file, 'utf8')).servers[0].credentialRef;
+  assert.equal(values.get(`${provider}:${identityId}`), 'server-token');
 });
 
 

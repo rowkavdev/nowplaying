@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import { applyPrivacyChanges, privacySettingsView } from "../src/app-settings.js";
 import { parseAppConfig, privacyPolicyFromConfig, startAppFromConfig, startDiscordFromConfig, withPrivacy } from "../src/app-config.js";
 import { createPresence } from "../src/presence.js";
+import { createDiscordPresenceLoop } from "../src/discord-presence.js";
+import { createHostedLoop } from "../src/hosted-loop.js";
+import { applyPrivacy } from "../src/privacy.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
 
 // Privacy settings (#253): one policy for Discord, the hosted card and the local card.
 const USER = "a1b2c3d4-0000-0000-0000-000000000001";
 const JELLYFIN = { provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: USER, displayName: "Rowan" }, credentialStored: true, discordArtworkLookup: "musicbrainz" };
-const OFF = { hideTitles: false, hideArtwork: false, hideProgress: false, hideMovies: false, hideEpisodes: false, hideMusic: false };
+const OFF = { hideTitles: false, hideArtwork: false, hideProgress: false, hideProviders: false, hideMovies: false, hideEpisodes: false, hideMusic: false };
 const episode = createPresence({ state: "playing", kind: "episode", title: "The Secret Episode", subtitle: "Secret Show", series: "Secret Show", season: 2, episode: 5, year: 2024, artworkUrl: "https://img.example/ep.jpg", positionMs: 1000, durationMs: 60_000 });
 
 async function configFile(input = JELLYFIN) {
@@ -75,6 +78,39 @@ test("with nothing hidden the provider's result passes through untouched", async
   const provider = withPrivacy({ getPresence: async () => episode, other: 1 }, () => ({}));
   assert.equal(await provider.getPresence(), episode);
   assert.equal(provider.other, 1);
+});
+
+test("source privacy removes the provider label and raw user fields", async () => {
+  const snapshot = { ...episode, provider: "jellyfin", username: "private-user" };
+  const filtered = applyPrivacy(snapshot, { hideProviders: true, hideUsers: true });
+  assert.equal(filtered.provider, null);
+  assert.equal(Object.hasOwn(filtered, "username"), false);
+  assert.equal(applyPrivacy(snapshot, { hideProviders: false }).provider, "jellyfin");
+  const saved = applyPrivacyChanges(parseAppConfig(serializeSetupConfig(JELLYFIN)), { hideProviders: true }).config;
+  const provider = withPrivacy({ getPresence: async () => snapshot }, () => saved);
+  assert.equal((await provider.getPresence()).provider, null);
+});
+
+test("hidden progress never leaves the app and still clears frozen sessions", async () => {
+  let elapsed = 0;
+  const { getPresence } = withPrivacy({ getPresence: async () => episode }, () => ({ privacy: { hideProgress: true } }));
+  const hosted = [];
+  const discord = [];
+  const hostedLoop = createHostedLoop({
+    getPresence, elapsedNow: () => elapsed,
+    uploader: { push: async presence => { hosted.push(presence); return { sent: true }; } },
+  });
+  const discordLoop = createDiscordPresenceLoop({
+    getPresence, now: () => elapsed, client: { publish: async activity => { discord.push(activity); return true; } },
+  });
+  for (elapsed of [0, 60_000, 300_001]) {
+    await hostedLoop.tick();
+    await discordLoop.tick();
+  }
+  assert.deepEqual(hosted.map(presence => presence.state), ["playing", "paused", "idle"]);
+  assert.ok(hosted.every(presence => presence.positionMs === null && presence.durationMs === null));
+  assert.equal(discord.at(-1), null);
+  assert.ok(discord.slice(0, -1).every(activity => activity && !activity.timestamps));
 });
 
 test("Discord never sends the real title or looks covers up by title when titles are hidden", async () => {

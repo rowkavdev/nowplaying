@@ -52,14 +52,14 @@ test("discord values are validated through the setup rules, not just their keys"
 
 test("privacy values must be real booleans; kinds land in order", () => {
   const cfg = config();
-  for (const key of ["hideTitles", "hideArtwork", "hideProgress", "hideMovies", "hideEpisodes", "hideMusic"]) {
+  for (const key of ["hideTitles", "hideArtwork", "hideProgress", "hideProviders", "hideMovies", "hideEpisodes", "hideMusic"]) {
     for (const value of [1, 0, "true", null, [], {}]) {
       assert.throws(() => applyPrivacyChanges(cfg, { [key]: value }), TypeError, `${key}=${String(value)}`);
     }
   }
   const { config: saved } = applyPrivacyChanges(cfg, { hideMusic: true, hideMovies: true });
   assert.deepEqual(saved.privacy.suppressMediaKinds, ["movie", "track"]);
-  assert.deepEqual({ ...privacySettingsView(saved) }, { hideTitles: false, hideArtwork: false, hideProgress: false, hideMovies: true, hideEpisodes: false, hideMusic: true });
+  assert.deepEqual({ ...privacySettingsView(saved) }, { hideTitles: false, hideArtwork: false, hideProgress: false, hideProviders: false, hideMovies: true, hideEpisodes: false, hideMusic: true });
 });
 
 test("card numbers stay inside their ranges and integers only", () => {

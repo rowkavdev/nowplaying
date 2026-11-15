@@ -10,7 +10,7 @@ test("starts with privacy-first, testable defaults", () => {
     account: null,
     servers: [],
     spotify: null,
-    discordEnabled: true,
+    discordEnabled: false,
     discordIdleBehavior: "clear",
     discordArtworkLookup: true,
     startWithWindows: null,

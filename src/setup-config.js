@@ -4,12 +4,13 @@ import { isFontStack } from "./card.js";
 import { isServerUrl } from "./setup.js";
 import { normalizeHostedUrl } from "./hosted-uploader.js";
 import { validateTemplate } from "./template.js";
+import { serverAccountKey, serverCredentialRef } from "./server-connection.js";
 
 const PROVIDERS = new Set(["plex", "jellyfin", "navidrome", "emby"]);
 const ARTWORK_LOOKUPS = new Set(["off", "musicbrainz"]);
 const STATUS_DISPLAY_TYPES = new Set(["name", "state", "details"]);
 const TIMESTAMP_MODES = new Set(["elapsed", "remaining", "both", "none"]);
-const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress"];
+const PRIVACY_FLAGS = ["redactTitles", "hideArtwork", "hideProgress", "hideProviders"];
 const PRIVACY_KINDS = new Set(["movie", "episode", "track"]);
 
 // Privacy (set from the settings page, #253). Left out means nothing hidden.
@@ -184,8 +185,8 @@ export function createSetupConfig(input = {}) {
   return Object.freeze(config);
 }
 
-// config.json schema version (v2: a list of servers, #252).
-export const CONFIG_SCHEMA_VERSION = 2;
+// v3 supports credentials scoped to a server address and account.
+export const CONFIG_SCHEMA_VERSION = 3;
 export const MAX_SERVERS = 8;
 
 function normalizeServers(input) {
@@ -194,6 +195,7 @@ function normalizeServers(input) {
   const list = input.servers ?? [{ provider: input.provider, serverUrl: input.serverUrl, identity: input.identity }];
   if (!Array.isArray(list) || list.length < 1 || list.length > MAX_SERVERS) throw new TypeError(`setup config.servers must list 1 to ${MAX_SERVERS} servers`);
   const seen = new Set();
+  const refs = new Set();
   return Object.freeze(list.map((server, index) => {
     if (!server || typeof server !== "object" || Array.isArray(server)) throw new TypeError(`setup config.servers[${index}] is invalid`);
     for (const key of Object.keys(server)) {
@@ -202,16 +204,24 @@ function normalizeServers(input) {
     if (!PROVIDERS.has(server.provider)) throw new TypeError("setup config.provider is invalid");
     const identity = createProviderIdentity(server.identity);
     if (server.serverUrl !== undefined && !isServerUrl(server.serverUrl)) throw new TypeError("setup config.serverUrl is invalid");
-    // One sign-in per account per server; the credential store is keyed by
-    // provider + identity, so a second copy would share and overwrite it.
-    const key = `${server.provider}\u0000${identity.id}`;
+    const connection = { ...server, identity };
+    const key = serverAccountKey(connection);
     if (seen.has(key)) throw new TypeError("setup config.servers lists the same account twice");
     seen.add(key);
+    // Existing installs can continue reading the legacy account-only key.
+    const ref = server.credentialRef ?? { provider: server.provider, identityId: identity.id };
+    if (ref.provider !== server.provider ||
+        ![identity.id, serverCredentialRef(connection).identityId].includes(ref.identityId)) {
+      throw new TypeError("setup config.server credential does not match its connection");
+    }
+    const refKey = JSON.stringify([ref.provider, ref.identityId]);
+    if (refs.has(refKey)) throw new TypeError("setup config.servers share a credential");
+    refs.add(refKey);
     return Object.freeze({
       provider: server.provider,
       ...(server.serverUrl ? { serverUrl: server.serverUrl } : {}),
       identity,
-      credentialRef: Object.freeze({ provider: server.provider, identityId: identity.id }),
+      credentialRef: Object.freeze({ provider: ref.provider, identityId: ref.identityId }),
     });
   }));
 }

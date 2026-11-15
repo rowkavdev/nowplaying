@@ -1,4 +1,23 @@
+import { presenceItemKey } from "./presence-identity.js";
+
 const DEFAULT_STALE_AFTER_MS = 60_000;
+const observations = new WeakMap();
+
+// Keep progress and identity available to the local stale-session detector
+// without attaching private fields to a presence that an output can publish.
+export function preservePlaybackObservation(filtered, source) {
+  if (filtered.state === "playing" && source.state === "playing") {
+    observations.set(filtered, playbackObservation(source));
+  }
+  return filtered;
+}
+
+export function playbackObservation(presence) {
+  return observations.get(presence) ?? {
+    key: JSON.stringify([presenceItemKey(presence), presence.series, presence.season, presence.episode]),
+    positionMs: presence.positionMs,
+  };
+}
 
 export function presenceAgeMs(presence, now = Date.now()) {
   const observedAt = Date.parse(presence?.updatedAt);

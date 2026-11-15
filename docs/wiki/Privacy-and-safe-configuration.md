@@ -9,6 +9,7 @@ In **Settings > Privacy** you can:
 - **Hide titles** - Discord and the card show "Private media" instead of the show or track name.
 - **Hide album art** - Discord shows the NowPlaying icon instead of the cover.
 - **Hide progress and timer** - no progress bar on the card, no timer on Discord.
+- **Hide the source name in Discord** - the activity template leaves out the provider name, such as Jellyfin or Plex.
 - **Hide a whole media type** - for example never show TV episodes. Playing a hidden type looks exactly like nothing playing.
 
 Privacy is applied before anything is formatted or sent, so hidden data can't leak through a theme or template.

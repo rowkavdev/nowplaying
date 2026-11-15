@@ -13,7 +13,10 @@ export function createUpstashRedis({ url, token, fetchImpl = globalThis.fetch, t
         body: JSON.stringify(args),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!response.ok) throw new Error(`redis_http_${response.status}`);
+      if (!response.ok) {
+        try { Promise.resolve(response.body?.cancel?.()).catch(() => {}); } catch { /* Keep the original HTTP error. */ }
+        throw new Error(`redis_http_${response.status}`);
+      }
       const body = await response.json();
       if (body.error) throw new Error("redis_error");
       return body.result;

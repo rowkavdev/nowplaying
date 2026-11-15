@@ -4,9 +4,10 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { parseAppConfig } from "./app-config.js";
-import { MAX_SERVERS, serializeSetupConfig } from "./setup-config.js";
+import { CONFIG_SCHEMA_VERSION, MAX_SERVERS } from "./setup-config.js";
 import { createSetupSignInHandler } from "./setup-signin-handler.js";
-import { SignInError } from "./provider-signin.js";
+import { normalizeServerUrl, SignInError } from "./provider-signin.js";
+import { serverAccountKey, serverCredentialRef } from "./server-connection.js";
 import { discoverSettingsServers, subnetCandidates } from "./settings-discovery.js";
 
 const SAFE = new Set(["same-origin", "none"]);
@@ -17,7 +18,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
   let queue = Promise.resolve();
   let removalSequence = 0;
   const removals = new Map();
-  const identityKey = (provider, id) => JSON.stringify([provider, id]);
+  const matchingIndex = (servers, account) => servers.findIndex((server) => serverAccountKey(server) === serverAccountKey(account));
   let scan = null;
   let cached = null;
   let configured = false;
@@ -39,20 +40,13 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     catch (error) { if (error.code === "ENOENT") return null; throw error; }
   }
   async function save(servers, existing) {
-    const body = serializeSetupConfig({
-      servers, credentialStored: true,
-      discordEnabled: existing?.discord?.enabled ?? true,
-      discordIdleBehavior: existing?.discord?.idleBehavior ?? "clear",
-      discordArtworkLookup: existing?.discord?.artworkLookup ?? "off",
-      ...(typeof existing?.discord?.artworkUpload === "boolean" ? { discordArtworkUpload: existing.discord.artworkUpload } : {}),
-      ...(existing?.discord?.timestamps ? { discordTimestamps: existing.discord.timestamps } : {}),
-      ...(existing?.discord?.name ? { discordName: existing.discord.name } : {}),
-      ...(existing?.discord?.statusDisplayType ? { discordStatusDisplayType: existing.discord.statusDisplayType } : {}),
-      ...(existing?.hosted ? { hostedEnabled: existing.hosted.enabled, ...(existing.hosted.url ? { hostedUrl: existing.hosted.url } : {}) } : {}),
-      ...(existing?.privacy ? { privacy: existing.privacy } : {}),
-      ...(existing?.card ? { card: existing.card } : {}),
-      ...(existing?.spotify ? { spotify: { clientId: existing.spotify.clientId, identity: existing.spotify.identity } } : {}),
-    });
+    const config = parseAppConfig(JSON.stringify({
+      ...existing,
+      version: CONFIG_SCHEMA_VERSION,
+      servers,
+      discord: existing?.discord ?? { enabled: false },
+    }));
+    const body = `${JSON.stringify(config, null, 2)}\n`;
     await mkdir(dirname(file), { recursive: true });
     const temp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
     try { await writeFile(temp, body, { mode: 0o600, flag: "wx" }); await rename(temp, file); }
@@ -64,27 +58,29 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
       // At capacity allow reconnecting to an existing server address, then
       // check the returned identity before writing anything. A new address
       // fails here, before a Plex approval or a password exchange.
-      if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.serverUrl === serverUrl)) {
+      if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && normalizeServerUrl(s.serverUrl) === serverUrl)) {
         throw new SignInError("too_many_servers");
       }
       const started = removalSequence;
-      return result => (removals.get(identityKey(result.provider, result.identity.id)) ?? 0) <= started;
+      return result => (removals.get(serverAccountKey({ ...result, serverUrl })) ?? 0) <= started;
     }),
-    beforeSignedIn: async ({ provider, identity }) => {
+    credentialRefFor: async (account) => {
       const existing = await read();
-      if ((existing?.servers.length ?? 0) >= MAX_SERVERS && !existing.servers.some((s) => s.provider === provider && s.identity.id === identity.id)) {
+      const servers = existing?.servers ?? [];
+      const index = matchingIndex(servers, account);
+      if (index < 0 && servers.length >= MAX_SERVERS) {
         throw new SignInError("too_many_servers");
       }
+      return servers[index]?.credentialRef ?? serverCredentialRef(account);
     },
-    onSignedIn: async ({ provider, identity, serverUrl }) => {
+    onSignedIn: async ({ provider, identity, serverUrl }, credentialRef) => {
       if (!PROVIDERS.has(provider) || !serverUrl) throw new TypeError("invalid server");
       const existing = await read();
-      const servers = [...(existing?.servers ?? [])].map((s) => ({ provider: s.provider, serverUrl: s.serverUrl, identity: s.identity }));
-      if (!servers.some((s) => s.provider === provider && s.identity.id === identity.id)) servers.push({ provider, serverUrl, identity });
-      else {
-        const i = servers.findIndex((s) => s.provider === provider && s.identity.id === identity.id);
-        servers[i] = { provider, serverUrl, identity };
-      }
+      const servers = [...(existing?.servers ?? [])];
+      const account = { provider, serverUrl, identity, credentialRef };
+      const index = matchingIndex(servers, account);
+      if (index < 0) servers.push(account);
+      else servers[index] = account;
       // Optional connected services run before the server commit. If they
       // fail, the server config is unchanged and finish() restores the old
       // credential (or removes a newly acquired one).
@@ -133,7 +129,7 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     }
     if (method === "GET") {
       const config = await read();
-      return json(200, { firstRun: !config, configured, activationFailed, servers: (config?.servers ?? []).map((s) => ({ provider: s.provider, id: s.identity.id, name: s.identity.displayName, baseUrl: s.serverUrl })), discovered: cached ?? [] });
+      return json(200, { firstRun: !config, configured, activationFailed, servers: (config?.servers ?? []).map((s) => ({ provider: s.provider, id: s.credentialRef.identityId, name: s.identity.displayName, baseUrl: s.serverUrl })), discovered: cached ?? [] });
     }
     if (method !== "DELETE") return json(405, { error: "method_not_allowed" }, { Allow: "GET, DELETE" });
     let input;
@@ -142,13 +138,13 @@ export function createSettingsServers({ file, credentialStore, deviceId, version
     return serial(async () => {
       const existing = await read();
       if (!existing) return json(404, { error: "not_found" });
-      const removed = existing.servers.find((s) => s.provider === input.provider && s.identity.id === input.id);
+      const removed = existing.servers.find((s) => s.provider === input.provider && s.credentialRef.identityId === input.id);
       const servers = existing.servers.filter((s) => s !== removed);
       if (!removed) return json(404, { error: "not_found" });
       if (!servers.length) return json(409, { error: "last_server" });
       try { await save(servers, existing); }
       catch { return json(500, { error: "save_failed" }); }
-      removals.set(identityKey(input.provider, input.id), ++removalSequence);
+      removals.set(serverAccountKey(removed), ++removalSequence);
       // Config is committed first: a keychain failure must not leave the app
       // using a credential for a server the user has removed.
       let tokenRemoved = false;

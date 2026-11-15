@@ -101,6 +101,18 @@ test("tray subprocess env excludes tokens and opener exceptions cannot crash app
   tray.close();
 });
 
+test("a missing or failing browser launcher reports which page to open", () => {
+  const url = "http://127.0.0.1:47832/settings";
+  for (const event of [["error", new Error("ENOENT")], ["exit", 2], ["exit", 0]]) {
+    const child = fakeChild();
+    const failures = [];
+    openLinuxWebUiUrl(url, { spawnProcess: () => child, onFailure: address => failures.push(address) });
+    child.emit(...event);
+    child.emit("close", 2);
+    assert.deepEqual(failures, event[1] === 0 ? [] : [url]);
+  }
+});
+
 test("real helper ignoring TERM is killed within the bounded shutdown window", { skip: process.platform === "win32", timeout: 3000 }, async () => {
   let child;
   const tray = createLinuxTray(options(null, { readyTimeoutMs: 1500, killTimeoutMs: 40, spawnProcess: () => {

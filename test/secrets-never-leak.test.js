@@ -104,7 +104,7 @@ test("a failing server never puts a secret into errors, diagnostics, status or t
 test("a config with a pasted secret fails to load without echoing it", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-leak-config-"));
   const file = join(dir, "config.json");
-  await writeFile(file, JSON.stringify({ version: 2, servers: [], discord: { enabled: true }, token: TOKEN }));
+  await writeFile(file, JSON.stringify({ version: 3, servers: [], discord: { enabled: true }, token: TOKEN }));
   const error = await loadAppConfig(file).then(() => null, (caught) => caught);
   assert.ok(error, "the config is refused");
   assertClean("startup error", `${error.message} ${error.code ?? ""}`);

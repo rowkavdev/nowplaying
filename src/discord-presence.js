@@ -1,5 +1,5 @@
 import { createDiscordController } from "./discord-controller.js";
-import { presenceItemKey } from "./presence-identity.js";
+import { playbackObservation } from "./presence-freshness.js";
 
 // Polls the media server and keeps Discord in step, following the idle
 // choice saved by setup:
@@ -52,10 +52,10 @@ export function createDiscordPresenceLoop({
   // stuckAfterMs is cleared until it moves again. Paused sessions and
   // sessions without a position are never "stuck".
   function isStale(presence) {
-    if (presence.state !== "playing" || !Number.isFinite(presence.positionMs)) { stuck = null; return false; }
-    const key = JSON.stringify([presenceItemKey(presence), presence.series, presence.season, presence.episode]);
-    if (!stuck || stuck.key !== key || stuck.positionMs !== presence.positionMs) {
-      stuck = { key, positionMs: presence.positionMs, since: now() };
+    const { key, positionMs } = playbackObservation(presence);
+    if (presence.state !== "playing" || !Number.isFinite(positionMs)) { stuck = null; return false; }
+    if (!stuck || stuck.key !== key || stuck.positionMs !== positionMs) {
+      stuck = { key, positionMs, since: now() };
       return false;
     }
     return now() - stuck.since >= stuckAfterMs;

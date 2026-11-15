@@ -8,6 +8,11 @@ import { tmpdir } from "node:os";
 import { openSetupUrl, startSetupApp, windowsConfigPath, windowsSetupDraftPath, writeSetupConfig } from "../src/setup-app.js";
 import { stat } from "node:fs/promises";
 
+const navidromeRef = {
+  provider: "navidrome",
+  identityId: "server:6FC2roVowPlIp8vFlQo-h7VcZw18gzD324c-N4wfARE",
+};
+
 test("builds the draft path under LOCALAPPDATA", () => {
   assert.equal(windowsSetupDraftPath({ localAppData: "C:\\Users\\R\\AppData\\Local" }), "C:\\Users\\R\\AppData\\Local\\nowplaying\\setup-draft.json");
   assert.throws(() => windowsSetupDraftPath({}), /LOCALAPPDATA/);
@@ -48,9 +53,9 @@ test("a sign-in saves the secret to the credential store and only the account to
     assert.deepEqual(await api("/api/setup/draft", "POST", { action: "next" }), [409, { error: "signin_required" }]);
     const [status, body] = await api("/api/setup/signin", "POST", { action: "password", provider: "navidrome", baseUrl: "http://127.0.0.1:4533", username: "rowan", password: "pw-123" });
     assert.deepEqual([status, body.status], [200, "signed_in"]);
-    assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "rowan" }, "nd-secret"]]);
+    assert.deepEqual(saved, [[navidromeRef, "nd-secret"]]);
     const draft = (await api("/api/setup/draft", "GET"))[1].draft;
-    assert.deepEqual([draft.step, draft.account], ["signin", { provider: "navidrome", id: "rowan", displayName: "Rowan", serverUrl: "http://127.0.0.1:4533" }]);
+    assert.deepEqual([draft.step, draft.account], ["signin", { provider: "navidrome", id: "rowan", displayName: "Rowan", serverUrl: "http://127.0.0.1:4533", credentialId: navidromeRef.identityId }]);
     assert.doesNotMatch(await readFile(draftFile, "utf8"), /nd-secret|pw-123/);
     assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "discord");
     await assert.rejects(readFile(configFile), { code: "ENOENT" });
@@ -59,9 +64,9 @@ test("a sign-in saves the secret to the credential store and only the account to
     assert.equal((await api("/api/setup/draft", "POST", { action: "next" }))[1].draft.step, "complete");
     const configText = await readFile(configFile, "utf8");
     assert.deepEqual(JSON.parse(configText), {
-      version: 2,
-      servers: [{ provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "Rowan" }, credentialRef: { provider: "navidrome", identityId: "rowan" } }],
-      discord: { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", artworkUpload: true },
+      version: 3,
+      servers: [{ provider: "navidrome", serverUrl: "http://127.0.0.1:4533", identity: { id: "rowan", displayName: "Rowan" }, credentialRef: navidromeRef }],
+      discord: { enabled: false, idleBehavior: "clear", artworkLookup: "musicbrainz", artworkUpload: false },
     });
     assert.doesNotMatch(configText, /nd-secret|pw-123/);
     if (process.platform !== "win32") assert.equal((await stat(configFile)).mode & 0o777, 0o600);
@@ -375,7 +380,7 @@ test("setup again can switch provider and keeps the card, privacy and hosted set
   assert.equal(after.hosted.enabled, true);
   assert.deepEqual(JSON.parse(JSON.stringify(after.card)), card);
   assert.deepEqual(JSON.parse(JSON.stringify(after.privacy)), privacy);
-  assert.deepEqual(saved, [[{ provider: "navidrome", identityId: "rowan" }, "nd-secret"]]);
+  assert.deepEqual(saved, [[navidromeRef, "nd-secret"]]);
   assert.doesNotMatch(await readFile(configFile, "utf8"), /nd-secret|pw-123/);
 });
 
@@ -468,11 +473,12 @@ test('#812 overlapping setup changes preserve both accepted fields', async () =>
   } finally { await app.close(); }
 });
 
-test("a fresh setup turns Discord cover upload on and the saved file reads back on", async () => {
+test("a fresh setup defaults Discord presence and cover uploads off", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-setup-app-"));
   const file = join(dir, "config.json");
   const account = { provider: "jellyfin", id: "u1", displayName: "Rowan", serverUrl: "http://127.0.0.1:8096" };
   await writeSetupConfig(file, { provider: "jellyfin", account });
-  assert.equal(JSON.parse(await readFile(file, "utf8")).discord.artworkUpload, true);
-  assert.equal(parseAppConfig(await readFile(file, "utf8")).discord.artworkUpload, true);
+  const config = parseAppConfig(await readFile(file, "utf8"));
+  assert.equal(config.discord.enabled, false);
+  assert.equal(config.discord.artworkUpload, false);
 });

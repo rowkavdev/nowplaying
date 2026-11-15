@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { StartupError, createProviderFromConfig, loadAppConfig, parseAppConfig, startAppFromConfig } from "../src/app-config.js";
 import { serializeSetupConfig } from "../src/setup-config.js";
@@ -29,7 +29,7 @@ const code = (startupCode) => (error) => error instanceof StartupError && error.
 test("reads the wizard's config back exactly", async () => {
   const config = await loadAppConfig(await configFile());
   assert.deepEqual(config, {
-    version: 2,
+    version: 3,
     servers: [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" } }],
     discord: { enabled: true, idleBehavior: "clear", artworkLookup: "off", artworkUpload: false },
   });
@@ -59,7 +59,7 @@ test("a damaged, tampered or credential-bearing config is refused", async () => 
   const server = good.servers[0];
   const withServer = (changes) => JSON.stringify({ ...good, servers: [{ ...server, ...changes }] });
   for (const bad of [
-    "{nope", "[]", JSON.stringify({ ...good, version: 3 }), JSON.stringify({ ...good, version: 1 }), withServer({ provider: "other" }),
+    "{nope", "[]", JSON.stringify({ ...good, version: 4 }), JSON.stringify({ ...good, version: 1 }), withServer({ provider: "other" }),
     withServer({ credentialRef: { provider: "jellyfin", identityId: "someone-else" } }), withServer({ credentialRef: undefined }),
     withServer({ serverUrl: undefined }), withServer({ serverUrl: "http://u:p@x" }), withServer({ token: "s3cret" }),
     JSON.stringify({ ...good, token: "s3cret" }), JSON.stringify({ ...good, provider: "jellyfin" }),
@@ -205,9 +205,9 @@ test("start-up migration leaves a current config alone and refuses a newer one (
   await writeFile(file, serializeSetupConfig(JELLYFIN));
   assert.equal((await migrateAppConfig(file)).status, "current");
   assert.equal((await readdir(dir)).length, 1);
-  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 3 }));
+  await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 4 }));
   await assert.rejects(loadAppConfig(file), code("CONFIG_TOO_NEW"));
-  assert.equal(JSON.parse(await readFile(file, "utf8")).version, 3);
+  assert.equal(JSON.parse(await readFile(file, "utf8")).version, 4);
   await writeFile(file, JSON.stringify({ ...JSON.parse(serializeSetupConfig(JELLYFIN)), version: 0 }));
   await assert.rejects(loadAppConfig(file), code("CONFIG_INVALID"));
   assert.deepEqual((await readdir(dir)).sort(), ["config.json"]);
@@ -277,7 +277,7 @@ test("a down server is retried with backoff, not on every request, and recovers 
   }
 });
 
-test("a v1 single-server config is migrated to a v2 servers list, with a backup (#252)", async () => {
+test("a v1 single-server config is migrated to the current servers list, with a backup (#252)", async () => {
   const dir = await mkdtemp(join(tmpdir(), "np-migrate-v1-"));
   const file = join(dir, "config.json");
   const v1 = {
@@ -288,17 +288,30 @@ test("a v1 single-server config is migrated to a v2 servers list, with a backup 
   };
   await writeFile(file, JSON.stringify(v1));
   const config = await loadAppConfig(file);
-  assert.equal(config.version, 2);
+  assert.equal(config.version, 3);
   assert.deepEqual(config.servers, [{ provider: "jellyfin", serverUrl: "http://127.0.0.1:8096", identity: { id: "u1", displayName: "Rowan" }, credentialRef: { provider: "jellyfin", identityId: "u1" } }]);
   assert.deepEqual(config.discord, v1.discord);
   assert.equal(config.hosted.enabled, true);
   assert.equal(config.privacy.hideArtwork, true);
   const saved = JSON.parse(await readFile(file, "utf8"));
-  assert.equal(saved.version, 2);
+  assert.equal(saved.version, 3);
   assert.equal("provider" in saved, false);
   const backups = (await readdir(dir)).filter((name) => name.startsWith("config.json.backup-"));
   assert.equal(backups.length, 1);
   assert.deepEqual(JSON.parse(await readFile(join(dir, backups[0]), "utf8")), v1);
+});
+
+test("a v2 upgrade keeps the existing keychain references and Discord choice", async () => {
+  const old = JSON.parse(serializeSetupConfig({ ...JELLYFIN, discordEnabled: true }));
+  old.version = 2;
+  const file = await configFile(JSON.stringify(old));
+  const config = await loadAppConfig(file);
+  assert.equal(config.version, 3);
+  assert.deepEqual(config.servers, old.servers);
+  assert.equal(config.discord.enabled, true);
+  const dir = dirname(file);
+  const backup = (await readdir(dir)).find(name => name.startsWith("config.json.backup-"));
+  assert.deepEqual(JSON.parse(await readFile(join(dir, backup), "utf8")), old);
 });
 
 test("a v1 config that fails validation after migration is left untouched", async () => {
