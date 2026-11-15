@@ -43,8 +43,21 @@ listener_is_child() {
 # the smoke rather than accepting a stranger's answer.
 port="$("$bundle/runtime/node" -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close();});')"
 
-log="$(mktemp)"
-NOWPLAYING_PORT=$port "$bundle/nowplaying" start --no-setup > "$log" 2>&1 &
+smoke_dir="$(mktemp -d)"
+cleanup_probe() {
+  if [ -n "${pid:-}" ]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  rm -rf -- "$smoke_dir"
+}
+trap cleanup_probe EXIT
+
+# This is a throwaway first run. Never migrate the developer's real config
+# or launch a second tray during a local package build or test run.
+log="$smoke_dir/start.log"
+HOME="$smoke_dir" XDG_CONFIG_HOME="$smoke_dir/config" XDG_STATE_HOME="$smoke_dir/state" \
+  NOWPLAYING_PORT=$port "$bundle/nowplaying" start --no-setup --no-tray > "$log" 2>&1 &
 pid=$!
 
 ok=0
@@ -58,13 +71,12 @@ for _ in $(seq 1 30); do
 done
 kill "$pid" 2>/dev/null || true
 wait "$pid" 2>/dev/null || true
+pid=""
 if [ "$ok" != 1 ]; then
   echo "smoke-bundle.sh: the bundle did not answer on :$port as its own process" >&2
   cat "$log" >&2
-  rm -f "$log"
   exit 1
 fi
-rm -f "$log"
 
 # Packaged-layout check (#673 review): the Info modal handler reads
 # ../NOTICE, ../README.md and ../LICENSE relative to app/src, so the files
