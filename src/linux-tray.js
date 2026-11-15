@@ -5,16 +5,29 @@ export function linuxDesktopEnv(env = process.env) {
     ["DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "HOME", "PATH", "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "XAUTHORITY"].includes(key) || /^XDG_[A-Z_]+$/.test(key)));
 }
 
-export function openLinuxWebUiUrl(url, { spawnProcess = spawn, env = process.env } = {}) {
+function reportOpenFailure(url) {
+  console.error(`NowPlaying couldn't open the browser. Open this address manually: ${url}`);
+}
+
+export function openLinuxWebUiUrl(url, { spawnProcess = spawn, env = process.env, onFailure = reportOpenFailure } = {}) {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || !["/", "/settings", "/logs"].includes(parsed.pathname) || parsed.search || parsed.hash || parsed.username || parsed.password)
     throw new TypeError("Web UI URL must be an allowed loopback page");
   const desktopEnv = linuxDesktopEnv(env);
   // xdg-open uses this to select the Plasma launcher instead of kfmclient.
   if (env.KDE_SESSION_VERSION) desktopEnv.KDE_SESSION_VERSION = env.KDE_SESSION_VERSION;
-  const child = spawnProcess("xdg-open", [parsed.href], { env: desktopEnv, detached: true, stdio: "ignore", shell: false });
-  child.on?.("error", () => {});
-  child.unref?.();
+  let failed = false;
+  const fail = () => {
+    if (failed) return;
+    failed = true;
+    onFailure(parsed.href);
+  };
+  try {
+    const child = spawnProcess("xdg-open", [parsed.href], { env: desktopEnv, detached: true, stdio: "ignore", shell: false });
+    child.on?.("error", fail);
+    child.on?.("exit", (code) => { if (code !== 0) fail(); });
+    child.unref?.();
+  } catch { fail(); }
   return parsed.href;
 }
 

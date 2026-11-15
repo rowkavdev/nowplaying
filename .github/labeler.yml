@@ -84,6 +84,7 @@ area:security:
   - changed-files:
       - any-glob-to-any-file:
           - "src/credential-store.js"
+          - "src/server-connection.js"
           - "src/windows-credential-adapter.js"
           - "src/linux-credential-adapter.js"
           - "src/platform-credential-adapter.js"

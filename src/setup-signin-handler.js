@@ -23,6 +23,7 @@ export function createSetupSignInHandler({
   credentialStore, deviceId, version = "0", signIn = DEFAULT_SIGNIN, elapsedNow = () => performance.now(), onSignedIn = async () => {},
   flowTtlMs = 10 * 60_000, maxFlows = 4, newFlowId = () => randomBytes(18).toString("base64url"),
   requireServerUrl = false, beforeSignIn = async () => {}, beforeSignedIn = async () => {}, commitQueue = job => job(),
+  credentialRefFor = ({ provider, identity }) => ({ provider, identityId: identity.id }),
 } = {}) {
   if (typeof credentialStore?.save !== "function") throw new TypeError("credentialStore.save is required");
   if (typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(deviceId)) throw new TypeError("deviceId is invalid");
@@ -56,10 +57,13 @@ export function createSetupSignInHandler({
   async function finishCommit(result, serverUrl, flowIsActive, beginCommit) {
     const expired = () => json(410, { error: "expired" });
     if (!flowIsActive()) return expired();
-    const ref = { provider: result.provider, identityId: result.identity.id };
     const identity = { id: result.identity.id, displayName: result.identity.displayName };
     const event = { provider: result.provider, identity, ...(serverUrl ? { serverUrl } : {}) };
-    try { await beforeSignedIn(event); }
+    let ref;
+    try {
+      await beforeSignedIn(event);
+      ref = await credentialRefFor(event);
+    }
     catch (error) {
       if (error instanceof SignInError && error.status === "too_many_servers") return json(409, { error: error.status });
       return json(500, { error: "draft_update_failed" });
@@ -99,7 +103,7 @@ export function createSetupSignInHandler({
     // Once config/draft commit begins, Cancel returns a conflict rather than
     // claiming success for an operation it cannot safely roll back.
     beginCommit();
-    try { await onSignedIn(event); }
+    try { await onSignedIn(event, ref); }
     catch {
       try { await restore(); }
       catch { return json(500, { error: "credential_store_failed" }); }

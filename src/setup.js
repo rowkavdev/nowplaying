@@ -1,4 +1,5 @@
 import { normalizeHostedUrl } from "./hosted-uploader.js";
+import { serverAccountKey, serverCredentialRef } from "./server-connection.js";
 
 const STEPS = Object.freeze(["welcome", "provider", "signin", "discord", "hosting", "review", "complete"]);
 const MAX_ACCOUNT_FIELD = 200;
@@ -39,7 +40,7 @@ export function createSetupDraft(input = {}) {
     // Optional Spotify sign-in for the card (#135): Client ID and who signed
     // in. The refresh token is in the credential store.
     spotify,
-    discordEnabled: input.discordEnabled ?? true,
+    discordEnabled: input.discordEnabled ?? false,
     discordIdleBehavior: input.discordIdleBehavior ?? "clear",
     // Album art lookup (title + artist to MusicBrainz / Cover Art Archive).
     // On for new setups so Discord shows real covers; the user can turn it off.
@@ -73,7 +74,7 @@ function createServerList(input) {
     let account;
     try { account = createAccount(item); } catch { account = null; }
     if (!account) throw new TypeError("setup.servers is invalid");
-    const key = `${account.provider}\u0000${account.id}`;
+    const key = setupAccountKey(account);
     if (seen.has(key)) throw new TypeError("setup.servers is invalid");
     seen.add(key);
     return account;
@@ -85,7 +86,11 @@ function createServerList(input) {
 export function setupAccounts(draft) {
   const current = createSetupDraft(draft);
   const all = [...current.servers];
-  if (current.account && !all.some((item) => item.provider === current.account.provider && item.id === current.account.id)) all.push(current.account);
+  if (current.account) {
+    const index = all.findIndex((item) => setupAccountKey(item) === setupAccountKey(current.account));
+    if (index < 0) all.push(current.account);
+    else all[index] = current.account;
+  }
   return Object.freeze(all);
 }
 
@@ -111,7 +116,7 @@ export function cancelAddServer(draft) {
 // Drops an added server (never the one being signed in right now).
 export function removeSetupServer(draft, { provider, id } = {}) {
   const current = createSetupDraft(draft);
-  const servers = current.servers.filter((item) => !(item.provider === provider && item.id === id));
+  const servers = current.servers.filter((item) => !(item.provider === provider && (item.credentialId ?? item.id) === id));
   if (servers.length === current.servers.length) throw new SetupStepError("server_not_found");
   return createSetupDraft({ ...current, servers });
 }
@@ -120,10 +125,19 @@ function createAccount(input) {
   if (input === undefined || input === null) return null;
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("setup.account is invalid");
   const keys = Object.keys(input);
-  if (keys.some((key) => !["provider", "id", "displayName", "serverUrl"].includes(key)) || !PROVIDERS.has(input.provider)) throw new TypeError("setup.account is invalid");
+  if (keys.some((key) => !["provider", "id", "displayName", "serverUrl", "credentialId"].includes(key)) || !PROVIDERS.has(input.provider)) throw new TypeError("setup.account is invalid");
   if (!accountText(input.id) || !accountText(input.displayName)) throw new TypeError("setup.account is invalid");
   if (input.serverUrl !== undefined && !isServerUrl(input.serverUrl)) throw new TypeError("setup.account is invalid");
-  return Object.freeze({ provider: input.provider, id: input.id, displayName: input.displayName, ...(input.serverUrl ? { serverUrl: input.serverUrl } : {}) });
+  if (input.credentialId !== undefined && input.credentialId !== serverCredentialRef({ ...input, identity: { id: input.id } }).identityId) throw new TypeError("setup.account is invalid");
+  return Object.freeze({
+    provider: input.provider, id: input.id, displayName: input.displayName,
+    ...(input.serverUrl ? { serverUrl: input.serverUrl } : {}),
+    ...(input.credentialId ? { credentialId: input.credentialId } : {}),
+  });
+}
+
+export function setupAccountKey(account) {
+  return serverAccountKey({ ...account, identity: { id: account.id } });
 }
 
 // The media server address the app will talk to. Not a secret, but it must be a

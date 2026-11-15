@@ -14,7 +14,8 @@ import { createHostedDevicesClient, createHostedDevicesHandler } from "./hosted-
 import { createLogsPageHandler } from "./logs-page-handler.js";
 import { readLogTail } from "./log-tail.js";
 import { createResilientCardResolver } from "./resilient-card.js";
-import { cardRenderOptions, createSetupConfig } from "./setup-config.js";
+import { cardRenderOptions, CONFIG_SCHEMA_VERSION, createSetupConfig } from "./setup-config.js";
+import { preservePlaybackObservation } from "./presence-freshness.js";
 import { createConfigMigrationStore } from "./config-migration-store.js";
 import { createEmbyProvider } from "./providers/emby.js";
 import { createJellyfinProvider } from "./providers/jellyfin.js";
@@ -96,7 +97,7 @@ export function parseAppConfig(text) {
   // and the app needs an address for every server.
   const refsMatch = config.servers.every((server, index) => {
     const ref = parsed.servers[index]?.credentialRef;
-    return ref?.provider === server.provider && ref?.identityId === server.identity.id && server.serverUrl;
+    return ref?.provider === server.provider && ref?.identityId === server.credentialRef.identityId && server.serverUrl;
   });
   if (!refsMatch) throw invalidConfig();
   return config;
@@ -105,12 +106,14 @@ export function parseAppConfig(text) {
 // Config schema version this build writes and reads. When it goes up, add a
 // migration for the old version below; the store backs the file up first
 // (config.json.backup-<time>) and only replaces it with a validated result.
-export const CONFIG_VERSION = 2;
+export const CONFIG_VERSION = CONFIG_SCHEMA_VERSION;
 const CONFIG_MIGRATIONS = Object.freeze([
   // 0 -> 1: no version-0 file was ever released.
   () => { throw new Error("unsupported"); },
   // 1 -> 2 (#252): the single server moves into a one-item servers list.
   migrateV1ToV2,
+  // 2 -> 3: keep the old keychain references. New connections use scoped keys.
+  (document) => ({ ...document, version: 3 }),
 ]);
 
 export function migrateV1ToV2(document) {
@@ -186,12 +189,13 @@ export function privacyPolicyFromConfig(config) {
     redactTitles: privacy.redactTitles === true,
     hideArtwork: privacy.hideArtwork === true,
     hideProgress: privacy.hideProgress === true,
+    hideProviders: privacy.hideProviders === true,
     suppressMediaKinds: Object.freeze(kinds.includes("episode") ? [...kinds, "show"] : [...kinds]),
   });
 }
 
 function hidesAnything(policy) {
-  return policy.redactTitles || policy.hideArtwork || policy.hideProgress || policy.suppressMediaKinds.length > 0;
+  return policy.redactTitles || policy.hideArtwork || policy.hideProgress || policy.hideProviders || policy.suppressMediaKinds.length > 0;
 }
 
 // Reads the policy on every poll, so a saved change applies straight away.
@@ -201,7 +205,9 @@ export function withPrivacy(provider, getConfig) {
     getPresence: async (...args) => {
       const presence = await provider.getPresence(...args);
       const policy = privacyPolicyFromConfig(getConfig());
-      return presence && hidesAnything(policy) ? applyPrivacy(presence, policy) : presence;
+      return presence && hidesAnything(policy)
+        ? preservePlaybackObservation(applyPrivacy(presence, policy), presence)
+        : presence;
     },
   });
 }

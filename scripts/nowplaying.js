@@ -67,6 +67,7 @@ async function start() {
   }
   const paths = dataPaths();
   const logger = createAppLogger({ file: paths.logFile });
+  const openUrl = (url) => openDesktopUrl(url, logger);
   await logger.event("startup", "starting");
   let app;
   try {
@@ -75,7 +76,7 @@ async function start() {
     app = await guardedStart(paths);
     liveApp = app;
     if (app.firstRun && !args.includes("--no-setup"))
-      (process.platform === "linux" ? openLinuxWebUiUrl : openLocalSettingsUrl)(`${app.url}/settings`);
+      openUrl(`${app.url}/settings`);
     if (app.safeMode)
       await logger.event("startup", "degraded", {
         level: "warn",
@@ -119,6 +120,7 @@ async function start() {
   if (!args.includes("--no-tray") && linuxTrayAvailable()) {
     tray = createLinuxTray({
       url: app.url,
+      openUrl,
       isFirstRun: () => Boolean(liveApp?.firstRun),
       getUrl: () => liveApp.url,
       script: fileURLToPath(new URL("./linux-tray.py", import.meta.url)),
@@ -136,8 +138,18 @@ async function start() {
 async function reopenExisting(url, logger) {
   console.log(`NowPlaying is already running. Settings: ${url}/settings`);
   if (!args.includes("--no-setup"))
-    (process.platform === "linux" ? openLinuxWebUiUrl : openLocalSettingsUrl)(`${url}/settings`);
+    openDesktopUrl(`${url}/settings`, logger);
   await logger.event("startup", "already-running");
+}
+
+function openDesktopUrl(url, logger) {
+  if (process.platform !== "linux") return openLocalSettingsUrl(url);
+  return openLinuxWebUiUrl(url, {
+    onFailure: (address) => {
+      console.error(`NowPlaying couldn't open the browser. Open this address manually: ${address}`);
+      void logger.event("tray", "failed", { level: "warn", code: "TRAY_OPEN_FAILED" });
+    },
+  });
 }
 
 async function version() {

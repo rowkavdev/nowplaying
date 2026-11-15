@@ -419,7 +419,7 @@ const JS = `"use strict";
       if (removable) {
         var remove = el("button", { type: "button", className: "removeServer", textContent: "Remove" });
         remove.dataset.provider = account.provider;
-        remove.dataset.id = account.id;
+        remove.dataset.id = account.credentialId || account.id;
         item.append(remove);
       }
       return item;

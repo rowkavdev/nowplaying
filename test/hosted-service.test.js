@@ -200,6 +200,18 @@ test("upstash client posts commands with bearer auth and hides error bodies", as
   assert.throws(() => createUpstashRedis({ url: "http://insecure", token: "t" }), TypeError);
 });
 
+test("upstash cancels rejected response bodies without waiting on cleanup", async () => {
+  let cancelled = 0;
+  const redis = createUpstashRedis({
+    url: "https://example.upstash.io", token: "fixture",
+    fetchImpl: async () => new Response(new ReadableStream({
+      cancel() { cancelled++; return new Promise(() => {}); },
+    }), { status: 503 }),
+  });
+  await assert.rejects(redis.command(["GET", "fixture"]), { message: "redis_http_503" });
+  assert.equal(cancelled, 1);
+});
+
 test("an ingest 429 says how many seconds are left in the minute window", async () => {
   const { service, now } = setup(1_800_000_000_000 + 20_000);
   const device = await service.register({ clientKey: "one" });
