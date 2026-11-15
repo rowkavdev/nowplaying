@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import http from "node:http";
-import { cp, mkdtemp, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,6 +104,37 @@ test("a bundle missing the packaged Info files fails the smoke (#673 review)", {
 // through /proc instead, in both directions.
 const hasProc = process.platform === "linux";
 const hasBasics = ["bash", "curl"].every((tool) => spawnSync("sh", ["-c", `command -v ${tool}`], { stdio: "ignore" }).status === 0);
+
+test("a package smoke run leaves the caller's config and state alone", { skip: !(hasTools || (hasProc && hasBasics)), timeout: 60000 }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), "nowplaying-smoke-host-"));
+  const configHome = join(dir, "config");
+  const stateHome = join(dir, "state");
+  const appConfig = join(configHome, "nowplaying");
+  const configFile = join(appConfig, "config.json");
+  const oldConfig = JSON.stringify({
+    version: 2,
+    servers: [{
+      provider: "jellyfin", serverUrl: "http://127.0.0.1:9",
+      identity: { id: "fixture", displayName: "Fixture" },
+      credentialRef: { provider: "jellyfin", identityId: "fixture" },
+    }],
+    discord: { enabled: false },
+  });
+  try {
+    await mkdir(appConfig, { recursive: true });
+    await mkdir(stateHome);
+    await writeFile(configFile, oldConfig);
+    const bundle = await makeBundle({ healthy: true });
+    const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: configHome, XDG_STATE_HOME: stateHome };
+    const run = spawnSync("bash", [smoke, bundle], { encoding: "utf8", env, timeout: 45000 });
+    assert.equal(await readFile(configFile, "utf8"), oldConfig, "must not migrate the caller's config");
+    assert.deepEqual(await readdir(appConfig), ["config.json"], "must not write a backup or an instance secret");
+    assert.deepEqual(await readdir(stateHome), []);
+    assert.equal(run.status, 0, run.stderr);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 async function pathWithoutLsof() {
   const dir = await mkdtemp(join(tmpdir(), "nowplaying-no-lsof-"));
