@@ -10,7 +10,7 @@ Download your chosen package and `SHA256SUMS` from the same release. In the down
 sha256sum --ignore-missing -c SHA256SUMS
 ```
 
-Your downloaded file must say `OK`. Native package names include the version and development commit; the portable file is `nowplaying-dev-linux-x64.tar.gz`. Status and diagnostics show the exact running commit and package type. `nowplaying --version` reports only the base app version. Avoid mixing downloads from different revisions of the moving release.
+Your downloaded file must say `OK`. Native package names include the version, dev build number and short commit; the portable file is `nowplaying-dev-linux-x64.tar.gz`. Status and diagnostics show the exact running commit and package type. `nowplaying --version` reports only the base app version. Avoid mixing downloads from different revisions of the moving release.
 
 ## Native package
 

@@ -43,8 +43,10 @@ This slice rejects non-x86_64 hosts and bundles rather than mislabeling them.
 
 ## Development release identity
 
-Rolling development packages carry `+dev.<headsha>` in package metadata so
-upgrades can identify the commit. POSIX bundles embed the base version, full
+Rolling development packages carry `+dev.10000000.<build-number>.<headsha>`
+in package metadata. The numeric prefix sorts above the previous SHA-only
+suffixes, and the build number orders upgrades within the same base version.
+The short SHA identifies the commit. POSIX bundles embed the base version, full
 commit SHA, build time, development channel and unsigned status. Native package
 staging preserves that build identity and marks the installation as `deb`,
 `rpm` or `arch`; an extracted bundle reports `portable`. The status API and

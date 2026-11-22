@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const beta = readFileSync(new URL("../.github/workflows/beta.yml", import.meta.url), "utf8");
+const baseVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 test("Windows dev download names stay stable when the installer carries build metadata", () => {
   // Exercise the workflow's replacement with the filenames produced by the
   // versioned ZIP and the build-labelled installer, as published in dev #719.
@@ -23,6 +25,18 @@ test("rolling dev release awaits native distro packages and covers them in check
     assert.ok(beta.split(extension).length >= 4, `${extension} must cover upload, attestation, checksums, release files`);
   }
   assert.match(beta, /--prerelease --latest=false/);
+});
+
+test("native package versions put the dev build number before the short SHA", { skip: process.platform !== "linux" }, () => {
+  const [, assignment] = beta.match(/^ +(package_version=.*)$/m);
+  for (const [buildNumber, sha, shortSha] of [["742", "8505f3100", "8505f31"], ["743", "21cbba100", "21cbba1"]]) {
+    const version = execFileSync("bash", ["-c", assignment + '\n' + 'printf "%s" "$package_version"'], {
+      cwd: new URL("..", import.meta.url),
+      env: { ...process.env, GITHUB_RUN_NUMBER: buildNumber, GITHUB_SHA: sha },
+      encoding: "utf8",
+    });
+    assert.equal(version, `${baseVersion}+dev.10000000.${buildNumber}.${shortSha}`);
+  }
 });
 
 test("PR build legs have read-only grants and release/attestation require trusted main", () => {
