@@ -147,7 +147,8 @@ jobs:
           DISTRO: ${{ matrix.distro }}
         run: |
           mkdir -p native-packages
-          package_version="$(node -p 'require("./package.json").version')+dev.${GITHUB_SHA:0:7}"
+          # Sort above every old seven-character SHA, then order by build number.
+          package_version="$(node -p 'require("./package.json").version')+dev.10000000.${GITHUB_RUN_NUMBER}.${GITHUB_SHA:0:7}"
           docker run --rm -e DISTRO -e "PACKAGE_VERSION=$package_version" -v "$PWD:/source:ro" -v "$PWD/native-packages:/artifacts" "$DISTRO_IMAGE" bash /source/scripts/linux-distro-lab.sh
       - name: Upload native development packages
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
