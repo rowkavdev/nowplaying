@@ -12,10 +12,12 @@ Debian (.deb), Fedora (.rpm) and Arch (.pkg.tar.zst). They do not publish anythi
 
 ## Automated evidence
 
-Planned coverage (not yet a passed distro guarantee): `Linux desktop packages`
-is intended to install a built package in Debian 13, Fedora 43 and
-Arch's rolling container image. Each is intended to run the installed app as an unprivileged
-user with Xvfb and a private session bus. A synthetic StatusNotifier host is intended to check:
+The `Linux desktop packages` workflow exercises Debian 13, Fedora 43 and
+Arch's rolling container image. It installs a package with the old SHA-only
+version format, upgrades to the current format with the distro's package
+manager, and checks the installed version and build identity. It then starts
+the app as an unprivileged user with Xvfb and a private session bus. A synthetic
+StatusNotifier host checks:
 
 - Actual GTK/AppIndicator process registers an Active tray item.
 - First-run Settings is served on loopback by the installed app.
@@ -24,10 +26,11 @@ user with Xvfb and a private session bus. A synthetic StatusNotifier host is int
 - Activating Quit closes the installed app, its observed tray helper process
   exits, and the WebUI port no longer accepts connections.
 
-Once the exact-head matrix passes, this will be protocol and install evidence,
-not a screenshot of a real desktop. Until then these checks are planned, not
-confirmed. Image tags, Node 22 setup and package installs float for this dev
-lab; re-run after dependency changes rather than claim reproducible versions.
+The workflow also removes the upgraded package, checks that the launcher and
+application files are gone, and verifies that a user configuration fixture
+survived the upgrade and removal. The lab covers package-manager behavior and
+tray protocol using synthetic settings. Image tags, Node 22 setup and package
+installs can change between workflow runs.
 The containers do not prove GNOME extension configuration, icon rendering,
 Wayland integration or behavior on every release of each distro. They do not
 promise compatibility beyond the tested x86_64 releases.
