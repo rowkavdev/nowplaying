@@ -31,9 +31,9 @@ jobs:
           node-version: 22
       - run: npm ci --omit=dev
       - run: bash scripts/build-posix.sh linux
-      - name: Install and test in distro userland
+      - name: Verify install, upgrade and uninstall in distro userland
         env:
           DISTRO_IMAGE: ${{ matrix.image }}
           DISTRO: ${{ matrix.distro }}
         run: |
-          docker run --rm -e DISTRO -v "$PWD:/source:ro" "$DISTRO_IMAGE" bash /source/scripts/linux-distro-lab.sh
+          docker run --rm -e DISTRO -v "$PWD:/source:ro" "$DISTRO_IMAGE" bash /source/scripts/linux-distro-lab.sh --verify-lifecycle
